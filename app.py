@@ -20,6 +20,7 @@ from montasje import (
 from ifc_export import gen_ifc
 from export_excel import lag_excel
 from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
+from chatbot import vis_chatbot
 from projects import (
     lagre_prosjekt, hent_alle_prosjekter, hent_prosjekt,
     slett_prosjekt, oppdater_prosjekt,
@@ -642,6 +643,21 @@ elif modul == "Prisredigering":
 
     with st.expander("Vis gjeldende prisoverride"):
         st.json(st.session_state.get("pris_override", {}))
+
+# ── AI-assistent (vises alltid nederst, utenfor modul-blokken) ────────────────
+ov = result.get("ov", {})
+_kontekst = f"""
+Prosjekt: {navn or '(ikke navngitt)'}
+Rom-type: {rom_type}
+Panel: {PANEL_DB[panel_key]['label']} ({PANEL_DB[panel_key]['t']} mm)
+Panelbredde: {round(pw_m*1000)} mm
+Areal: {ov.get('A', '–')} m²
+Omkrets: {ov.get('P', '–')} m
+Romhøyde: {H*1000:.0f} mm
+Antall vegger: {len(pts)}
+Estimert totalkostnad: {result.get('total_eks_mva', '–')} kr eks. mva
+"""
+vis_chatbot(kontekst=_kontekst)
 
 st.markdown("---")
 st.caption("Stramo kjøleromssystem · kalkulasjon, FDV, montasje, kapplister og IFC")
