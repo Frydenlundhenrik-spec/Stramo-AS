@@ -27,6 +27,7 @@ class ProjectInput:
     # dorer kan være (dk, ant) ELLER (dk, ant, wall_idx, offset_m)
     dorer:         list[tuple]
     beslag_valg:   list[str]
+    apninger:      list[tuple] = None
 
 
 def beregn_prosjekt(
@@ -60,6 +61,7 @@ def beregn_prosjekt(
         round(inp.hoyde_m * 1000),
         round(inp.panelbredde_m * 1000),
         inp.rom_type,
+        apninger=tuple(tuple(a) for a in (inp.apninger or [])),
     )
     sam    = kappliste_sammendrag(df_kapp)
     beslag = beslag_beregning(inp.pts, inp.hoyde_m)

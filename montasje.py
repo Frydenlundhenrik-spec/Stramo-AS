@@ -40,6 +40,8 @@ def tegn_produksjonsfigurer(inp: Any, result: dict, bare_tilpassede: bool = Fals
         rom_type=inp.rom_type,
         info=info,
         bare_tilpassede=bare_tilpassede,
+        dorer=getattr(inp, "dorer", []),
+        apninger=getattr(inp, "apninger", []),
     )
 
 
@@ -66,3 +68,21 @@ def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
 
 def figur_som_png(fig, dpi: int = 180) -> bytes:
     return fig2png(fig, dpi=dpi)
+
+
+def figur_som_pdf(fig) -> bytes:
+    import io
+    buf = io.BytesIO()
+    fig.savefig(buf, format="pdf", bbox_inches="tight")
+    return buf.getvalue()
+
+
+def figurer_som_samlet_pdf(figs: list) -> bytes:
+    """Slår sammen flere matplotlib-figurer til én PDF."""
+    import io
+    from matplotlib.backends.backend_pdf import PdfPages
+    buf = io.BytesIO()
+    with PdfPages(buf) as pdf:
+        for fig in figs:
+            pdf.savefig(fig, bbox_inches="tight")
+    return buf.getvalue()

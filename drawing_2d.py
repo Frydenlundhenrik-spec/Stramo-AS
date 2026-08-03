@@ -13,50 +13,50 @@ from geometry import wall_lengths, ensure_ccw, Point
 from panel_engine import generate_roof_floor_panels, main_axis_from_longest_wall
 
 # ── Farger og konstanter ──────────────────────────────────────────────────────
-DIM_COL   = "#1a1a1a"
-DIM_FS    = 6.5
-BLUE      = "#1a3a5c"
-WALL_FILL = "#d0d0d0"
-WALL_EDGE = "#111"
-HATCH_COL = "#888"
-RED       = "#c0392b"
-GREEN     = "#1a6b1a"
-ORANGE    = "#e67e22"
+DIM_COL   = "#000000"
+DIM_FS    = 8.0
+BLUE      = "#000000"
+WALL_FILL = "#e8e8e8"
+WALL_EDGE = "#000000"
+HATCH_COL = "#555"
+RED       = "#000000"
+GREEN     = "#000000"
+ORANGE    = "#555555"
 
 
 # ── Hjelpefunksjoner ──────────────────────────────────────────────────────────
 
 def _door_entry(d):
-    """Normaliserer dør-oppføring til (dk, ant, wall_idx, offset_m)."""
+    """Normaliserer dør-oppføring til (dk, ant, wall_idx, offset_m, hengsel)."""
     if len(d) == 2:
-        return (d[0], d[1], 0, 0.35)
-    return (d[0], d[1], int(d[2]), float(d[3]))
+        return (d[0], d[1], 0, 0.35, "Venstre")
+    if len(d) == 4:
+        return (d[0], d[1], int(d[2]), float(d[3]), "Venstre")
+    return (d[0], d[1], int(d[2]), float(d[3]), str(d[4]))
 
 
 def _dh(ax, x1, x2, y, lbl, ey=None, fs=DIM_FS, col=None):
-    """Horisontal målpil med forlengelseslinjer."""
+    """Horisontal målpil med stiplede forlengelseslinjer."""
     col = col or DIM_COL
     ey  = y if ey is None else ey
-    ax.plot([x1, x1], [y, ey], color=col, lw=0.45, zorder=8)
-    ax.plot([x2, x2], [y, ey], color=col, lw=0.45, zorder=8)
+    ax.plot([x1, x1], [y, ey], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
+    ax.plot([x2, x2], [y, ey], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.annotate("", xy=(x2, ey), xytext=(x1, ey),
-                arrowprops=dict(arrowstyle="<->", color=col, lw=0.65, mutation_scale=5), zorder=9)
-    ax.text((x1+x2)/2, ey, f"  {lbl}  ", ha="center", va="bottom",
-            fontsize=fs, color=col, zorder=10,
-            bbox=dict(fc="white", ec="none", pad=0.4))
+                arrowprops=dict(arrowstyle="<->", color=col, lw=1.1, mutation_scale=8), zorder=9)
+    ax.text((x1+x2)/2, ey + 0.03, lbl, ha="center", va="bottom",
+            fontsize=fs, color=col, fontweight="bold", zorder=10)
 
 
 def _dv(ax, y1, y2, x, lbl, ex=None, fs=DIM_FS, col=None):
-    """Vertikal målpil."""
+    """Vertikal målpil med stiplede forlengelseslinjer."""
     col = col or DIM_COL
     ex  = x if ex is None else ex
-    ax.plot([x, ex], [y1, y1], color=col, lw=0.45, zorder=8)
-    ax.plot([x, ex], [y2, y2], color=col, lw=0.45, zorder=8)
+    ax.plot([x, ex], [y1, y1], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
+    ax.plot([x, ex], [y2, y2], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.annotate("", xy=(ex, y2), xytext=(ex, y1),
-                arrowprops=dict(arrowstyle="<->", color=col, lw=0.65, mutation_scale=5), zorder=9)
-    ax.text(ex, (y1+y2)/2, f"  {lbl}  ", ha="left", va="center",
-            fontsize=fs, color=col, rotation=90, zorder=10,
-            bbox=dict(fc="white", ec="none", pad=0.4))
+                arrowprops=dict(arrowstyle="<->", color=col, lw=1.1, mutation_scale=8), zorder=9)
+    ax.text(ex + 0.03, (y1+y2)/2, lbl, ha="left", va="center",
+            fontsize=fs, color=col, fontweight="bold", rotation=90, zorder=10)
 
 
 def _dim_along_wall(ax, p1, p2, lbl, offset=0.30, fs=DIM_FS, col=None):
@@ -276,15 +276,17 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
     # ── Dørmarkering med mål ──────────────────────────────────────────────────
     door_cursors = {}
     for entry in dorer:
-        dk, ant, wall_idx, offset_m = _door_entry(entry)
+        dk, ant, wall_idx, offset_m, hengsel = _door_entry(entry)
         if ant <= 0 or wall_idx >= nn or wls[wall_idx] < 1e-6:
             continue
         p1d   = pts_a[wall_idx]; p2d = pts_a[(wall_idx+1) % nn]
         vL    = wls[wall_idx]
         dx_n  = (p2d - p1d) / vL
-        perp  = np.array([-dx_n[1], dx_n[0]])
+        perp  = np.array([-dx_n[1], dx_n[0]])   # innadrettet (CCW polygon)
+        outw  = -perp                              # utoverretning
         cursor = door_cursors.get(wall_idx, offset_m)
         dw     = DOR_DB[dk]["bw"] / 1000
+        door_angle = math.degrees(math.atan2(dx_n[1], dx_n[0]))
 
         for idx_d in range(min(ant, 4)):
             s = p1d + dx_n * cursor
@@ -294,17 +296,31 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
                     color="white", lw=4.5, solid_capstyle="butt", zorder=6)
             ax.plot([s[0], e[0]], [s[1], e[1]],
                     color=WALL_EDGE, lw=1.1, solid_capstyle="butt", zorder=7)
-            # Svingebue
-            door_angle = math.degrees(math.atan2(dx_n[1], dx_n[0]))
-            ax.add_patch(Arc(tuple(s), dw*2, dw*2,
-                             angle=door_angle, theta1=0, theta2=90,
+
+            # Svingebue utover – hengsel velger side
+            if hengsel == "Høyre":
+                # Hengsel i e, referanseretning -dx_n (mot s = lukket posisjon)
+                # theta: 0 = mot s (lukket), 90 = utover (CCW-sveip)
+                hinge    = e
+                arc_ang  = door_angle + 180
+                t1, t2   = 0, 90
+            else:
+                # Hengsel i s, referanseretning dx_n (mot e = lukket posisjon)
+                # theta: 0 = mot e (lukket), -90 = utover (CW-sveip)
+                hinge    = s
+                arc_ang  = door_angle
+                t1, t2   = -90, 0
+
+            leaf_end = hinge + outw * dw
+
+            ax.add_patch(Arc(tuple(hinge), dw*2, dw*2,
+                             angle=arc_ang, theta1=t1, theta2=t2,
                              color=WALL_EDGE, lw=0.8, zorder=7))
-            ax.plot([s[0], s[0]+dx_n[0]*dw],
-                    [s[1], s[1]+dx_n[1]*dw],
+            # Dørblad i åpen posisjon (stiplet linje utover)
+            ax.plot([hinge[0], leaf_end[0]], [hinge[1], leaf_end[1]],
                     color=WALL_EDGE, lw=0.6, linestyle="--", zorder=7)
 
             # Mål-piler: hjørne→dør og dørbredde
-            corner_for_dim = p1d if idx_d == 0 else (p1d + dx_n * door_cursors.get(wall_idx, offset_m))
             _door_dim(ax, p1d + dx_n * (cursor - offset_m if idx_d > 0 else 0),
                       dx_n, cursor if idx_d == 0 else offset_m,
                       dw, perp * -1)
@@ -313,7 +329,6 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
         door_cursors[wall_idx] = cursor
 
     # ── Åpninger / klassfronter i plan ───────────────────────────────────────
-    CYAN = "#00aacc"
     if apninger:
         for ap in apninger:
             ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap
@@ -333,19 +348,18 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
                 m = s_a + da * ap_w * frac
                 ax.plot([m[0] - perp_a[0]*0.05, m[0] + perp_a[0]*0.05],
                         [m[1] - perp_a[1]*0.05, m[1] + perp_a[1]*0.05],
-                        color=CYAN, lw=1.2, zorder=8)
+                        color="#000", lw=1.2, zorder=8)
             ax.plot([s_a[0], e_a[0]], [s_a[1], e_a[1]],
-                    color=CYAN, lw=1.5, solid_capstyle="butt", zorder=7,
+                    color="#000", lw=1.5, solid_capstyle="butt", zorder=7,
                     linestyle="--")
             # Etikett
             mid_a = (s_a + e_a) / 2
-            sill_txt = f" {round(ap_sill*100)} cm" if ap_sill > 0 else ""
+            sill_txt = f" {round(ap_sill*1000)} mm" if ap_sill > 0 else ""
             ax.text(mid_a[0] + perp_a[0]*0.35,
                     mid_a[1] + perp_a[1]*0.35,
                     f"{ap_lbl}\n{round(ap_w*1000)}×{round(ap_h*1000)} mm{sill_txt}",
-                    ha="center", va="center", fontsize=5.5, color=CYAN,
-                    fontweight="bold", zorder=9,
-                    bbox=dict(fc="white", ec=CYAN, pad=1.5, linewidth=0.7))
+                    ha="center", va="center", fontsize=6.5, color="#000",
+                    fontweight="bold", zorder=9)
 
     # ── Vinkler ved hjørner ───────────────────────────────────────────────────
     for i in range(nn):
@@ -458,9 +472,9 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
                                  edgecolor=WALL_EDGE, linewidth=0.9, zorder=2))
 
         # ── Takpaneler ────────────────────────────────────────────────────────
-        FILL_HEL  = "#b8d4ee"
-        FILL_KAPP = "#f5c6a0"
-        FILL_REST = "#b8e8b8"
+        FILL_HEL  = "#e8e8e8"
+        FILL_KAPP = "#cccccc"
+        FILL_REST = "#e8e8e8"
 
         for p in panel_list:
             if not p.polygon or len(p.polygon) < 3:
@@ -468,12 +482,12 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
             poly_w = np.array(p.polygon)
             is_kapp = "kapp" in p.kind.lower() or "start" in p.kind.lower()
             fc = FILL_KAPP if is_kapp else FILL_HEL
-            ec = ORANGE if is_kapp else "#2980b9"
+            ec = "#000"
 
             ax.add_patch(MplPolygon(poly_w, closed=True, facecolor=fc,
                                      edgecolor=ec, linewidth=1.0, zorder=3, alpha=0.85))
             ax.add_patch(MplPolygon(poly_w, closed=True, facecolor="none",
-                                     edgecolor="#777", linewidth=0,
+                                     edgecolor="#555", linewidth=0,
                                      hatch="////" if not is_kapp else ".....",
                                      zorder=3.5, alpha=0.3))
 
@@ -588,6 +602,25 @@ def _draw_panel_width_chain(ax, panels, x_axis, pts_a, ymn, dim_off):
 
 # ══ VEGGOPPSTALT ═════════════════════════════════════════════════════════════
 
+def _global_start_el_nr(wls, pw_m, vegg_idx):
+    """Beregn første globale V-nummer for gitt vegg (samme logikk som kappliste)."""
+    pw_mm = round(pw_m * 1000)
+    el_nr = 1; rest_mm = 0
+    for vi, wl in enumerate(wls):
+        L_mm = round(wl * 1000); brukt = 0
+        if vi == vegg_idx:
+            return el_nr, rest_mm
+        if rest_mm > 0:
+            bredde = min(rest_mm, L_mm)
+            brukt += bredde; el_nr += 1; rest_mm = max(rest_mm - L_mm, 0)
+        while brukt + pw_mm <= L_mm:
+            brukt += pw_mm; el_nr += 1
+        remaining = L_mm - brukt
+        if remaining > 0:
+            el_nr += 1; rest_mm = pw_mm - remaining
+    return el_nr, rest_mm
+
+
 def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=None):
     """Veggoppstalt per vegg med elementoppdeling, dørmål og høyde-mål."""
     wls   = wall_lengths(pts)
@@ -607,33 +640,38 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
                                      edgecolor="#888", linewidth=0, hatch="////",
                                      zorder=1.5, alpha=0.5))
 
-    # ── Elementoppdeling ──────────────────────────────────────────────────────
-    brukt = 0; el_nr = 1
+    # ── Elementoppdeling med global V-nummerering ─────────────────────────────
+    el_nr, rest_mm_v = _global_start_el_nr(wls, pw_m, vegg_idx)
+    brukt = 0
     el_positions = []
-    while brukt + pw_m <= L:
-        el_positions.append((brukt, pw_m, f"V{el_nr}", "hel"))
-        brukt += pw_m; el_nr += 1
+    if rest_mm_v > 0:
+        bredde = min(rest_mm_v / 1000, L)
+        el_positions.append((brukt, bredde, f"V{el_nr}", "rest"))
+        brukt += bredde; el_nr += 1
+    while brukt + pw_m <= L + 1e-6:
+        w = min(pw_m, L - brukt)
+        if w < 0.001: break
+        el_positions.append((brukt, w, f"V{el_nr}", "hel"))
+        brukt += w; el_nr += 1
     kapp = L - brukt
     if kapp > 0.001:
         el_positions.append((brukt, kapp, f"V{el_nr}", "kapp"))
 
     for x, w, lbl, typ in el_positions:
-        col_fill = "#ddeeff" if typ == "hel" else "#ffd6b0"
-        col_edge = BLUE if typ == "hel" else ORANGE
+        col_fill = "#e8e8e8" if typ == "hel" else "#cccccc"
         ax.add_patch(mpatches.Rectangle((x, 0), w, H, facecolor=col_fill,
-                                         edgecolor=col_edge, linewidth=0.9, zorder=2, alpha=0.7))
+                                         edgecolor="#000", linewidth=0.9, zorder=2, alpha=0.7))
         ax.text(x + w/2, H/2, f"{lbl}\n{round(w*1000)} mm",
-                ha="center", va="center", fontsize=7,
-                color=BLUE if typ=="hel" else "#8b3e00",
-                fontweight="bold", zorder=4,
-                bbox=dict(fc="white", ec="none", pad=0.3, alpha=0.8))
+                ha="center", va="center", fontsize=8,
+                color="#000",
+                fontweight="bold", zorder=4)
         if x > 0:
             ax.plot([x, x], [0, H], color=WALL_EDGE, lw=0.8, zorder=3)
 
     # ── Dørmarkering med mål ──────────────────────────────────────────────────
     door_cursor = 0.35
     for entry in dorer:
-        dk, ant, wall_idx_d, offset_m = _door_entry(entry)
+        dk, ant, wall_idx_d, offset_m, _hengsel_s = _door_entry(entry)
         if int(wall_idx_d) != vegg_idx or ant <= 0:
             continue
         d  = DOR_DB[dk]
@@ -656,47 +694,54 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
         door_cursor = cursor
 
     # ── Åpninger / klassfronter på denne veggen ───────────────────────────────
-    CYAN = "#00aacc"
+    AP_COL = "#000000"   # sort for åpning, linjer og mål
     dim_bot = -0.70   # tracker for mål-linjer nedover
     if apninger:
         for ap in apninger:
             ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap
             if int(ap_wall) != vegg_idx:
                 continue
-            # Tegn åpning som hvit rektangel med cyan kant
+            # Tegn åpning som hvit rektangel
             ax.add_patch(mpatches.Rectangle(
                 (ap_off, ap_sill), ap_w, ap_h,
-                facecolor="white", edgecolor=CYAN,
+                facecolor="white", edgecolor=AP_COL,
                 linewidth=2.0, zorder=5))
             # Tre horisontale linjer = klassfront-symbol
             for frac in (0.25, 0.5, 0.75):
                 yy = ap_sill + ap_h * frac
                 ax.plot([ap_off + ap_w*0.15, ap_off + ap_w*0.85],
-                        [yy, yy], color=CYAN, lw=0.8, linestyle="-", zorder=6)
+                        [yy, yy], color=AP_COL, lw=0.8, linestyle="-", zorder=6)
             # Etikett inne i åpningen
             ax.text(ap_off + ap_w/2, ap_sill + ap_h/2,
                     f"{ap_lbl}\n{round(ap_w*1000)}×{round(ap_h*1000)} mm",
-                    ha="center", va="center", fontsize=6,
-                    color=CYAN, fontweight="bold", zorder=7,
-                    bbox=dict(fc="white", ec="none", pad=0.3, alpha=0.9))
-            # Mål: offset fra hjørne → underkant åpning
+                    ha="center", va="center", fontsize=8,
+                    color=AP_COL, fontweight="bold", zorder=7)
+            # Horisontale mål under veggen
             _dh(ax, 0, ap_off, dim_bot,
-                f"{round(ap_off*1000)} mm", ey=dim_bot, col="#555", fs=5.5)
-            # Bredde
-            _dh(ax, ap_off, ap_off+ap_w, dim_bot - 0.20,
-                f"{round(ap_w*1000)} mm", ey=dim_bot - 0.20, col=CYAN, fs=5.5)
-            # Sill-høyde
-            sill_cm = round(ap_sill * 100)
-            _dv(ax, 0, ap_sill, ap_off - 0.12,
-                f"{sill_cm} cm", ex=ap_off - 0.12, col="#555", fs=5.5)
+                f"{round(ap_off*1000)} mm", ey=dim_bot, col=AP_COL, fs=5.5)
+            _dh(ax, ap_off, ap_off+ap_w, dim_bot - 0.25,
+                f"{round(ap_w*1000)} mm", ey=dim_bot - 0.25, col=AP_COL, fs=5.5)
+            dim_bot -= 0.55
+
+            # Vertikale mål: forlengelseslinjer fra høyre kant av utsparringen
+            ap_right = ap_off + ap_w   # høyre kant av åpningen
+            arr_x    = L + 0.55        # x for selve pil-linjen
+            # Fra gulv til underkant åpning
+            if ap_sill > 0.001:
+                _dv(ax, 0, ap_sill, ap_right,
+                    f"{round(ap_sill*1000)} mm", ex=arr_x, col=AP_COL, fs=5.5)
             # Åpningshøyde
-            _dv(ax, ap_sill, ap_sill + ap_h, ap_off + ap_w + 0.12,
-                f"{round(ap_h*1000)} mm", ex=ap_off + ap_w + 0.12, col=CYAN, fs=5.5)
-            dim_bot -= 0.45
+            _dv(ax, ap_sill, ap_sill + ap_h, ap_right,
+                f"{round(ap_h*1000)} mm", ex=arr_x, col=AP_COL, fs=5.5)
+            # Fra topp åpning til topp element
+            top_gap = H - (ap_sill + ap_h)
+            if top_gap > 0.001:
+                _dv(ax, ap_sill + ap_h, H, ap_right,
+                    f"{round(top_gap*1000)} mm", ex=arr_x, col=AP_COL, fs=5.5)
 
     # ── Mål ───────────────────────────────────────────────────────────────────
     _dh(ax, 0, L,  0, f"{L_mm} mm",  ey=dim_bot - 0.20)
-    _dv(ax, 0, H, L, f"{H_mm} mm", ex=L + 0.40)
+    _dv(ax, 0, H, L, f"{H_mm} mm", ex=L + 0.90)
 
     # Element-mål kjede (toppen)
     for x, w, lbl, _ in el_positions:
@@ -773,7 +818,7 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
 
     # Dør på denne veggen
     for entry in dorer:
-        dk, ant, wall_idx_d, offset_m = _door_entry(entry)
+        dk, ant, wall_idx_d, offset_m, _hengsel_s = _door_entry(entry)
         if int(wall_idx_d) != vegg_idx or ant <= 0:
             continue
         d  = DOR_DB[dk]; dh = d["bh"] / 1000
@@ -849,7 +894,7 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
                 f"{round(ap_h*1000)} mm", ex=-DIM_OFF - 0.40, col=CYAN, fs=5.5)
             if ap_sill > 0:
                 _dv(ax, UC, UC + ap_sill, -DIM_OFF - 0.65,
-                    f"{round(ap_sill*100)} cm", ex=-DIM_OFF - 0.65, col="#555", fs=5.5)
+                    f"{round(ap_sill*1000)} mm", ex=-DIM_OFF - 0.65, col="#555", fs=5.5)
 
     H_mm  = round(H*1000); WT_mm = round(WT*1000)
     inn_fri = L - 2*WT
@@ -945,7 +990,7 @@ def _edge_kind(local_pts: np.ndarray, panel_width_mm: int, idx: int) -> str:
 
 
 def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
-                    panel_number: int, category: str = "Tak"):
+                    panel_number: int, category: str = "Tak", cutouts: list | None = None):
     """Tegner én panel-detalj med alle mål, vinkler og produksjonsnotes."""
     n = len(local_pts)
     WT_mm = PANEL_DB[panel_key]["t"]
@@ -963,6 +1008,24 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
                              zorder=2.5, alpha=0.35))
 
     center = local_pts.mean(axis=0)
+
+    # ── Utsparinger (dører og åpninger) ───────────────────────────────────────
+    for (lx, ly, lw, lh, cut_lbl) in (cutouts or []):
+        ax.add_patch(mpatches.Rectangle(
+            (lx, ly), lw, lh,
+            facecolor="white", edgecolor="#000", linewidth=1.4,
+            linestyle="--", zorder=5))
+        ax.text(lx + lw/2, ly + lh/2, cut_lbl,
+                ha="center", va="center", fontsize=6,
+                color="#000", fontweight="bold", zorder=6)
+        # Målpiler for utsparing
+        _dv(ax, ly, ly + lh, lx + lw, f"{round(lh*1000)} mm",
+            ex=lx + lw + 0.08, col="#000", fs=5.5)
+        _dh(ax, lx, lx + lw, ly - 0.08, f"{round(lw*1000)} mm",
+            ey=ly - 0.08, col="#000", fs=5.5)
+        if ly > 0.001:
+            _dv(ax, 0, ly, lx - 0.08, f"{round(ly*1000)} mm",
+                ex=lx - 0.08, col="#000", fs=5.5)
 
     # ── Kantmål og klassifisering ──────────────────────────────────────────────
     for i in range(n):
@@ -1127,6 +1190,8 @@ def stramo_produksjonstegninger(
     rom_type: str,
     info: dict,
     bare_tilpassede: bool = False,
+    dorer: list | None = None,
+    apninger: list | None = None,
 ) -> list[plt.Figure]:
     """
     Genererer ett figur-objekt per side med produksjonstegninger.
@@ -1140,6 +1205,8 @@ def stramo_produksjonstegninger(
     """
     pw_mm   = round(pw_m * 1000)
     is_frys = "Fryserom" in rom_type
+    dorer   = dorer   or []
+    apninger = apninger or []
 
     # Hent alle paneler
     tak_p  = generate_roof_floor_panels(pts, pw_mm, prefix="T",  label="Tak")
@@ -1148,36 +1215,78 @@ def stramo_produksjonstegninger(
     # Vegg-kapp: rektangulære panel men kortere enn standardbredde
     from geometry import wall_lengths as _wl
     wls     = _wl(pts)
-    vegg_p  = []
+    vegg_p  = []   # list of (panel, wall_idx, x_start_mm)
     el_nr   = 1; rest_mm = 0
     for wi, wl in enumerate(wls):
         L_mm = round(wl * 1000); brukt = 0
         if rest_mm > 0:
             bredde = min(rest_mm, L_mm)
-            _make_vegg(vegg_p, el_nr, wi, bredde, round(H*1000), pw_mm, rest=True)
+            _make_vegg(vegg_p, el_nr, wi, bredde, round(H*1000), pw_mm,
+                       x_start_mm=brukt, rest=True)
             brukt += bredde; el_nr += 1; rest_mm = max(rest_mm-L_mm, 0)
         while brukt + pw_mm <= L_mm:
+            _make_vegg(vegg_p, el_nr, wi, pw_mm, round(H*1000), pw_mm,
+                       x_start_mm=brukt)
             brukt += pw_mm; el_nr += 1
         remaining = L_mm - brukt
         if remaining > 0:
-            _make_vegg(vegg_p, el_nr, wi, remaining, round(H*1000), pw_mm)
+            _make_vegg(vegg_p, el_nr, wi, remaining, round(H*1000), pw_mm,
+                       x_start_mm=brukt)
             el_nr += 1; rest_mm = pw_mm - remaining
 
-    # Samle alt
+    # Samle alt – vegg-tupler er (panel, wall_idx, x_start_mm), tak/gulv er bare panel
     alle = (
-        [("Tak",  p) for p in tak_p] +
-        [("Gulv", p) for p in gulv_p] +
-        [("Vegg", p) for p in vegg_p]
+        [("Tak",  p, None, 0) for p in tak_p] +
+        [("Gulv", p, None, 0) for p in gulv_p] +
+        [("Vegg", p, wi, xs) for p, wi, xs in vegg_p]
     )
 
     if bare_tilpassede:
-        alle = [(cat, p) for cat, p in alle
+        alle = [(cat, p, wi, xs) for cat, p, wi, xs in alle
                 if "kapp" in p.kind.lower()
                 or "start" in p.kind.lower()
                 or len(p.polygon) > 4]
 
     if not alle:
         return []
+
+    def _cutouts_for_panel(cat, wall_idx, x_start_mm, width_mm, height_mm):
+        """Returnerer liste med (lx, ly, lw, lh, lbl) i meter relativt til panelet."""
+        if cat != "Vegg" or wall_idx is None:
+            return []
+        cuts = []
+        x_end_mm = x_start_mm + width_mm
+        # Dører
+        for entry in dorer:
+            de = _door_entry(entry)
+            dk, ant, w_idx, off_m, _hng = de
+            if int(w_idx) != wall_idx or ant <= 0:
+                continue
+            from database import DOR_DB
+            d = DOR_DB[dk]
+            d_off_mm = off_m * 1000
+            d_w_mm   = d["bw"]
+            d_h_mm   = d["bh"]
+            for _ in range(min(int(ant), 6)):
+                lo = max(d_off_mm, x_start_mm) - x_start_mm
+                hi = min(d_off_mm + d_w_mm, x_end_mm) - x_start_mm
+                if hi > lo + 1:
+                    cuts.append((lo/1000, 0, (hi-lo)/1000, d_h_mm/1000,
+                                 f"Dør {d_w_mm}×{d_h_mm}"))
+                d_off_mm += d_w_mm + 200
+        # Åpninger / utsparinger
+        for ap in apninger:
+            ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap
+            if int(ap_wall) != wall_idx:
+                continue
+            d_off_mm = ap_off * 1000
+            d_w_mm   = ap_w  * 1000
+            lo = max(d_off_mm, x_start_mm) - x_start_mm
+            hi = min(d_off_mm + d_w_mm, x_end_mm) - x_start_mm
+            if hi > lo + 1:
+                cuts.append((lo/1000, ap_sill, (hi-lo)/1000, ap_h,
+                             f"{ap_lbl} {round(d_w_mm)}×{round(ap_h*1000)}"))
+        return cuts
 
     PANELS_PER_PAGE = 4   # 2×2 per side
     figures = []
@@ -1203,11 +1312,12 @@ def stramo_produksjonstegninger(
                  ha="center", va="top", fontsize=7.5, color="#666")
 
         axes_flat = np.array(axes).flatten()
-        for cell, (cat, p) in enumerate(page):
+        for cell, (cat, p, wi, xs) in enumerate(page):
             num += 1
             ax = axes_flat[cell]
             local = _panel_to_local(p.polygon)
-            _draw_one_panel(ax, local, p, panel_key, num, category=cat)
+            cuts = _cutouts_for_panel(cat, wi, xs, p.width_mm, p.span_mm)
+            _draw_one_panel(ax, local, p, panel_key, num, category=cat, cutouts=cuts)
             ax.set_title(f"  {cat}: {p.name}  –  {p.kind}  [nr. {num}]",
                          fontsize=9, color=BLUE, fontweight="bold", pad=6, loc="left")
 
@@ -1221,7 +1331,8 @@ def stramo_produksjonstegninger(
     return figures
 
 
-def _make_vegg(out_list, el_nr, wall_idx, width_mm, height_mm, std_width_mm, rest=False):
+def _make_vegg(out_list, el_nr, wall_idx, width_mm, height_mm, std_width_mm,
+               x_start_mm=0, rest=False):
     """Lag et syntetisk vegg-panel for produksjonstegning."""
     from panel_engine import RoofFloorPanel
     w = width_mm / 1000.0; h = height_mm / 1000.0
@@ -1230,12 +1341,12 @@ def _make_vegg(out_list, el_nr, wall_idx, width_mm, height_mm, std_width_mm, res
                else ("Vegg – hel" if width_mm == std_width_mm else "Vegg – kapp"))
     note    = (f"Kapp {width_mm} mm – rett snitt" if "kapp" in kind.lower()
                else "Standard element")
-    out_list.append(RoofFloorPanel(
+    out_list.append((RoofFloorPanel(
         name=f"V{el_nr}", kind=kind,
         width_mm=width_mm, span_mm=height_mm,
         area_m2=round(w * h, 3),
         polygon=polygon, note=note,
-    ))
+    ), wall_idx, x_start_mm))
 
 
 def fig2png(fig, dpi: int = 200) -> io.BytesIO:

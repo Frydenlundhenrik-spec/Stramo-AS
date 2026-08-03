@@ -15,7 +15,7 @@ from fdv import lag_fdv_oversikt, lag_fdv_tekst
 from montasje import (
     tegn_plantegning, tegn_snitt, tegn_3d_modell,
     tegn_taktegning, tegn_veggoppstaltt, tegn_produksjonsfigurer,
-    figur_som_png, lag_tegningsinfo,
+    figur_som_png, figur_som_pdf, figurer_som_samlet_pdf, lag_tegningsinfo,
 )
 from ifc_export import gen_ifc
 from export_excel import lag_excel
@@ -76,14 +76,15 @@ def _beregn_cached(
     beslag_tuple: tuple, navn: str, pnr: str,
     tnr: str, dato: str, maalestokk: str,
     pris_json: str, breeam_mult: float,
+    apninger_tuple: tuple = (),
 ) -> dict[str, Any]:
     import json
     pris_override = json.loads(pris_json) if pris_json else {}
-    # Bygg dorer_mat = [(dk, ant)] for kalkulasjon/materialer
     dorer_mat = [(d[0], d[1]) for d in dorer_tuple]
     inp = ProjectInput(
         navn, pnr, tnr, dato, maalestokk, rom_type, panel_key,
         list(pts_tuple), H, pw_m, dorer_mat, list(beslag_tuple),
+        apninger=list(apninger_tuple),
     )
     return beregn_prosjekt(inp, pris_override=pris_override, breeam_multiplier=breeam_mult)
 
@@ -169,36 +170,41 @@ with st.sidebar:
     st.subheader("🏠 Romform")
     form_valg = st.selectbox("Form", list(FORM_MALER.keys()))
     st.caption(FORM_MALER[form_valg]["besk"])
-    H = st.number_input("Romhøyde (m)", min_value=1.8, max_value=8.0, value=2.5, step=0.05)
+    H_mm = st.number_input("Romhøyde (mm)", min_value=1800, max_value=8000, value=2500, step=50)
+    H = H_mm / 1000.0
 
     if form_valg != "Egendefinert polygon":
         c1, c2 = st.columns(2)
         with c1:
-            L_inp = st.number_input("Lengde (m)", min_value=0.5, max_value=50.0, value=5.85, step=0.05)
+            L_mm = st.number_input("Lengde (mm)", min_value=500, max_value=50000, value=5850, step=50)
         with c2:
-            B_inp = st.number_input("Bredde (m)", min_value=0.5, max_value=30.0, value=4.45, step=0.05)
+            B_mm = st.number_input("Bredde (mm)", min_value=500, max_value=30000, value=4450, step=50)
+        L_inp = L_mm / 1000.0
+        B_inp = B_mm / 1000.0
         if form_valg == "Femkant – avskåret hjørne":
             cc1, cc2 = st.columns(2)
             with cc1:
-                CX = st.number_input("Avskjær X (m)", min_value=0.05, max_value=L_inp, value=1.10, step=0.05)
+                CX_mm = st.number_input("Avskjær X (mm)", min_value=50, max_value=L_mm, value=1100, step=50)
             with cc2:
-                CY = st.number_input("Avskjær Y (m)", min_value=0.05, max_value=B_inp, value=1.10, step=0.05)
+                CY_mm = st.number_input("Avskjær Y (mm)", min_value=50, max_value=B_mm, value=1100, step=50)
+            CX = CX_mm / 1000.0
+            CY = CY_mm / 1000.0
         else:
             CX = CY = 0.0
         pts = FORM_MALER[form_valg]["func"](L_inp, B_inp, CX, CY)
     else:
         n_pts = int(st.number_input("Antall hjørner", min_value=3, max_value=16, value=5, step=1))
-        defs  = [(0,0),(5.85,0),(5.85,3.35),(4.75,4.45),(0,4.45)]
+        defs  = [(0,0),(5850,0),(5850,3350),(4750,4450),(0,4450)]
         pts   = []
         for i in range(n_pts):
             c1, c2 = st.columns(2)
             dx = float(defs[i][0]) if i < len(defs) else 0.0
             dy = float(defs[i][1]) if i < len(defs) else 0.0
             with c1:
-                px = st.number_input(f"X{i+1}", value=dx, step=0.05, key=f"px{i}")
+                px_mm = st.number_input(f"X{i+1} (mm)", value=dx, step=50.0, key=f"px{i}")
             with c2:
-                py = st.number_input(f"Y{i+1}", value=dy, step=0.05, key=f"py{i}")
-            pts.append((px, py))
+                py_mm = st.number_input(f"Y{i+1} (mm)", value=dy, step=50.0, key=f"py{i}")
+            pts.append((px_mm / 1000.0, py_mm / 1000.0))
 
     # Polygon-validering
     poly_ok = True
@@ -211,8 +217,8 @@ with st.sidebar:
     # ── Elementbredde ─────────────────────────────────────────────────────────
     st.divider()
     st.subheader("📏 Elementbredde")
-    pw_cm = st.number_input("Elementbredde (cm)", min_value=30, max_value=200, value=110, step=5)
-    pw_m  = pw_cm / 100.0
+    pw_mm = st.number_input("Elementbredde (mm)", min_value=300, max_value=2000, value=1100, step=50)
+    pw_m  = pw_mm / 1000.0
 
     # ── Dører med veggplassering ──────────────────────────────────────────────
     st.divider()
@@ -234,16 +240,24 @@ with st.sidebar:
             wall_idx = st.number_input(
                 "Vegg nr", min_value=1, max_value=wls_count, value=1, step=1, key=f"dw{i}"
             ) - 1
-        offset_m = st.number_input(
-            f"Offset fra hjørne (m) – type {i+1}", min_value=0.1, max_value=10.0,
-            value=0.35, step=0.05, key=f"do{i}"
-        )
-        dorer_full.append((dk, int(da), int(wall_idx), float(offset_m)))
+        h1, h2 = st.columns(2)
+        with h1:
+            offset_mm = st.number_input(
+                f"Offset fra hjørne (mm) – type {i+1}", min_value=100, max_value=10000,
+                value=350, step=50, key=f"do{i}"
+            )
+        with h2:
+            hengsel = st.selectbox(
+                "Hengslingsside", ["Venstre", "Høyre"], key=f"dh{i}",
+                help="Siden hengslet sitter på (sett innenfra rommet)"
+            )
+        offset_m = offset_mm / 1000.0
+        dorer_full.append((dk, int(da), int(wall_idx), float(offset_m), hengsel))
         dorer_mat.append((dk, int(da)))
 
     # ── Åpninger (klassfronter, display-fronter etc.) ─────────────────────────
     st.divider()
-    st.subheader("🪟 Åpninger / Klassfronter")
+    st.subheader("🪟 Åpninger / Utsparinger")
     n_ap = int(st.number_input("Antall åpninger", min_value=0, max_value=8,
                                value=0, step=1, key="n_apninger"))
     apninger_list = []   # [(wall_idx, offset_m, width_m, height_m, sill_m, label), ...]
@@ -251,30 +265,30 @@ with st.sidebar:
         st.caption(f"Åpning {ai+1}")
         ca1, ca2, ca3 = st.columns([2, 1, 1])
         with ca1:
-            ap_label = st.text_input(f"Navn", value=f"Klassfrontåpning {ai+1}",
+            ap_label = st.text_input(f"Navn", value=f"Utsparing {ai+1}",
                                      key=f"ap_lbl{ai}")
         with ca2:
             ap_wall = int(st.number_input("Vegg nr", min_value=1,
                                           max_value=wls_count, value=1, step=1,
                                           key=f"ap_w{ai}")) - 1
         with ca3:
-            ap_sill = st.selectbox("Fra gulv", [0, 10, 20],
-                                   format_func=lambda v: f"{v} cm",
-                                   key=f"ap_sill{ai}")
+            ap_sill = st.number_input("Fra gulv (mm)", min_value=0,
+                                      max_value=3000, value=0, step=50,
+                                      key=f"ap_sill{ai}")
         cb1, cb2, cb3 = st.columns(3)
         with cb1:
-            ap_offset = st.number_input("Offset fra hjørne (m)", min_value=0.05,
-                                        max_value=10.0, value=0.30, step=0.05,
-                                        key=f"ap_off{ai}")
+            ap_offset_mm = st.number_input("Offset fra hjørne (mm)", min_value=50,
+                                            max_value=10000, value=300, step=50,
+                                            key=f"ap_off{ai}")
         with cb2:
-            ap_w = st.number_input("Bredde (m)", min_value=0.10, max_value=5.0,
-                                   value=1.00, step=0.05, key=f"ap_bw{ai}")
+            ap_w_mm = st.number_input("Bredde (mm)", min_value=100, max_value=5000,
+                                      value=1000, step=50, key=f"ap_bw{ai}")
         with cb3:
-            ap_h = st.number_input("Høyde (m)", min_value=0.10, max_value=3.0,
-                                   value=1.80, step=0.05, key=f"ap_bh{ai}")
+            ap_h_mm = st.number_input("Høyde (mm)", min_value=100, max_value=3000,
+                                      value=1800, step=50, key=f"ap_bh{ai}")
         apninger_list.append((
-            int(ap_wall), float(ap_offset), float(ap_w),
-            float(ap_h), float(ap_sill) / 100.0,
+            int(ap_wall), float(ap_offset_mm) / 1000.0, float(ap_w_mm) / 1000.0,
+            float(ap_h_mm) / 1000.0, float(ap_sill) / 1000.0,
             ap_label or f"Åpning {ai+1}",
         ))
 
@@ -323,6 +337,7 @@ _cache_key = dict(
     navn=navn, pnr=pnr, tnr=tnr, dato=dato, maalestokk=maalestokk,
     pris_json=_json.dumps(st.session_state["pris_override"], sort_keys=True),
     breeam_mult=breeam_mult,
+    apninger_tuple=tuple(tuple(a) for a in apninger_list) if apninger_list else (),
 )
 result   = _beregn_cached(**_cache_key)
 fdv_df   = lag_fdv_oversikt(panel_key, rom_type, dorer_mat, beslag_valg)
@@ -331,13 +346,14 @@ fdv_df   = lag_fdv_oversikt(panel_key, rom_type, dorer_mat, beslag_valg)
 inp = ProjectInput(
     navn, pnr, tnr, dato, maalestokk, rom_type, panel_key,
     pts, H, pw_m, dorer_full, beslag_valg,
+    apninger=apninger_list if apninger_list else [],
 )
 
 # ── Hoved-header ──────────────────────────────────────────────────────────────
 st.title(f"❄️ {navn.strip() or 'Kjølerom'}")
 st.caption(
     f"{rom_type} · Panel: {result['panel']['label']} · "
-    f"Elementbredde: {pw_cm} cm"
+    f"Elementbredde: {pw_mm} mm"
     + (f"  ·  BREEAM {breeam_level}" if breeam_level != "Ingen" else "")
 )
 
@@ -406,11 +422,11 @@ elif modul == "Montasjetegninger":
     with tab_plan:
         fig = tegn_plantegning(inp, result, bakfil, apninger=apninger_list or None)
         st.pyplot(fig, use_container_width=True)
-        png = figur_som_png(fig)
+        pdf = figur_som_pdf(fig)
         plt.close(fig)
         st.download_button(
-            "Last ned plantegning PNG", png,
-            f"{tnr}_{navn or 'prosjekt'}_plan.png", "image/png",
+            "Last ned plantegning PDF", pdf,
+            f"{tnr}_{navn or 'prosjekt'}_plan.pdf", "application/pdf",
         )
         vdf = pd.DataFrame([{
             "Vegg": f"V{i+1}", "Lengde (m)": round(w, 3),
@@ -427,11 +443,11 @@ elif modul == "Montasjetegninger":
         seksjon = st.text_input("Seksjon", "A-A")
         fig = tegn_snitt(inp, result, v_idx, seksjon, apninger=apninger_list or None)
         st.pyplot(fig, use_container_width=True)
-        png = figur_som_png(fig)
+        pdf = figur_som_pdf(fig)
         plt.close(fig)
         st.download_button(
-            "Last ned snitt PNG", png,
-            f"{tnr}_{navn or 'prosjekt'}_snitt_{seksjon}.png", "image/png",
+            "Last ned snitt PDF", pdf,
+            f"{tnr}_{navn or 'prosjekt'}_snitt_{seksjon}.pdf", "application/pdf",
         )
 
     with tab_tak:
@@ -442,11 +458,11 @@ elif modul == "Montasjetegninger":
         )
         fig_tak = tegn_taktegning(inp, result)
         st.pyplot(fig_tak, use_container_width=True)
-        png_tak = figur_som_png(fig_tak)
+        pdf_tak = figur_som_pdf(fig_tak)
         plt.close(fig_tak)
         st.download_button(
-            "Last ned taktegning PNG", png_tak,
-            f"{tnr}_{navn or 'prosjekt'}_tak.png", "image/png",
+            "Last ned taktegning PDF", pdf_tak,
+            f"{tnr}_{navn or 'prosjekt'}_tak.pdf", "application/pdf",
         )
 
     with tab_oppsalt:
@@ -457,11 +473,11 @@ elif modul == "Montasjetegninger":
         v_idx2 = v_opts2.index(valgt2)
         fig2 = tegn_veggoppstaltt(inp, result, v_idx2, apninger=apninger_list or None)
         st.pyplot(fig2, use_container_width=True)
-        png2 = figur_som_png(fig2)
+        pdf2 = figur_som_pdf(fig2)
         plt.close(fig2)
         st.download_button(
-            "Last ned veggoppstalt PNG", png2,
-            f"{tnr}_{navn or 'prosjekt'}_vegg{v_idx2+1}.png", "image/png",
+            "Last ned veggoppstalt PDF", pdf2,
+            f"{tnr}_{navn or 'prosjekt'}_vegg{v_idx2+1}.pdf", "application/pdf",
         )
 
     with tab_prod:
@@ -479,13 +495,22 @@ elif modul == "Montasjetegninger":
         figs_prod = tegn_produksjonsfigurer(inp, result, bare_tilpassede=vis_bare_tilpassede)
         if not figs_prod:
             st.warning("Ingen elementer å vise. Prøv å fjerne filteret.")
+        else:
+            samlet_pdf = figurer_som_samlet_pdf(figs_prod)
+            st.download_button(
+                "Last ned alle produksjonstegninger PDF",
+                samlet_pdf,
+                f"{tnr}_{navn or 'prosjekt'}_produksjon_alle.pdf",
+                "application/pdf",
+                key="dl_prod_alle",
+            )
         for pi, fp in enumerate(figs_prod):
             st.pyplot(fp, use_container_width=True)
-            png_p = figur_som_png(fp, dpi=200)
+            pdf_p = figur_som_pdf(fp)
             plt.close(fp)
             st.download_button(
-                f"Last ned side {pi+1} PNG", png_p,
-                f"{tnr}_{navn or 'prosjekt'}_produksjon_s{pi+1}.png", "image/png",
+                f"Last ned side {pi+1} PDF", pdf_p,
+                f"{tnr}_{navn or 'prosjekt'}_produksjon_s{pi+1}.pdf", "application/pdf",
                 key=f"dl_prod_{pi}",
             )
 
@@ -501,6 +526,16 @@ elif modul == "Montasjetegninger":
             st.download_button(
                 "Last ned interaktiv 3D HTML", html,
                 f"{tnr}_{navn or 'prosjekt'}_3d.html", "text/html",
+            )
+            ifc_3d = gen_ifc(
+                pts, H, navn or "Kjolerom", panel_key,
+                dorer_full, rom_type, pw_m,
+                apninger=apninger_list if apninger_list else None,
+            )
+            st.download_button(
+                "Last ned IFC", ifc_3d,
+                f"{tnr}_{navn or 'prosjekt'}.ifc", "application/octet-stream",
+                key="dl_ifc_3d",
             )
 
 elif modul == "Kapplister":
