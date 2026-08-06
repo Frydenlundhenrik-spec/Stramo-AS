@@ -13,7 +13,7 @@ def _poly_centroid(pts: np.ndarray) -> np.ndarray:
     return np.array([float(np.mean(pts[:, 0])), float(np.mean(pts[:, 1]))])
 
 
-def _add_polygon_mesh(fig: go.Figure, pts: np.ndarray, z: float, *, name: str, color: str, opacity: float = 1.0) -> None:
+def _add_polygon_mesh(fig: go.Figure, pts: np.ndarray, z: float, *, name: str, color: str, opacity: float = 1.0, showlegend: bool = False) -> None:
     if len(pts) < 3:
         return
     c = _poly_centroid(pts)
@@ -23,7 +23,8 @@ def _add_polygon_mesh(fig: go.Figure, pts: np.ndarray, z: float, *, name: str, c
     i, j, k = [], [], []
     for n in range(1, len(pts) + 1):
         i.append(0); j.append(n); k.append(1 if n == len(pts) else n + 1)
-    fig.add_trace(go.Mesh3d(x=x, y=y, z=zz, i=i, j=j, k=k, color=color, opacity=opacity, name=name, flatshading=True, hoverinfo="name"))
+    fig.add_trace(go.Mesh3d(x=x, y=y, z=zz, i=i, j=j, k=k, color=color, opacity=opacity, name=name,
+                             flatshading=True, hoverinfo="name", showlegend=showlegend))
 
 
 def _add_vertical_faces(fig: go.Figure, pts: np.ndarray, z0: float, z1: float, *, name: str, color: str, opacity: float = 1.0) -> None:
@@ -189,6 +190,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
             camera=dict(eye=dict(x=1.6, y=-1.7, z=1.15)),
             bgcolor="#f7f9fc",
         ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        # Under plottet, ikke over – der kolliderte den med tittelen.
+        legend=dict(orientation="h", yanchor="top", y=-0.03, xanchor="left", x=0),
     )
     return fig

@@ -7,6 +7,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from database import PANEL_DB, BESLAG_DB, DOR_DB, FORM_MALER, PANELER, load_databases
 from geometry import wall_lengths, validate_polygon
@@ -21,12 +22,14 @@ from ifc_export import gen_ifc
 from export_excel import lag_excel
 from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
 from chatbot import vis_chatbot
-from projects import (
-    lagre_prosjekt, hent_alle_prosjekter, hent_prosjekt,
-    slett_prosjekt, oppdater_prosjekt,
-)
+from projects import lagre_prosjekt
+from branding import LOGO_PATH, logo_finnes, logo_data_uri
 
-st.set_page_config(page_title="Stramo kjøleromssystem", page_icon="❄️", layout="wide")
+st.set_page_config(
+    page_title="Stramo kjøleromssystem",
+    page_icon=str(LOGO_PATH) if logo_finnes() else "❄️",
+    layout="wide",
+)
 
 st.markdown("""
 <style>
@@ -69,6 +72,35 @@ def card(t: str, v: str, s: str = "") -> None:
     )
 
 
+def _scroll_til_topp() -> None:
+    """
+    Tvinger visningen til toppen av siden.
+
+    Chat-feltet nederst får autofokus når det monteres, og nettleseren
+    scroller det inn i bildet. Det skjer ved første lasting og hver gang
+    modul byttes – da bygges hovedinnholdet på nytt.
+    """
+    import time
+    components.html(
+        f"""
+        <script>
+          // {time.time()} – gjør innholdet unikt slik at skriptet kjører på nytt
+          const topp = () => {{
+            const d = window.parent.document;
+            window.parent.scrollTo(0, 0);
+            d.querySelectorAll(
+              '[data-testid="stMain"], [data-testid="stAppViewContainer"], section.main'
+            ).forEach(el => el.scrollTop = 0);
+          }};
+          topp();
+          requestAnimationFrame(topp);
+          [50, 150, 400].forEach(ms => setTimeout(topp, ms));
+        </script>
+        """,
+        height=0,
+    )
+
+
 @st.cache_data(show_spinner=False)
 def _beregn_cached(
     panel_key: str, rom_type: str, pts_tuple: tuple,
@@ -91,39 +123,19 @@ def _beregn_cached(
 
 # ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("❄️ Stramo")
+    if logo_finnes():
+        st.image(str(LOGO_PATH), width=170)
+    else:
+        st.title("❄️ Stramo")
     st.caption("Kalkulasjon · FDV · Montasje · Kappliste · IFC")
 
     modul = st.radio(
         "Velg modul",
-        ["Kalkulasjon", "FDV", "Montasjetegninger",
-         "Kapplister", "IFC-eksport", "Samlet eksport", "Prisredigering"],
+        ["Kalkulasjon", "FDV", "Montasjetegninger", "Kapplister"],
     )
 
-    # ── Prosjekthåndtering ────────────────────────────────────────────────────
-    st.divider()
-    with st.expander("💾 Prosjekthåndtering", expanded=False):
-        prosjekter = hent_alle_prosjekter()
-        if prosjekter:
-            proj_labels = {p["id"]: f"{p['navn']}  ({p['dato']})" for p in prosjekter}
-            valgt_id = st.selectbox(
-                "Last inn prosjekt",
-                [None] + list(proj_labels.keys()),
-                format_func=lambda x: "– velg –" if x is None else proj_labels[x],
-            )
-            if valgt_id and st.button("📂 Last inn"):
-                data = hent_prosjekt(valgt_id)
-                if data:
-                    for k, v in data.items():
-                        st.session_state[k] = v
-                    st.success("Prosjekt lastet inn!")
-                    st.rerun()
-            if valgt_id and st.button("🗑️ Slett", type="secondary"):
-                slett_prosjekt(valgt_id)
-                st.success("Slettet.")
-                st.rerun()
-        else:
-            st.info("Ingen lagrede prosjekter.")
+    # Ved første lasting og ved modulbytte skal visningen starte på toppen.
+    _start_paa_topp = st.session_state.get("_forrige_modul") != modul
 
     # ── Prosjektinfo ──────────────────────────────────────────────────────────
     st.divider()
@@ -301,19 +313,6 @@ with st.sidebar:
         format_func=lambda k: BESLAG_DB[k]["label"],
     )
 
-    # ── BREEAM-lite ───────────────────────────────────────────────────────────
-    st.divider()
-    with st.expander("🌱 Miljøkrav (BREEAM-inspirert)", expanded=False):
-        st.caption("Legger til miljøkostnad som prispavikling – etter prinsipp fra NS-EN 15978.")
-        breeam_level = st.selectbox("Miljønivå", list(BREEAM_MULTIPLIERS.keys()), index=0)
-        breeam_mult  = BREEAM_MULTIPLIERS[breeam_level]
-        if breeam_level != "Ingen":
-            st.info(
-                f"Prisjustering: +{round((breeam_mult-1)*100)}%  ·  "
-                f"Faktor: {breeam_mult:.2f}  ·  "
-                "Inkluderer miljøoppfølging, avfallshåndtering og lavkarbonmaterialer."
-            )
-
     st.divider()
     bakfil = st.file_uploader("Bakgrunn plantegning PNG/JPG", type=["png","jpg","jpeg"])
 
@@ -336,7 +335,7 @@ _cache_key = dict(
     beslag_tuple=tuple(beslag_valg),
     navn=navn, pnr=pnr, tnr=tnr, dato=dato, maalestokk=maalestokk,
     pris_json=_json.dumps(st.session_state["pris_override"], sort_keys=True),
-    breeam_mult=breeam_mult,
+    breeam_mult=1.0,
     apninger_tuple=tuple(tuple(a) for a in apninger_list) if apninger_list else (),
 )
 result   = _beregn_cached(**_cache_key)
@@ -352,9 +351,7 @@ inp = ProjectInput(
 # ── Hoved-header ──────────────────────────────────────────────────────────────
 st.title(f"❄️ {navn.strip() or 'Kjølerom'}")
 st.caption(
-    f"{rom_type} · Panel: {result['panel']['label']} · "
-    f"Elementbredde: {pw_mm} mm"
-    + (f"  ·  BREEAM {breeam_level}" if breeam_level != "Ingen" else "")
+    f"{rom_type} · Panel: {result['panel']['label']} · Elementbredde: {pw_mm} mm"
 )
 
 k1, k2, k3, k4, k5 = st.columns(5)
@@ -382,11 +379,6 @@ if modul == "Kalkulasjon":
     with c3:
         kr_m2 = result["tot_pris"] / result["ov"]["A"] if result["ov"]["A"] else 0
         st.metric("Kr/m²", f"{kr_m2:,.0f} kr".replace(",", " "))
-    if breeam_level != "Ingen":
-        st.info(
-            f"💡 Prisene inkluderer BREEAM {breeam_level}-tillegg "
-            f"(+{round((breeam_mult-1)*100)}%)."
-        )
     st.download_button(
         "Last ned materialliste CSV",
         result["df_mat"].to_csv(index=False).encode("utf-8-sig"),
@@ -416,7 +408,7 @@ elif modul == "FDV":
 elif modul == "Montasjetegninger":
     st.header("📐 Montasjetegninger")
     tab_plan, tab_snitt, tab_tak, tab_oppsalt, tab_prod, tab_3d = st.tabs(
-        ["Plantegning", "Snitt", "Taktegning", "Veggoppstalt", "Produksjonstegninger", "3D"]
+        ["Plantegning", "Snitt", "Taktegning", "Vegger", "Produksjonstegninger", "3D"]
     )
 
     with tab_plan:
@@ -466,7 +458,7 @@ elif modul == "Montasjetegninger":
         )
 
     with tab_oppsalt:
-        st.info("Veggoppstalt viser panelfordeling og dørplassering på én vegg.")
+        st.info("Vegger viser panelfordeling og dørplassering på én vegg.")
         wls2 = wall_lengths(pts)
         v_opts2 = [f"Vegg {i+1}  ({wls2[i]*1000:.0f} mm)" for i in range(len(wls2))]
         valgt2 = st.selectbox("Velg vegg", v_opts2, key="oppstalt_vegg")
@@ -515,28 +507,34 @@ elif modul == "Montasjetegninger":
             )
 
     with tab_3d:
-        c1, c2 = st.columns([1, 4])
-        with c1:
-            azimuth   = st.slider("Rotasjon",     -180, 180,  -55, 5)
-            elevation = st.slider("Høydevinkel",     5,  85,   28, 5)
-        with c2:
-            fig3 = tegn_3d_modell(inp, azimuth, elevation, apninger=apninger_list or None)
-            st.plotly_chart(fig3, use_container_width=True)
-            html = fig3.to_html(include_plotlyjs="cdn").encode("utf-8")
-            st.download_button(
-                "Last ned interaktiv 3D HTML", html,
-                f"{tnr}_{navn or 'prosjekt'}_3d.html", "text/html",
+        # Kameraretningen justeres direkte i 3D-visningen (dra med musen),
+        # så egne rotasjon/høydevinkel-slidere er ikke nødvendig.
+        fig3 = tegn_3d_modell(inp, apninger=apninger_list or None)
+        st.plotly_chart(fig3, use_container_width=True)
+        html_str = fig3.to_html(include_plotlyjs="cdn")
+        _logo_uri = logo_data_uri()
+        if _logo_uri and "<body>" in html_str:
+            html_str = html_str.replace(
+                "<body>",
+                "<body><img src='" + _logo_uri + "' "
+                "style='position:fixed;top:12px;left:12px;height:40px;z-index:1000;'>",
+                1,
             )
-            ifc_3d = gen_ifc(
-                pts, H, navn or "Kjolerom", panel_key,
-                dorer_full, rom_type, pw_m,
-                apninger=apninger_list if apninger_list else None,
-            )
-            st.download_button(
-                "Last ned IFC", ifc_3d,
-                f"{tnr}_{navn or 'prosjekt'}.ifc", "application/octet-stream",
-                key="dl_ifc_3d",
-            )
+        html = html_str.encode("utf-8")
+        st.download_button(
+            "Last ned interaktiv 3D HTML", html,
+            f"{tnr}_{navn or 'prosjekt'}_3d.html", "text/html",
+        )
+        ifc_3d = gen_ifc(
+            pts, H, navn or "Kjolerom", panel_key,
+            dorer_full, rom_type, pw_m,
+            apninger=apninger_list if apninger_list else None,
+        )
+        st.download_button(
+            "Last ned IFC", ifc_3d,
+            f"{tnr}_{navn or 'prosjekt'}.ifc", "application/octet-stream",
+            key="dl_ifc_3d",
+        )
 
 elif modul == "Kapplister":
     st.header("🔪 Kapplister")
@@ -553,131 +551,6 @@ elif modul == "Kapplister":
         f"{navn or 'prosjekt'}_kappliste.csv", "text/csv",
     )
 
-elif modul == "IFC-eksport":
-    st.header("🏗️ IFC-eksport")
-    st.info(
-        "IFC2X3 med vegger (booleanske åpninger for dører og klassfronter), "
-        "gulv, takpaneler og gulvpaneler (fryserom). "
-        "Åpnes i Solibri, BIM 360, Revit m.fl."
-    )
-    ifc = gen_ifc(
-        pts, H, navn or "Kjolerom", panel_key,
-        dorer_full, rom_type, pw_m,
-        apninger=apninger_list if apninger_list else None,
-    )
-    st.success(f"IFC klar: {len(ifc)//1024} kB")
-    st.download_button(
-        "Last ned IFC", ifc,
-        f"{tnr}_{navn or 'prosjekt'}.ifc", "application/octet-stream",
-    )
-
-elif modul == "Samlet eksport":
-    st.header("📥 Samlet eksport")
-
-    # Full tilbuds-PDF med tegninger
-    st.subheader("Full tilbuds-PDF (inkl. tegninger)")
-    with st.spinner("Genererer plantegning og snitt…"):
-        _fig_plan  = tegn_plantegning(inp, result, bakfil, apninger=apninger_list or None)
-        _png_plan  = figur_som_png(_fig_plan).read()
-        plt.close(_fig_plan)
-        _fig_snitt = tegn_snitt(inp, result, 0, "A-A", apninger=apninger_list or None)
-        _png_snitt = figur_som_png(_fig_snitt).read()
-        plt.close(_fig_snitt)
-    try:
-        pi = dict(
-            navn=navn or "–", pnr=pnr, tnr=tnr, dato=dato,
-            rom_type=rom_type, panel_label=result["panel"]["label"],
-        )
-        tilbuds = lag_tilbuds_pdf(pi, result, result["df_mat"], _png_plan, _png_snitt)
-        st.download_button(
-            "📄 Last ned full tilbuds-PDF", tilbuds,
-            f"{navn or 'prosjekt'}_tilbud.pdf", "application/pdf",
-        )
-    except Exception as e:
-        st.warning(f"PDF-generering feilet: {e}. Installer: pip install reportlab")
-
-    st.subheader("Andre formater")
-    excel = lag_excel(result, fdv_df)
-    st.download_button("Last ned samlet Excel", excel,
-        f"{navn or 'prosjekt'}_samlet.xlsx",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    st.download_button("Materialliste CSV",
-        result["df_mat"].to_csv(index=False).encode("utf-8-sig"),
-        f"{navn or 'prosjekt'}_materialliste.csv", "text/csv")
-    st.download_button("Kappliste CSV",
-        result["df_kapp"].to_csv(index=False).encode("utf-8-sig"),
-        f"{navn or 'prosjekt'}_kappliste.csv", "text/csv")
-    st.download_button("FDV CSV",
-        fdv_df.to_csv(index=False).encode("utf-8-sig"),
-        f"{navn or 'prosjekt'}_fdv.csv", "text/csv")
-    ifc = gen_ifc(pts, H, navn or "Kjolerom", panel_key, dorer_mat, rom_type, pw_m)
-    st.download_button("IFC", ifc, f"{tnr}_{navn or 'prosjekt'}.ifc", "application/octet-stream")
-
-elif modul == "Prisredigering":
-    st.header("🏷️ Prisredigering")
-    st.info(
-        "Her kan du justere priser for denne sesjonen. "
-        "Prisene lagres ikke permanent – bruk 'Lagre prosjekt' for å bevare dem."
-    )
-    override = dict(st.session_state.get("pris_override", {}))
-    pan = PANEL_DB[panel_key]
-
-    st.subheader("Panelpris")
-    new_pan = st.number_input(
-        f"Vegg/tak panel – {pan['label']} (kr/m²)",
-        min_value=100, max_value=10000,
-        value=int(override.get("vegg_0", pan["pris"])), step=10,
-    )
-    for i in range(len(wall_lengths(pts))):
-        override[f"vegg_{i}"] = float(new_pan)
-    override["tak"] = float(new_pan)
-
-    st.subheader("Gulvpriser")
-    if rom_type.startswith("Kjølerom"):
-        st.caption("Kjølerom: gulvet er eksisterende betong – ikke inkludert i kalkulasjon.")
-    else:
-        new_pir = st.number_input(
-            "PIR gulvpanel (kr/m²)", min_value=100, max_value=5000,
-            value=int(override.get("gulv_pir", 650)), step=10,
-        )
-        new_spon = st.number_input(
-            "Sponplate m/ plastbelegg (kr/m²)", min_value=50, max_value=2000,
-            value=int(override.get("gulv_spon", 330)), step=10,
-        )
-        override["gulv_pir"]  = float(new_pir)
-        override["gulv_spon"] = float(new_spon)
-
-    st.subheader("U-kanal og beslag")
-    override["ukan"] = float(st.number_input(
-        "U-kanal 80 mm (kr/stk à 3 m)", min_value=50, max_value=2000,
-        value=int(override.get("ukan", 220)), step=10,
-    ))
-    override["beslag_inn"] = float(st.number_input(
-        "Innv. hjørnebeslag 50×50 mm (kr/stk à 2,5 m)", min_value=50, max_value=2000,
-        value=int(override.get("beslag_inn", 185)), step=10,
-    ))
-    override["beslag_ut"] = float(st.number_input(
-        "Utv. hjørnebeslag 50×125 mm (kr/stk à 2,5 m)", min_value=50, max_value=2000,
-        value=int(override.get("beslag_ut", 265)), step=10,
-    ))
-
-    st.subheader("Dørpriser")
-    for dk in DOR_DB:
-        d = DOR_DB[dk]
-        override[f"dor_{dk}"] = float(st.number_input(
-            f"{d['label']} (kr/stk)", min_value=1000, max_value=200000,
-            value=int(override.get(f"dor_{dk}", d["pris"])), step=500,
-        ))
-
-    if st.button("✅ Bruk disse prisene"):
-        st.session_state["pris_override"] = override
-        st.success("Prisene er oppdatert – kalkulasjonen vil bruke disse verdiene.")
-    if st.button("🔄 Tilbakestill til standardpriser"):
-        st.session_state["pris_override"] = {}
-        st.success("Tilbakestilt til standardpriser.")
-
-    with st.expander("Vis gjeldende prisoverride"):
-        st.json(st.session_state.get("pris_override", {}))
 
 # ── AI-assistent (vises alltid nederst, utenfor modul-blokken) ────────────────
 ov = result.get("ov", {})
@@ -696,3 +569,9 @@ vis_chatbot(kontekst=_kontekst)
 
 st.markdown("---")
 st.caption("Stramo kjøleromssystem · kalkulasjon, FDV, montasje, kapplister og IFC")
+
+# Kjøres helt til slutt, etter at chat-feltet har rukket å ta fokus.
+# Flagget kvitteres først her, slik at en avbrutt kjøring (st.stop) prøver på nytt.
+if _start_paa_topp:
+    _scroll_til_topp()
+st.session_state["_forrige_modul"] = modul

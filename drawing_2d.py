@@ -11,6 +11,7 @@ import matplotlib.patheffects as pe
 from database import PANEL_DB, DOR_DB
 from geometry import wall_lengths, ensure_ccw, Point
 from panel_engine import generate_roof_floor_panels, main_axis_from_longest_wall
+from branding import logo_bilde, logo_sideforhold
 
 # ── Farger og konstanter ──────────────────────────────────────────────────────
 DIM_COL   = "#000000"
@@ -86,8 +87,42 @@ def _dim_along_wall(ax, p1, p2, lbl, offset=0.30, fs=DIM_FS, col=None):
             color=col, zorder=10, bbox=dict(fc="white", ec="none", pad=0.5))
 
 
-def _corner_angle(ax, pts_a, i, radius=0.22, fs=5.8):
-    """Tegner vinkelmerke og grader ved hjørne i."""
+def _polygon_ccw(pts_a) -> bool:
+    """Sant dersom polygonet går mot klokka (positivt fortegnsareal)."""
+    x = np.asarray(pts_a)[:, 0]; y = np.asarray(pts_a)[:, 1]
+    return float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) > 0
+
+
+def _side_label(ax, pts_a, i, nn, fs=5.5, avstand=0.38):
+    """
+    Sideetikett («Side1», «Side2», ...) plassert midt på veggsiden – ikke i
+    hjørnet, som ellers blir overfylt av vinkelbue og hjørneelement-skille.
+    Trukket lenger inn enn V-nummerne slik at den ikke kolliderer med dem.
+    """
+    p1 = pts_a[i]; p2 = pts_a[(i+1) % nn]
+    d  = p2 - p1; L = np.linalg.norm(d)
+    if L < 1e-6:
+        return
+    d /= L
+    perp = np.array([-d[1], d[0]])
+    mid  = (p1 + p2) / 2 + perp * avstand
+    ax.text(mid[0], mid[1], f"Side{i+1}", ha="center", va="center",
+            fontsize=fs, color="#444", zorder=14,
+            bbox=dict(fc="white", ec="none", pad=0.2))
+
+
+def _corner_angle(ax, pts_a, i, radius=0.22, fs=5.8, vis_utvendig=True):
+    """
+    Tegner vinkelmerke ved hjørne i, med innvendig og utvendig grad.
+
+    Innsiden ligger til venstre for gangretningen i et CCW-polygon. Den
+    innvendige vinkelen er derfor sveipet mot klokka fra retningen mot neste
+    hjørne til retningen mot forrige (motsatt vei i et CW-polygon). Det gir
+    riktig verdi også for innadgående hjørner, f.eks. i L-formede rom.
+
+    Den utvendige vinkelen er resten av sirkelen, altså 360° − innvendig.
+    Det er vinkelen man måler på utsiden av hjørnet.
+    """
     nn  = len(pts_a)
     pc  = pts_a[i]
     pm  = pts_a[(i - 1) % nn]
@@ -98,23 +133,43 @@ def _corner_angle(ax, pts_a, i, radius=0.22, fs=5.8):
     if L1 < 1e-6 or L2 < 1e-6:
         return
     v1n = v1 / L1; v2n = v2 / L2
-    dot = float(np.clip(np.dot(v1n, v2n), -1, 1))
-    ang = math.degrees(math.acos(dot))
 
-    a1  = math.degrees(math.atan2(v1n[1], v1n[0]))
-    a2  = math.degrees(math.atan2(v2n[1], v2n[0]))
-    # Sørg for at vi tegner den innvendige vinkelen
-    if (a2 - a1) % 360 > 180:
-        a1, a2 = a2, a1
+    a_prev = math.degrees(math.atan2(v1n[1], v1n[0]))   # mot forrige hjørne
+    a_next = math.degrees(math.atan2(v2n[1], v2n[0]))   # mot neste hjørne
+
+    start = a_next if _polygon_ccw(pts_a) else a_prev
+    slutt = a_prev if _polygon_ccw(pts_a) else a_next
+    ang   = (slutt - start) % 360
+    if ang < 1e-6:
+        ang = 360.0
+
     ax.add_patch(Arc(tuple(pc), radius*2, radius*2,
-                     angle=0, theta1=a1, theta2=a2,
+                     angle=0, theta1=start, theta2=start + ang,
                      color="#555", lw=0.7, zorder=12))
-    # Etikett midt i vinkelbuen
-    a_mid  = math.radians((a1 + a2) / 2)
-    lx     = pc[0] + (radius + 0.13) * math.cos(a_mid)
-    ly     = pc[1] + (radius + 0.13) * math.sin(a_mid)
+    # Etikett midt i vinkelbuen – havner alltid på innsiden av rommet
+    a_mid  = math.radians(start + ang / 2)
+    lx     = pc[0] + (radius + 0.15) * math.cos(a_mid)
+    ly     = pc[1] + (radius + 0.15) * math.sin(a_mid)
     ax.text(lx, ly, f"{ang:.1f}°", ha="center", va="center",
             fontsize=fs, color="#333", zorder=13,
+            bbox=dict(fc="white", ec="none", pad=0.2))
+
+    # På rette (90°) hjørner er utvendig vinkel alltid 270° og gir ingen ny
+    # informasjon – den vises derfor kun på skrå hjørner, der den faktisk
+    # varierer og er nyttig å lese av.
+    if not vis_utvendig or abs(ang - 90.0) < 0.05:
+        return
+
+    # Utvendig vinkel: resten av sirkelen, med bue og etikett på utsiden.
+    r_ut = radius * 1.55
+    ax.add_patch(Arc(tuple(pc), r_ut*2, r_ut*2,
+                     angle=0, theta1=start + ang, theta2=start + 360,
+                     color="#999", lw=0.6, linestyle=(0, (2, 2)), zorder=12))
+    a_ut = math.radians(start + ang / 2 + 180)
+    ux   = pc[0] + (r_ut + 0.17) * math.cos(a_ut)
+    uy   = pc[1] + (r_ut + 0.17) * math.sin(a_ut)
+    ax.text(ux, uy, f"{360 - ang:.1f}°", ha="center", va="center",
+            fontsize=fs * 0.85, color="#777", style="italic", zorder=13,
             bbox=dict(fc="white", ec="none", pad=0.2))
 
 
@@ -159,13 +214,54 @@ def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, dim_side=1.0):
             color=RED, zorder=12, bbox=dict(fc="white", ec="none", pad=0.3))
 
 
-def _title_block(ax, xmn, xmx, ymn, ymx, info):
-    bw = 3.2; mg = 0.5; tx = xmx + mg; h = ymx - ymn
+def _tegn_logo(ax, cx, cy, maks_bredde, maks_hoyde, fallback_fs=14):
+    """
+    Tegner Stramo-logoen sentrert i (cx, cy), skalert til å passe innenfor
+    maks_bredde × maks_hoyde med bevart sideforhold. Faller tilbake på
+    tekst dersom logofilen mangler.
+    """
+    bilde = logo_bilde()
+    if bilde is None:
+        ax.text(cx, cy, "STRAMO", ha="center", va="center", fontsize=fallback_fs,
+                fontweight="bold", color=BLUE, zorder=21)
+        return
+    ar = logo_sideforhold()
+    w  = min(maks_bredde, maks_hoyde * ar)
+    hh = w / ar
+    # imshow setter aksens aspekt – legg det tilbake slik det var
+    aspekt = ax.get_aspect()
+    ax.imshow(bilde, extent=(cx - w/2, cx + w/2, cy - hh/2, cy + hh/2),
+              zorder=21, interpolation="antialiased")
+    ax.set_aspect(aspekt)
+
+
+def _tegn_fig_logo(fig, x=0.012, y_topp=0.995, bredde=0.075) -> bool:
+    """
+    Plasserer logoen i figurens øvre venstre hjørne (figurkoordinater).
+    Returnerer False hvis logofilen mangler, slik at kalleren kan bruke tekst.
+    """
+    bilde = logo_bilde()
+    if bilde is None:
+        return False
+    fw, fh = fig.get_size_inches()
+    hoyde  = bredde * (fw / fh) / logo_sideforhold()
+    lax = fig.add_axes([x, y_topp - hoyde, bredde, hoyde], zorder=30)
+    lax.imshow(bilde, interpolation="antialiased")
+    lax.axis("off")
+    return True
+
+
+def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
+    # Marginen må være stor nok til at utvendige vinkeletiketter (og ev.
+    # målsettinger som stikker ut til høyre) får plass før boksen begynner.
+    bw = 3.2; tx = xmx + mg; h = ymx - ymn
     ax.add_patch(mpatches.FancyBboxPatch(
         (tx, ymn), bw, h, boxstyle="square,pad=0",
         facecolor="white", edgecolor="black", linewidth=1.0, zorder=20))
+    # Logo i det øverste feltet, over den første skillelinjen (frac 0.82)
+    _tegn_logo(ax, tx + bw/2, ymn + h * 0.91, bw - 0.40, h * 0.14)
+
     rows = [
-        ("",           "STRAMO",            0.94, True,  14),
         ("Prosjekt",   info["navn"],         0.82, True,   9),
         ("Tegning",    info["ttype"],        0.72, False,  8),
         ("Prosjektnr", info["pnr"],          0.62, False,  8),
@@ -173,7 +269,7 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info):
         ("Dato",       info["dato"],         0.42, False,  8),
         ("Målestokk",  info["maal"],         0.32, False,  8),
         ("Areal",      f"{info['A']:.2f} m²",0.22, False,  8),
-        ("Omkrets",    f"{info['P']:.2f} m", 0.12, False,  8),
+        ("Omkrets",    f"{info['P']*1000:.0f} mm", 0.12, False,  8),
     ]
     for lbl, val, frac, bold, fs in rows:
         yp = ymn + h * frac
@@ -236,6 +332,13 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
                              edgecolor=WALL_EDGE, linewidth=0.9, zorder=3))
 
     # ── Elementoppdeling på vegger ────────────────────────────────────────────
+    # Hvert panel tegnes med egen ramme, slik at det er lett å se hvilket
+    # element som fysisk når helt frem til hjørnet, og hvilket som stopper
+    # en vegg-tykkelse før. Siste panel i en vegg går uendret helt frem til
+    # hjørnepunktet (og dekker dermed hjørnepostkvadratet der veggene møtes),
+    # mens neste veggs FØRSTE panel forkortes en vegg-tykkelse og butter
+    # inntil – det gir én ren skillelinje i samme stil som mellom de andre
+    # elementene, i stedet for et hjørne der begge later som de eier hjørnet.
     el_nr = 1; rest_mm = 0; pw_mm = round(pw_m * 1000)
     for i in range(nn):
         p1 = pts_a[i]; p2 = pts_a[(i+1)%nn]; L = wls[i]
@@ -260,18 +363,21 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
             positions.append((brukt_mm/L_mm, 1.0, f"V{el_nr}", "kapp"))
             el_nr += 1; rest_mm = pw_mm - remaining
 
-        for t0, t1, lbl, typ in positions:
-            if t1 < 0.999:
-                px = p1[0]+t1*(p2[0]-p1[0]); py = p1[1]+t1*(p2[1]-p1[1])
-                tk_v = perp * 0.065
-                ax.plot([px-tk_v[0]/2, px+tk_v[0]/2],
-                        [py-tk_v[1]/2, py+tk_v[1]/2],
-                        color="black", lw=0.9, zorder=4)
+        for idx_p, (t0, t1, lbl, typ) in enumerate(positions):
+            outer_a = p1 + t0*(p2-p1)
+            outer_b = p1 + t1*(p2-p1)
+            if idx_p == 0:
+                outer_a = outer_a + dx_n*WT
+            inner_a = outer_a + perp*WT
+            inner_b = outer_b + perp*WT
+            ax.add_patch(MplPolygon([outer_a, outer_b, inner_b, inner_a], closed=True,
+                                     facecolor="none", edgecolor="black",
+                                     linewidth=1.1, zorder=4))
+
             mid_t = (t0+t1)/2
             mx = p1[0]+mid_t*(p2[0]-p1[0]); my = p1[1]+mid_t*(p2[1]-p1[1])
-            col = RED if typ == "kapp" else (GREEN if typ == "rest" else BLUE)
             ax.text(mx+inw[0], my+inw[1], lbl, ha="center", va="center",
-                    fontsize=5.8, color=col, fontweight="bold", zorder=5)
+                    fontsize=5.8, color="black", fontweight="bold", zorder=5)
 
     # ── Dørmarkering med mål ──────────────────────────────────────────────────
     door_cursors = {}
@@ -320,6 +426,12 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
             ax.plot([hinge[0], leaf_end[0]], [hinge[1], leaf_end[1]],
                     color=WALL_EDGE, lw=0.6, linestyle="--", zorder=7)
 
+            # Dørhåndtak nær den frie kanten (motsatt hengselet) – flytter
+            # seg automatisk med hengselsiden siden den følger dørbladet.
+            handle_pt = hinge + (leaf_end - hinge) * 0.85
+            ax.plot([handle_pt[0]], [handle_pt[1]], marker="o",
+                    markersize=3.0, color=WALL_EDGE, zorder=8)
+
             # Mål-piler: hjørne→dør og dørbredde
             _door_dim(ax, p1d + dx_n * (cursor - offset_m if idx_d > 0 else 0),
                       dx_n, cursor if idx_d == 0 else offset_m,
@@ -364,18 +476,17 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
     # ── Vinkler ved hjørner ───────────────────────────────────────────────────
     for i in range(nn):
         _corner_angle(ax, pts_a, i, radius=0.20)
-        # Hjørnepunkt-label
-        ax.text(pts_a[i][0], pts_a[i][1], f" P{i+1}",
-                fontsize=5, color="#444", zorder=14,
-                bbox=dict(fc="white", ec="none", pad=0.2))
+        _side_label(ax, pts_a, i, nn)
 
     # ── Målsetting ────────────────────────────────────────────────────────────
     xmn, xmx = xs.min(), xs.max(); ymn, ymx = ys.min(), ys.max()
     DIM_OFF = 0.55
 
-    # Ytre totalmål
+    # Ytre totalmål. Høyde-målet må stanse klart før tittelblokken (som
+    # starter 0.85 til høyre for xmx) – ellers stipler linjen helt inn i
+    # boksen og ser ut som to streker som stikker ut av rammen.
     _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn - DIM_OFF - 0.45)
-    _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx + DIM_OFF + 0.45)
+    _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx + DIM_OFF)
 
     # Per-vegg mål (offset 0.30 utover fra veggen)
     for i in range(nn):
@@ -383,15 +494,6 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
         if L < 0.05:
             continue
         _dim_along_wall(ax, p1, p2, f"{L*1000:.0f} mm", offset=0.30)
-
-    # Koordinatboks for hjørnepunkter (tabell nede til venstre)
-    _corner_table(ax, pts_a, xmn, ymn)
-
-    # N-pil
-    ax.annotate("", xy=(xmn+0.35, ymx+0.40), xytext=(xmn+0.35, ymx+0.10),
-                arrowprops=dict(arrowstyle="-|>", color="black", lw=1.4, mutation_scale=12), zorder=15)
-    ax.text(xmn+0.35, ymx+0.52, "N", ha="center", va="bottom",
-            fontsize=11, fontweight="bold", zorder=15)
 
     xright = _title_block(ax, xmn, xmx, ymn, ymx, info)
     ax.text((xmn+xmx)/2, ymn - DIM_OFF - 1.10,
@@ -404,18 +506,6 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None):
     return fig
 
 
-def _corner_table(ax, pts_a, xmn, ymn):
-    """Tabell med hjørnekoordinater."""
-    rows = [f"P{i+1}: ({p[0]:.3f}, {p[1]:.3f})" for i, p in enumerate(pts_a)]
-    tx = xmn; ty = ymn - 1.05
-    ax.text(tx, ty, "Hjørnepunkter (m)", fontsize=5.5, color=BLUE,
-            fontweight="bold", va="top", zorder=14)
-    for j, r in enumerate(rows):
-        ax.text(tx, ty - 0.13*(j+1), r, fontsize=5, color="#333",
-                va="top", zorder=14,
-                bbox=dict(fc="white", ec="none", pad=0.1))
-
-
 # ══ TAKTEGNING ═══════════════════════════════════════════════════════════════
 
 def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 80 mm"):
@@ -425,7 +515,6 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
     • Hel/kapp markert med farger
     • Alle vegg-mål rundt rommet med vinkler
     • Elementbredde-mål langs spans-retning
-    • Spennpil og retningsindikator
     • Titleblokk
     """
     pts_a  = np.array(pts, dtype=float)
@@ -503,9 +592,10 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
         xmn, xmx = xs.min(), xs.max(); ymn, ymx = ys.min(), ys.max()
         DIM_OFF = 0.65
 
-        # Totalmål
+        # Totalmål. Høyde-målet må stanse klart før tittelblokken (0.85 til
+        # høyre for xmx), ellers stipler linjen inn i boksen.
         _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn - DIM_OFF - 0.55, fs=9)
-        _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx + DIM_OFF + 0.55, fs=9)
+        _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx + DIM_OFF - 0.10, fs=9)
 
         # Per-vegg mål
         for i in range(nn):
@@ -513,27 +603,15 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
                             f"{wls[i]*1000:.0f} mm", offset=0.35, fs=8.5)
 
         # ── Vinkler ───────────────────────────────────────────────────────────
+        # Sideetiketter er droppet her: takflaten er allerede full av
+        # panel-etiketter, og de trengs uansett kun for referanse i
+        # plantegningen.
         for i in range(nn):
             _corner_angle(ax, pts_a, i, radius=0.22, fs=8)
-            ax.text(pts_a[i][0], pts_a[i][1], f" P{i+1}",
-                    fontsize=6.5, color="#444", zorder=14,
-                    bbox=dict(fc="white", ec="none", pad=0.2))
 
         # ── Element-bredde kjede langs hoved-aksen ────────────────────────────
         x_axis, _ = main_axis_from_longest_wall(pts)
         _draw_panel_width_chain(ax, panels, x_axis, pts_a, ymn, DIM_OFF)
-
-        # ── Spennpil ──────────────────────────────────────────────────────────
-        cx_room = float(xs.mean()); cy_room = float(ys.mean())
-        half_span = min(float(np.linalg.norm(pts_a.max(0)-pts_a.min(0))) * 0.28, 1.2)
-        ax.annotate("",
-            xy=(cx_room + x_axis[0]*half_span, cy_room + x_axis[1]*half_span),
-            xytext=(cx_room - x_axis[0]*half_span, cy_room - x_axis[1]*half_span),
-            arrowprops=dict(arrowstyle="<->", color="#2980b9", lw=1.4, mutation_scale=12),
-            zorder=8)
-        ax.text(cx_room + x_axis[0]*half_span*1.08,
-                cy_room + x_axis[1]*half_span*1.08,
-                "Spenn", fontsize=9, color="#2980b9", ha="center", va="center", zorder=9)
 
         # ── Legende ───────────────────────────────────────────────────────────
         leg = [
@@ -541,12 +619,6 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
             mpatches.Patch(facecolor=FILL_KAPP, edgecolor=ORANGE,    label="Kapp/start"),
         ]
         ax.legend(handles=leg, loc="upper left", fontsize=8, framealpha=0.9)
-
-        # ── N-pil ─────────────────────────────────────────────────────────────
-        ax.annotate("", xy=(xmn+0.30, ymx+0.38), xytext=(xmn+0.30, ymx+0.10),
-                    arrowprops=dict(arrowstyle="-|>", color="black", lw=1.3, mutation_scale=11), zorder=15)
-        ax.text(xmn+0.30, ymx+0.50, "N", ha="center", va="bottom",
-                fontsize=10, fontweight="bold", zorder=15)
 
         xright = _title_block(ax, xmn, xmx, ymn, ymx, {**info, "ttype": tittel})
         ax.text((xmn+xmx)/2, ymn - DIM_OFF - 1.0, tittel,
@@ -671,7 +743,7 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
     # ── Dørmarkering med mål ──────────────────────────────────────────────────
     door_cursor = 0.35
     for entry in dorer:
-        dk, ant, wall_idx_d, offset_m, _hengsel_s = _door_entry(entry)
+        dk, ant, wall_idx_d, offset_m, hengsel_v = _door_entry(entry)
         if int(wall_idx_d) != vegg_idx or ant <= 0:
             continue
         d  = DOR_DB[dk]
@@ -684,6 +756,11 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
             ax.text(cursor + dw/2, dh/2, f"D\n{d['label']}",
                     ha="center", va="center", fontsize=5.5,
                     color=RED, fontweight="bold", zorder=6)
+            # Dørhåndtak motsatt hengselet, i vanlig håndtakshøyde
+            handle_x = cursor + dw * (0.10 if hengsel_v == "Høyre" else 0.90)
+            handle_y = min(1.0, dh * 0.5)
+            ax.plot([handle_x], [handle_y], marker="o", markersize=4,
+                    color=RED, zorder=7)
             # Mål hjørne→dør
             _dh(ax, 0, cursor, -0.25, f"{round(cursor*1000)} mm", ey=-0.25, col="#555", fs=5.5)
             # Dørbredde
@@ -753,6 +830,7 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
 
     ax.set_xlim(-0.9, L + 1.6); ax.set_ylim(dim_bot - 0.8, H + 0.9)
     ax.set_aspect("equal"); ax.axis("off")
+    _tegn_fig_logo(fig)
     return fig
 
 
@@ -835,15 +913,33 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
                 rotation=rot, zorder=10,
                 bbox=dict(fc="white", ec="none", pad=0.5, alpha=0.85))
 
+    def pil_lbl(punkt, txt, retning, avstand=0.34, col="#222", fs=5):
+        """
+        Peker-etikett: kort pil fra et punkt et stykke unna og inn til selve
+        elementet. Brukes for små detaljer (hjørnebeslag) som ellers blir
+        overskrevet av vegg/tak-skravur når teksten står rett på dem.
+        """
+        p = np.asarray(punkt, dtype=float)
+        r = np.asarray(retning, dtype=float)
+        r = r / (np.linalg.norm(r) + 1e-9)
+        ytre = p + r * avstand
+        ax.annotate("", xy=tuple(p), xytext=tuple(ytre),
+                    arrowprops=dict(arrowstyle="-|>", color=col, lw=0.7, mutation_scale=6),
+                    zorder=10)
+        ax.text(ytre[0], ytre[1], txt, ha="center", va="center", fontsize=fs,
+                color=col, zorder=10, bbox=dict(fc="white", ec="none", pad=0.5, alpha=0.9))
+
     lbl(UW/2, UC/2,        "U-kanal\n80 mm",  fs=5.5, col="#1a3a5c")
     lbl(L-UW/2, UC/2,      "U-kanal\n80 mm",  fs=5.5, col="#1a3a5c")
     lbl(WT/2, UC+H/2,      f"Vegg\n{vegg_label_left}", fs=6, col="#1a3a5c")
     lbl(L-WT/2, UC+H/2,    f"Vegg\n{vegg_label_right}", fs=6, col="#1a3a5c")
     lbl(L/2, UC+H+TAK/2,   "Tak", fs=6)
-    lbl(WT,      UC+H,     "50×50\ninnv.", fs=5, col=CBESL_I)
-    lbl(L-WT,    UC+H,     "50×50\ninnv.", fs=5, col=CBESL_I)
-    lbl(-BSZ_UW*0.5, UC+H+BSZ_UH*0.6, "50×125\nutv.", fs=5, col=CBESL_U)
-    lbl(L+BSZ_UW*0.5, UC+H+BSZ_UH*0.6, "50×125\nutv.", fs=5, col=CBESL_U)
+    pil_lbl((WT, UC+H),           "Innv.\nbeslag", retning=(1, -1),  col=CBESL_I)
+    pil_lbl((L-WT, UC+H),         "Innv.\nbeslag", retning=(-1, -1), col=CBESL_I)
+    # Rett opp (ingen sideveis drift) – på høyre side ligger det allerede en
+    # stabel med høyde-mål ut til siden, så en skrå pil ville krysset dem.
+    pil_lbl((-BSZ_UW/2, UC+H+BSZ_UH/2), "Utv.\nbeslag", retning=(0, 1), avstand=0.38, col=CBESL_U)
+    pil_lbl((L+BSZ_UW/2, UC+H+BSZ_UH/2), "Utv.\nbeslag", retning=(0, 1), avstand=0.38, col=CBESL_U)
     if IS_FRYS:
         lbl(L/2, GFL/2+UC*0.1,  "PIR gulv 100 mm",             fs=5.5, col="#2d6e2d")
         lbl(L/2, GFL+SPL/2,     "Sponplate 22 mm m/ plastbelegg", fs=5.5, col="#7a5c20")
@@ -935,10 +1031,12 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     ax.text(L/2, -DIM_OFF-1.0,
             f"SNITT {seksjon}  –  {info['maal']}  (vegg {vl_left} / {vl_right})",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
-    _title_block(ax, 0, L, -0.05, UC+H+TAK+BSZ_UH+0.1,
-                 {**info, "ttype": f"Snitt {seksjon}"})
+    # Tittelblokken må stå klar av det ytterste høyde-målet ("... mm tot.",
+    # ex=L+DIM_OFF+1.0) – ellers stipler målsettingen inn i boksen.
+    xright = _title_block(ax, 0, L, -0.05, UC+H+TAK+BSZ_UH+0.1,
+                          {**info, "ttype": f"Snitt {seksjon}"}, mg=DIM_OFF+1.35)
 
-    ax.set_xlim(-DIM_OFF-0.9, L+DIM_OFF+4.2)
+    ax.set_xlim(-DIM_OFF-0.9, xright+0.25)
     ax.set_ylim(-DIM_OFF-1.3, UC+H+TAK+BSZ_UH+DIM_OFF+0.5)
     ax.set_aspect("equal"); ax.axis("off")
     return fig
@@ -1299,8 +1397,10 @@ def stramo_produksjonstegninger(
                                   figsize=(22, nrows * 10))
         fig.patch.set_facecolor("white")
 
-        # Sidetittel
-        fig.text(0.5, 0.995, f"STRAMO – PRODUKSJONSTEGNINGER  ·  {info['navn'] or '–'}  ·  {info['dato']}",
+        # Sidetittel med logo øverst til venstre
+        har_logo = _tegn_fig_logo(fig)
+        tittel   = "PRODUKSJONSTEGNINGER" if har_logo else "STRAMO – PRODUKSJONSTEGNINGER"
+        fig.text(0.5, 0.995, f"{tittel}  ·  {info['navn'] or '–'}  ·  {info['dato']}",
                  ha="center", va="top", fontsize=11, fontweight="bold", color=BLUE)
         fig.text(0.5, 0.988,
                  f"Prosjektnr: {info['pnr']}  ·  Tegningsnr: {info['tnr']}  ·  "
