@@ -47,6 +47,74 @@ def _add_line(fig: go.Figure, xs, ys, zs, *, name: str, color: str = "#222", wid
     fig.add_trace(go.Scatter3d(x=xs, y=ys, z=zs, mode="lines", name=name, line=dict(color=color, width=width, dash=dash or "solid"), showlegend=showlegend, hoverinfo="name"))
 
 
+class _QuadBatch:
+    """
+    Samler mange firkanter i én Mesh3d-trace i stedet for én trace per
+    firkant. Hver ekstra trace har egen oppsett-kostnad i nettleserens
+    WebGL-visning, så beslag som består av dusinvis av små flenser blir
+    fort tregt å laste hvis hver av dem er sin egen trace. Bygg opp med
+    quad()/quad_horisontal(), og kall flush() én gang til slutt.
+    """
+    def __init__(self, name: str, color: str, opacity: float = 1.0, showlegend: bool = False):
+        self.name, self.color, self.opacity, self.showlegend = name, color, opacity, showlegend
+        self.x: list[float] = []; self.y: list[float] = []; self.z: list[float] = []
+        self.i: list[int] = []; self.j: list[int] = []; self.k: list[int] = []
+
+    def _tri(self, xs, ys, zs) -> None:
+        n = len(self.x)
+        self.x += xs; self.y += ys; self.z += zs
+        self.i += [n, n]; self.j += [n + 1, n + 2]; self.k += [n + 2, n + 3]
+
+    def quad(self, p1, p2, z0: float, z1: float) -> None:
+        self._tri([p1[0], p2[0], p2[0], p1[0]], [p1[1], p2[1], p2[1], p1[1]], [z0, z0, z1, z1])
+
+    def quad_horisontal(self, p1, p2, perp, depth0: float, depth1: float, z: float) -> None:
+        a0, a1 = p1 + perp * depth0, p2 + perp * depth0
+        b0, b1 = p1 + perp * depth1, p2 + perp * depth1
+        self._tri([a0[0], a1[0], b1[0], b0[0]], [a0[1], a1[1], b1[1], b0[1]], [z, z, z, z])
+
+    def flush(self, fig: go.Figure) -> None:
+        if not self.x:
+            return
+        fig.add_trace(go.Mesh3d(x=self.x, y=self.y, z=self.z, i=self.i, j=self.j, k=self.k,
+                                 color=self.color, opacity=self.opacity, name=self.name,
+                                 flatshading=True, hoverinfo="name", showlegend=self.showlegend))
+
+
+def _add_u_kanal(batch: _QuadBatch, p1, p2, perp, width: float, height: float) -> None:
+    """U-profil (gulv→vegg-kanal): to oppbrettede sider forbundet med en flat bunn, langs p1-p2."""
+    batch.quad(p1, p2, 0, height)
+    batch.quad(p1 + perp * width, p2 + perp * width, 0, height)
+    batch.quad_horisontal(p1, p2, perp, 0, width, 0)
+
+
+def _add_l_flange_run(batch: _QuadBatch, p1, p2, perp, *, z_knekk: float, leg_v: float, leg_h: float,
+                       vert_up: bool, horiz_inn: bool) -> None:
+    """
+    Vinkeljern (L-profil) langs en rett strekning p1-p2: én vertikal flens og
+    én horisontal flens som møtes i et knekk ved z_knekk. `vert_up` styrer om
+    den vertikale flensen går opp eller ned fra knekken, `horiz_inn` om den
+    horisontale flensen går innover (positiv perp) eller utover.
+    """
+    gap = 0.005  # liten avstand fra vegglinja, kun for å unngå z-fighting
+    side = 1 if horiz_inn else -1
+    p1o, p2o = p1 + perp * gap * side, p2 + perp * gap * side
+    z_top = z_knekk + leg_v if vert_up else z_knekk
+    z_bot = z_knekk if vert_up else z_knekk - leg_v
+    batch.quad(p1o, p2o, z_bot, z_top)
+    d0, d1 = gap * side, (gap + leg_h) * side
+    batch.quad_horisontal(p1, p2, perp, d0, d1, z_knekk)
+
+
+def _add_l_post(batch: _QuadBatch, corner, dir_a, dir_b, perp_a, perp_b, leg: float,
+                 z0: float, z1: float, *, offset: float) -> None:
+    """Vertikal hjørnestolpe (L-profil) i et bygningshjørne, med én flens langs hver tilstøtende vegg."""
+    a0 = corner + perp_a * offset
+    batch.quad(a0, a0 + dir_a * leg, z0, z1)
+    b0 = corner + perp_b * offset
+    batch.quad(b0, b0 + dir_b * leg, z0, z1)
+
+
 def _wall_color(i: int) -> str:
     return ["#d7dde6", "#c7d0dc", "#e4e8ef", "#bcc8d6"][i % 4]
 
@@ -55,13 +123,15 @@ def tegn_3d(pts, H, dorer, panel_key, rom_type, azimuth=-55, elevation=28):
     return tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, 1.10, azimuth, elevation)
 
 
-def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, azimuth=-55, elevation=28, apninger=None):
+def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, azimuth=-55, elevation=28,
+                             apninger=None):
     """
     Interaktiv 3D-modell med samme panelmotor som kapplisten.
     Tak-/gulvpanelene klippes mot polygonet, slik at avskåret hjørne vises riktig.
     """
     pts_a = np.array(ensure_ccw(pts), dtype=float)
-    if len(pts_a) < 3:
+    nn = len(pts_a)
+    if nn < 3:
         return go.Figure()
 
     WT = PANEL_DB[panel_key]["t"] / 1000.0
@@ -72,6 +142,10 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
     z1 = UC + H
     z_roof_top = z1 + TAK
     IS_FRYS = "Fryserom" in rom_type
+
+    UKAN_W, UKAN_H = 0.090, UC          # U-kanal: bredde/høyde
+    INNV_LEG = 0.050                    # Innv. hjørnebeslag 50×50
+    UTV_LEG_UT, UTV_LEG_H = 0.050, 0.125  # Utv. hjørnebeslag 50×125
 
     fig = go.Figure()
 
@@ -85,11 +159,10 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
             _add_polygon_mesh(fig, pa, 0.10, name=f"{p.name} {p.width_mm}×{p.span_mm} mm", color="#88b886", opacity=0.65)
             _add_vertical_faces(fig, pa, 0, 0.10, name=f"{p.name} gulvtykkelse", color="#6a9f6a", opacity=0.35)
 
-    # Vegger og U-kanal
-    for i in range(len(pts_a)):
-        p1, p2 = pts_a[i], pts_a[(i + 1) % len(pts_a)]
+    # Vegger
+    for i in range(nn):
+        p1, p2 = pts_a[i], pts_a[(i + 1) % nn]
         _add_quad(fig, p1, p2, z0, z1, name=f"Vegg {i+1} – panel", color=_wall_color(i), opacity=0.96)
-        _add_quad(fig, p1, p2, 0, UC, name=f"Vegg {i+1} – U-kanal 80 mm", color="#315b7d", opacity=1.0)
 
         # Elementskjøter på vegger
         L = float(np.linalg.norm(p2 - p1))
@@ -113,11 +186,49 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         closed = list(pa) + [pa[0]]
         _add_line(fig, [q[0] for q in closed], [q[1] for q in closed], [z_roof_top + 0.006] * len(closed), name=f"Omriss {p.name}", color="#138a36", width=4)
 
-    # Beslag langs tak/vegg
-    for i in range(len(pts_a)):
-        p1, p2 = pts_a[i], pts_a[(i + 1) % len(pts_a)]
-        _add_line(fig, [p1[0], p2[0]], [p1[1], p2[1]], [z1, z1], name="Innv. L-beslag 50×50", color="#1f77b4", width=6, showlegend=(i == 0))
-        _add_line(fig, [p1[0], p2[0]], [p1[1], p2[1]], [z_roof_top, z_roof_top], name="Utv. L-beslag 50×125", color="#e67e22", width=6, showlegend=(i == 0))
+    # ── Beslag – tegnes alltid, som faktiske bøyde profiler ────────────────────
+    # Samlet i tre batcher (én trace hver) i stedet for én trace per liten
+    # flens – ellers blir det fort 40+ ekstra traces å laste i nettleseren.
+    ukanal_b = _QuadBatch("U-kanal 80 mm", "#315b7d", showlegend=True)
+    innv_b   = _QuadBatch("Innv. hjørnebeslag 50×50", "#1f77b4", showlegend=True)
+    utv_b    = _QuadBatch("Utv. hjørnebeslag 50×125", "#e67e22", showlegend=True)
+
+    for i in range(nn):
+        p1, p2 = pts_a[i], pts_a[(i + 1) % nn]
+        dx_n = (p2 - p1) / (float(np.linalg.norm(p2 - p1)) + 1e-9)
+        perp = np.array([-dx_n[1], dx_n[0]])   # innadrettet (CCW polygon)
+
+        # U-kanal (gulv→vegg): U-profil med to oppbrettede sider
+        _add_u_kanal(ukanal_b, p1, p2, perp, UKAN_W, UKAN_H)
+
+        # Innv. hjørnebeslag – vinkeljern i innvendig vegg/tak-hjørne
+        _add_l_flange_run(innv_b, p1, p2, perp, z_knekk=z1, leg_v=INNV_LEG, leg_h=INNV_LEG,
+                          vert_up=False, horiz_inn=True)
+
+        # Utv. hjørnebeslag – fasadeblikk utenpå vegg/tak-hjørne
+        _add_l_flange_run(utv_b, p1, p2, perp, z_knekk=z1, leg_v=UTV_LEG_H, leg_h=UTV_LEG_UT,
+                          vert_up=True, horiz_inn=False)
+
+    # Vertikale hjørnestolper – innv. i vanlige (konvekse) hjørner,
+    # utv. i eventuelle re-entrante (konkave) hjørner, som i materiallisten.
+    for i in range(nn):
+        pm, pc, pn = pts_a[(i - 1) % nn], pts_a[i], pts_a[(i + 1) % nn]
+        v1, v2 = pc - pm, pn - pc
+        L1, L2 = float(np.linalg.norm(v1)), float(np.linalg.norm(v2))
+        if L1 < 1e-9 or L2 < 1e-9:
+            continue
+        dir_prev, dir_next = -v1 / L1, v2 / L2
+        perp_prev = np.array([-v1[1], v1[0]]) / L1
+        perp_next = np.array([-v2[1], v2[0]]) / L2
+        konveks = (v1[0] * v2[1] - v1[1] * v2[0]) >= 0
+        if konveks:
+            _add_l_post(innv_b, pc, dir_prev, dir_next, perp_prev, perp_next, INNV_LEG, z0, z1, offset=0.005)
+        else:
+            _add_l_post(utv_b, pc, dir_prev, dir_next, -perp_prev, -perp_next, UTV_LEG_UT, z0, z1, offset=0.005)
+
+    ukanal_b.flush(fig)
+    innv_b.flush(fig)
+    utv_b.flush(fig)
 
     # Dører – plassert på riktig vegg med offset
     if dorer:

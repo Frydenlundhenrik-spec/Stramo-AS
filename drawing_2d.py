@@ -251,6 +251,21 @@ def _tegn_fig_logo(fig, x=0.012, y_topp=0.995, bredde=0.075) -> bool:
     return True
 
 
+def _tegn_fig_title_block(fig, info, x: float = 0.815, y_topp: float = 0.995, width: float = 0.17):
+    """
+    Samme tittelblokk som _title_block, men som en egen fastplassert boks i
+    figurkoordinater – for sider uten én enkelt data-akse å feste boksen
+    til (f.eks. produksjonstegninger med flere paneler per side).
+    """
+    bw, bh = 3.2, 3.0  # samme boksbredde som _title_block; egen naturlig høyde
+    fw, fh = fig.get_size_inches()
+    height = (fw * width) * (bh / bw) / fh
+    bax = fig.add_axes([x, y_topp - height, width, height], zorder=30)
+    bax.set_xlim(0, bw); bax.set_ylim(0, bh)
+    bax.axis("off")
+    _title_block(bax, 0, 0, 0, bh, info, mg=0)
+
+
 def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
     # Marginen må være stor nok til at utvendige vinkeletiketter (og ev.
     # målsettinger som stikker ut til høyre) får plass før boksen begynner.
@@ -828,9 +843,13 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
             f"VEGG {vegg_idx+1}  –  {info['maal']}  (total {L_mm} mm)",
             ha="center", va="bottom", fontsize=9, fontweight="bold", color=BLUE)
 
-    ax.set_xlim(-0.9, L + 1.6); ax.set_ylim(dim_bot - 0.8, H + 0.9)
+    # Tittelblokken må stå klar av høyde-målet til høyre (ex=L+0.90 + tekst).
+    # Bruker samme høyde som aksens fulle utstrekning (ikke bare veggen H) –
+    # ellers blir boksen for kort i fysiske tommer og radene klemmes sammen.
+    xright = _title_block(ax, 0, L, dim_bot - 0.8, H + 0.9, info, mg=1.4)
+
+    ax.set_xlim(-0.9, xright + 0.25); ax.set_ylim(dim_bot - 0.8, H + 0.9)
     ax.set_aspect("equal"); ax.axis("off")
-    _tegn_fig_logo(fig)
     return fig
 
 
@@ -846,8 +865,7 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
     SPL = 0.022 if IS_FRYS else 0.0
 
     CPANEL = "#c8c8c8"; CSPON = "#d4a96a"
-    CPIR_G  = "#b8d4b8"; CUKAN  = "#5a7a9a"; CBESL_I = "#2980b9"
-    CBESL_U = "#e67e22"; CWHITE = "white"
+    CPIR_G  = "#b8d4b8"; CUKAN  = "#5a7a9a"; CWHITE = "white"
 
     def rect(x, y, w, h, fc, ec="black", lw=0.8, hatch=None, zo=2, alpha=1.0):
         ax.add_patch(mpatches.Rectangle((x, y), w, h, facecolor=fc, edgecolor=ec,
@@ -873,13 +891,6 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
     inn_y0 = UC + (GFL+SPL if IS_FRYS else 0)
     rect(WT, inn_y0, L-2*WT, H-(inn_y0-UC), CWHITE, ec="#aaa", lw=0.4, zo=2)
     rect(0, UC+H, L, TAK, CPANEL, hatch="////", zo=3)
-
-    BSZ_I = 0.050
-    rect(WT-BSZ_I/2,   UC+H-BSZ_I/2, BSZ_I, BSZ_I, CBESL_I, lw=0.6, zo=6)
-    rect(L-WT-BSZ_I/2, UC+H-BSZ_I/2, BSZ_I, BSZ_I, CBESL_I, lw=0.6, zo=6)
-    BSZ_UW = 0.050; BSZ_UH = 0.125
-    rect(-BSZ_UW, UC+H, BSZ_UW, BSZ_UH, CBESL_U, lw=0.6, zo=6)
-    rect(L,       UC+H, BSZ_UW, BSZ_UH, CBESL_U, lw=0.6, zo=6)
 
     n_vegg_el = math.ceil(H / pw_m)
     for pi in range(1, n_vegg_el):
@@ -913,33 +924,11 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
                 rotation=rot, zorder=10,
                 bbox=dict(fc="white", ec="none", pad=0.5, alpha=0.85))
 
-    def pil_lbl(punkt, txt, retning, avstand=0.34, col="#222", fs=5):
-        """
-        Peker-etikett: kort pil fra et punkt et stykke unna og inn til selve
-        elementet. Brukes for små detaljer (hjørnebeslag) som ellers blir
-        overskrevet av vegg/tak-skravur når teksten står rett på dem.
-        """
-        p = np.asarray(punkt, dtype=float)
-        r = np.asarray(retning, dtype=float)
-        r = r / (np.linalg.norm(r) + 1e-9)
-        ytre = p + r * avstand
-        ax.annotate("", xy=tuple(p), xytext=tuple(ytre),
-                    arrowprops=dict(arrowstyle="-|>", color=col, lw=0.7, mutation_scale=6),
-                    zorder=10)
-        ax.text(ytre[0], ytre[1], txt, ha="center", va="center", fontsize=fs,
-                color=col, zorder=10, bbox=dict(fc="white", ec="none", pad=0.5, alpha=0.9))
-
     lbl(UW/2, UC/2,        "U-kanal\n80 mm",  fs=5.5, col="#1a3a5c")
     lbl(L-UW/2, UC/2,      "U-kanal\n80 mm",  fs=5.5, col="#1a3a5c")
     lbl(WT/2, UC+H/2,      f"Vegg\n{vegg_label_left}", fs=6, col="#1a3a5c")
     lbl(L-WT/2, UC+H/2,    f"Vegg\n{vegg_label_right}", fs=6, col="#1a3a5c")
     lbl(L/2, UC+H+TAK/2,   "Tak", fs=6)
-    pil_lbl((WT, UC+H),           "Innv.\nbeslag", retning=(1, -1),  col=CBESL_I)
-    pil_lbl((L-WT, UC+H),         "Innv.\nbeslag", retning=(-1, -1), col=CBESL_I)
-    # Rett opp (ingen sideveis drift) – på høyre side ligger det allerede en
-    # stabel med høyde-mål ut til siden, så en skrå pil ville krysset dem.
-    pil_lbl((-BSZ_UW/2, UC+H+BSZ_UH/2), "Utv.\nbeslag", retning=(0, 1), avstand=0.38, col=CBESL_U)
-    pil_lbl((L+BSZ_UW/2, UC+H+BSZ_UH/2), "Utv.\nbeslag", retning=(0, 1), avstand=0.38, col=CBESL_U)
     if IS_FRYS:
         lbl(L/2, GFL/2+UC*0.1,  "PIR gulv 100 mm",             fs=5.5, col="#2d6e2d")
         lbl(L/2, GFL+SPL/2,     "Sponplate 22 mm m/ plastbelegg", fs=5.5, col="#7a5c20")
@@ -959,7 +948,6 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     IS_FRYS = "Fryserom" in rom_type
     GFL = 0.100 if IS_FRYS else 0.0
     SPL = 0.022 if IS_FRYS else 0.0
-    BSZ_UH = 0.125
     DIM_OFF = 0.35
 
     fig, ax = plt.subplots(figsize=(16, 8))
@@ -1002,12 +990,11 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     _dh(ax, L-WT, L, 0, f"{WT_mm} mm",                 ey=-DIM_OFF-0.55)
 
     # ── Vertikal mål ──────────────────────────────────────────────────────────
-    _dv(ax, 0, UC+H+TAK+BSZ_UH, L,
-        f"{round((UC+H+TAK+BSZ_UH)*1000)} mm tot.", ex=L+DIM_OFF+1.0)
+    _dv(ax, 0, UC+H+TAK, L,
+        f"{round((UC+H+TAK)*1000)} mm tot.", ex=L+DIM_OFF+0.35)
     _dv(ax, UC,   UC+H,            L, f"{H_mm} mm",     ex=L+DIM_OFF)
     _dv(ax, 0,    UC,              L, "80 mm U-kan.",   ex=L+DIM_OFF)
     _dv(ax, UC+H, UC+H+TAK,        L, f"{WT_mm} mm tak",ex=L+DIM_OFF)
-    _dv(ax, UC+H, UC+H+BSZ_UH,     L, "125 mm besl.",  ex=L+DIM_OFF+0.65)
 
     if IS_FRYS:
         _dv(ax, UC, UC+GFL,         0, "100 mm PIR",   ex=-DIM_OFF)
@@ -1032,12 +1019,12 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
             f"SNITT {seksjon}  –  {info['maal']}  (vegg {vl_left} / {vl_right})",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
     # Tittelblokken må stå klar av det ytterste høyde-målet ("... mm tot.",
-    # ex=L+DIM_OFF+1.0) – ellers stipler målsettingen inn i boksen.
-    xright = _title_block(ax, 0, L, -0.05, UC+H+TAK+BSZ_UH+0.1,
-                          {**info, "ttype": f"Snitt {seksjon}"}, mg=DIM_OFF+1.35)
+    # ex=L+DIM_OFF+0.35) – ellers stipler målsettingen inn i boksen.
+    xright = _title_block(ax, 0, L, -0.05, UC+H+TAK+0.1,
+                          {**info, "ttype": f"Snitt {seksjon}"}, mg=DIM_OFF+0.70)
 
     ax.set_xlim(-DIM_OFF-0.9, xright+0.25)
-    ax.set_ylim(-DIM_OFF-1.3, UC+H+TAK+BSZ_UH+DIM_OFF+0.5)
+    ax.set_ylim(-DIM_OFF-1.3, UC+H+TAK+DIM_OFF+0.5)
     ax.set_aspect("equal"); ax.axis("off")
     return fig
 
@@ -1387,6 +1374,7 @@ def stramo_produksjonstegninger(
         return cuts
 
     PANELS_PER_PAGE = 4   # 2×2 per side
+    total_sider = math.ceil(len(alle) / PANELS_PER_PAGE)
     figures = []
     num = 0
 
@@ -1397,15 +1385,15 @@ def stramo_produksjonstegninger(
                                   figsize=(22, nrows * 10))
         fig.patch.set_facecolor("white")
 
-        # Sidetittel med logo øverst til venstre
-        har_logo = _tegn_fig_logo(fig)
-        tittel   = "PRODUKSJONSTEGNINGER" if har_logo else "STRAMO – PRODUKSJONSTEGNINGER"
-        fig.text(0.5, 0.995, f"{tittel}  ·  {info['navn'] or '–'}  ·  {info['dato']}",
+        # Sidetittel – samme tittelblokk (logo + prosjektinfo) som de andre
+        # tegningene, plassert øverst til høyre. Grid med paneler reserverer
+        # derfor plass i høyre marg (se tight_layout-rect nedenfor).
+        side_nr = len(figures) + 1
+        _tegn_fig_title_block(fig, {**info, "ttype": f"Produksjonstegning – side {side_nr} av {total_sider}"})
+        fig.text(0.5, 0.995, "PRODUKSJONSTEGNINGER",
                  ha="center", va="top", fontsize=11, fontweight="bold", color=BLUE)
         fig.text(0.5, 0.988,
-                 f"Prosjektnr: {info['pnr']}  ·  Tegningsnr: {info['tnr']}  ·  "
-                 f"Panel: {PANEL_DB[panel_key]['label']}  ·  "
-                 f"Side {len(figures)+1} av {math.ceil(len(alle)/PANELS_PER_PAGE)}",
+                 f"Panel: {PANEL_DB[panel_key]['label']}  ·  Side {side_nr} av {total_sider}",
                  ha="center", va="top", fontsize=8, color="#444")
         fig.text(0.5, 0.983,
                  "F = Fabrikkant (ingen kapping)   RK = Rett kapp (90°)   VK = Vinklet kapp (se snittvinkel i tabell)",
@@ -1425,7 +1413,8 @@ def stramo_produksjonstegninger(
         for cell in range(len(page), len(axes_flat)):
             axes_flat[cell].axis("off")
 
-        fig.tight_layout(rect=[0, 0, 1, 0.982], pad=1.2, h_pad=2.5, w_pad=2.0)
+        # Høyre marg (rect-bredde 0.80) er reservert til tittelblokken.
+        fig.tight_layout(rect=[0, 0, 0.80, 0.982], pad=1.2, h_pad=2.5, w_pad=2.0)
         figures.append(fig)
 
     return figures

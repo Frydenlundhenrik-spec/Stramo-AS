@@ -77,13 +77,15 @@ BESLAG = {
     "Magnetpakning komplett": Beslag(980, 1, "Magnetpakning"),
 }
 
+DOR_STANDARD_HOYDE_MM = 2100  # alle dører har denne standardhøyden
+
 DORER = {
-    "Enkel kjøledør 900×2000 mm": Door(900, 2000, 12500, "Enkel 900×2000"),
-    "Enkel kjøledør 1200×2200 mm": Door(1200, 2200, 15800, "Enkel 1200×2200"),
-    "Dobbelddør 1600×2200 mm": Door(1600, 2200, 24500, "Dobbel 1600×2200"),
-    "Skyvedør 1000×2000 mm": Door(1000, 2000, 18900, "Skyvedør 1000×2000"),
-    "Fryserom enkel 900×2000 mm": Door(900, 2000, 17500, "Fryserom enkel 900×2000"),
-    "Fryserom dobbel 1600×2200 mm": Door(1600, 2200, 31000, "Fryserom dobbel 1600×2200"),
+    "Enkel kjøledør 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 12500, "Enkel 900×2100"),
+    "Enkel kjøledør 1200×2100 mm": Door(1200, DOR_STANDARD_HOYDE_MM, 15800, "Enkel 1200×2100"),
+    "Dobbelddør 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 24500, "Dobbel 1600×2100"),
+    "Skyvedør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 18900, "Skyvedør 1000×2100"),
+    "Fryserom enkel 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 17500, "Fryserom enkel 900×2100"),
+    "Fryserom dobbel 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 31000, "Fryserom dobbel 1600×2100"),
 }
 
 FORMER = {
