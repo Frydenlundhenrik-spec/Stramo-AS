@@ -53,9 +53,9 @@ class FormMal:
         return dict(besk=self.besk, func=self.func)
 
 PANELER = {
-    "PIR 80 mm":  Panel("PIR 80 mm", 80, 0.28, 1250, 8.5),
+    "PIR 80 mm":  Panel("PIR 80 mm", 80, 0.29, 1250, 8.5),
     "PIR 100 mm": Panel("PIR 100 mm", 100, 0.22, 1480, 10.2),
-    "PIR 120 mm": Panel("PIR 120 mm", 120, 0.18, 1720, 12.1),
+    "PIR 120 mm": Panel("PIR 120 mm", 120, 0.19, 1720, 12.1),
     "PIR 150 mm": Panel("PIR 150 mm", 150, 0.15, 2050, 14.8),
     "PUR 100 mm": Panel("PUR 100 mm", 100, 0.23, 1350, 11.0),
     "PUR 150 mm": Panel("PUR 150 mm", 150, 0.15, 1900, 15.5),
@@ -63,8 +63,8 @@ PANELER = {
 
 GULV_KJOL = FloorType(450, 12.0, "Avrettet betong (kjølerom – panel direkte på gulv)",
                       "80 mm PIR-panel monteres direkte på avrettet betong. Ingen gulvisolasjon.")
-GULV_FRYS = FloorType(980, 28.0, "100 mm PIR gulvpanel + sponplate m/ plastbelegg (fryserom)",
-                      "100 mm PIR-panel på gulv. Dekkes med sponplate med plastbelegg.")
+GULV_FRYS = FloorType(980, 28.0, "Gulvpanel som vegg/tak + 12 mm gulvfiberplate (fryserom)",
+                      "22 mm lekter under gulvpanel. Vegger står på panelet; 12 mm gulvfiberplate legges innenfor veggene.")
 
 BESLAG = {
     "Hengsel – tung kjøledør (rustfritt)": Beslag(850, 3, "Hengsel rustfritt"),
@@ -81,10 +81,12 @@ DOR_STANDARD_HOYDE_MM = 2100  # alle dører har denne standardhøyden
 
 DORER = {
     "Enkel kjøledør 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 12500, "Enkel 900×2100"),
+    "Enkel kjøledør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 0, "Enkel 1000×2100"),
     "Enkel kjøledør 1200×2100 mm": Door(1200, DOR_STANDARD_HOYDE_MM, 15800, "Enkel 1200×2100"),
     "Dobbelddør 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 24500, "Dobbel 1600×2100"),
     "Skyvedør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 18900, "Skyvedør 1000×2100"),
     "Fryserom enkel 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 17500, "Fryserom enkel 900×2100"),
+    "Fryserom enkel 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 0, "Fryserom enkel 1000×2100"),
     "Fryserom dobbel 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 31000, "Fryserom dobbel 1600×2100"),
 }
 

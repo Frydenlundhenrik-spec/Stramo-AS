@@ -1,4 +1,5 @@
 from __future__ import annotations
+from construction import roof_outline, wall_polygon, wall_span
 
 from dataclasses import dataclass
 from datetime import datetime
@@ -8,7 +9,9 @@ from typing import Iterable
 
 import numpy as np
 
+from construction import CHANNEL_HEIGHT, CHANNEL_FLANGE, FLOOR_PIR, FLOOR_BOARD, BATTEN_HEIGHT, wall_base, floor_outline, finished_floor
 from database import PANEL_DB, DOR_DB
+from geometry import polygon_winding
 from panel_engine import generate_roof_floor_panels
 
 
@@ -23,7 +26,10 @@ def ifc_guid() -> str:
 
 
 def _ifc_text(value: str) -> str:
-    return "'" + str(value or "").replace("'", "''") + "'"
+    value = str(value or "")
+    if not value.isascii():
+        return "'\\X2\\" + value.encode("utf-16-be").hex().upper() + "\\X0\\'"
+    return "'" + value.replace("'", "''") + "'"
 
 
 def _refs(ids: Iterable[int]) -> str:
@@ -39,6 +45,7 @@ def gen_ifc(
     rom_type: str = "Kjølerom",
     panelbredde_m: float = 1.10,
     apninger=None,          # [(wall_idx, offset_m, width_m, height_m, sill_m, label), ...]
+    excluded_walls=(),
 ) -> bytes:
     """
     IFC2X3-eksport med korrekte vegger, U-kanal, tak/gulvpaneler og booleanske åpninger.
@@ -46,7 +53,7 @@ def gen_ifc(
     Vegger:
     - Plassert langs polygon-kanten
     - Tykkelse utover fra rom-polygonen (innvendig flate = polygon-kanten)
-    - Korrekt hjørnegeometri via miter-cut av profilen
+    - Felles hjørnegeometri med rette skjøter i vinkelrette hjørner
 
     Åpninger:
     - Dører: fra DOR_DB, plassert på riktig vegg med offset
@@ -56,9 +63,10 @@ def gen_ifc(
     pan     = PANEL_DB[panel_key]
     tk      = pan["t"] / 1000.0          # veggtykkelse
     roof_tk = tk
-    UC_h    = 0.080                       # U-kanal høyde
+    UC_h    = CHANNEL_HEIGHT                       # U-kanal høyde
     IS_FRYS = "Fryserom" in rom_type
-    floor_tk = 0.10 if IS_FRYS else 0.0
+    floor_tk = tk if IS_FRYS else 0.0
+    base = wall_base(rom_type,panel_key)
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S")
 
     lines: list[str] = []
@@ -103,7 +111,7 @@ def gen_ifc(
                 dir_x=0., dir_y=0., dir_z=1.) -> int:
         """Extrude profil i retning (dir_x, dir_y, dir_z)."""
         solid = E("IFCEXTRUDEDAREASOLID",
-                  f"#{profile_id}", "$",
+                  f"#{profile_id}", f"#{axis3d()}",
                   f"#{d3(dir_x, dir_y, dir_z)}",
                   f"{float(depth):.6f}")
         rep = E("IFCSHAPEREPRESENTATION",
@@ -157,21 +165,17 @@ def gen_ifc(
 
     mat_panel = E("IFCMATERIAL", _ifc_text(f"Isolasjonspanel {pan['label']}"))
     mat_floor = E("IFCMATERIAL", _ifc_text("Gulvplate"))
-    mat_door  = E("IFCMATERIAL", _ifc_text("Isolert kjøleromsdør"))
+    mat_door  = E("IFCMATERIAL", _ifc_text(f"Isolert {rom_type.lower()}sdør"))
+    mat_pir_floor = E("IFCMATERIAL", _ifc_text("Gulvpanel, samme type som vegg"))
+    mat_board = E("IFCMATERIAL", _ifc_text("Gulvfiberplate 12 mm"))
+    mat_channel = E("IFCMATERIAL", _ifc_text("Rustfritt stål"))
     mat_glass = E("IFCMATERIAL", _ifc_text("Klassfrontåpning"))
 
     products: list[int] = []
     pts_a = np.array(pts_m, dtype=float)
     nn    = len(pts_a)
 
-    # ── Normaliser polygon CCW ─────────────────────────────────────────────────
-    def _signed_area(p):
-        n = len(p)
-        return 0.5 * sum(
-            p[i][0]*p[(i+1)%n][1] - p[(i+1)%n][0]*p[i][1]
-            for i in range(n))
-    if _signed_area(pts_a) < 0:
-        pts_a = pts_a[::-1]
+    winding = polygon_winding(pts_a)
 
     # ── Vegger ────────────────────────────────────────────────────────────────
     # Profil i lokal XZ-plan av veggen:
@@ -181,12 +185,14 @@ def gen_ifc(
     # Panelet: X 0→length, Y 0→-tk (fra indre flate utover)
     # Vegg-plassering: origin = P1 i verdenskoordinater, ref = veggretning
     #
-    # For å lukke hjørner bruker vi miter-teknikk:
-    # Veggen strekkes et halvt tykkelse inn i nabohjørnene.
+    # Samme hjørneskjøter som plan, 3D og kapplister: rette ender ved 90 grader.
 
     wall_ids: list[int] = []   # for å koble åpninger til riktig vegg
 
     for i in range(nn):
+        if i in excluded_walls:
+            wall_ids.append(0)
+            continue
         p1v = pts_a[i]
         p2v = pts_a[(i + 1) % nn]
         seg  = p2v - p1v
@@ -201,29 +207,25 @@ def gen_ifc(
 
         # Profil i lokal XY (2D, X=langs vegg, Y=tykkelse):
         # Y=0 er innvendig flate, Y=-tk er utvendig flate.
-        # Utvid X med tk i hver ende for lukkede hjørner.
-        ext = tk
-        corners_2d = [
-            p2(-ext,    0.0),
-            p2(L+ext,   0.0),
-            p2(L+ext,  -tk),
-            p2(-ext,   -tk),
-        ]
+        # Hjørnetillegg og fradrag kommer fra den felles veggkonturen.
+        footprint = wall_polygon(pts_a,i,tk,excluded_walls)-p1v
+        corners_2d = [p2(float(q @ np.array([ca,sa])),float(q @ np.array([-sa,ca])))
+                      for q in footprint]
         poly2d = E("IFCPOLYLINE", _refs(corners_2d + [corners_2d[0]]))
         prof   = E("IFCARBITRARYCLOSEDPROFILEDEF", ".AREA.", "$", f"#{poly2d}")
 
         # Extruder i Z (opp) med høyde h (fri vegg = uten UK og tak)
         solid = E("IFCEXTRUDEDAREASOLID",
-                  f"#{prof}", "$", f"#{d3(0,0,1)}", f"{h:.6f}")
+                  f"#{prof}", f"#{axis3d()}", f"#{d3(0,0,1)}", f"{h:.6f}")
         rep   = E("IFCSHAPEREPRESENTATION",
                   f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                   _refs([solid]))
         shape = E("IFCPRODUCTDEFINITIONSHAPE", "$", "$", _refs([rep]))
 
         # Plassering: origin = P1, X_local = veggretning, Z_local = opp
-        # z = UC_h slik at vegg starter på topp U-kanal
+        # Wall base follows the slab, never the top of the U-channel side flanges.
         w_pl   = placement(f"#{storey_pl}",
-                           float(p1v[0]), float(p1v[1]), UC_h,
+                           float(p1v[0]), float(p1v[1]), base,
                            axis=(0,0,1), ref=(float(ca), float(sa), 0))
         wall_e = E("IFCWALL", _ifc_text(ifc_guid()), "$",
                    _ifc_text(f"Vegg {i+1}"), "$", "$",
@@ -254,12 +256,12 @@ def gen_ifc(
         # Åpnings-opprinnelse i verdenskoordinater:
         # Horisontal: P1 + offset langs vegg
         # Lateral: flytt ut til ekstern flate = Y_lokal = -tk
-        # Vertikal: UK = UC_h + sill_m
+        # Vertical offset is measured from finished floor.
 
         # Åpningens lokal system: X = veggretning, Y = utover, Z = opp
-        ox = float(p1v[0]) + ca * offset_m + sa * tk    # X_world = P1 + offset·dir + tk·outward_x
-        oy = float(p1v[1]) + sa * offset_m + (-ca) * tk # Y_world
-        oz = UC_h + sill_m
+        ox = float(p1v[0]) + ca * offset_m + sa * tk * winding    # X_world = P1 + offset·dir + tk·outward_x
+        oy = float(p1v[1]) + sa * offset_m + (-ca) * tk * winding # Y_world
+        oz = finished_floor(rom_type, panel_key) + sill_m
 
         # Outward normal i verdenskoordinater: (sa, -ca, 0) for CCW polygon
         # = lokal Y for åpningsplacements ref=(ca,sa,0) → outward = (-left_perp)
@@ -270,11 +272,11 @@ def gen_ifc(
         # Åpnings-profil i lokal XZ-planet (width × height):
         # X_local = veggretning, Z_local = opp
         # Vi ekstruder i lokal Y (= verdenskoordinat innover)
-        prof = rect_profile_2d(width_m, height_m)
+        prof = rect_profile_2d(width_m, tk * 2 * winding)
         solid = E("IFCEXTRUDEDAREASOLID",
-                  f"#{prof}", "$",
-                  f"#{d3(0., 1., 0.)}",  # extrude in local Y = gjennom veggen
-                  f"{tk * 2:.6f}")        # litt ekstra for sikker kapping
+                  f"#{prof}", f"#{axis3d()}",
+                  f"#{d3(0., 0., 1.)}",  # footprint in XY, height in Z
+                  f"{height_m:.6f}")        # litt ekstra for sikker kapping
         rep   = E("IFCSHAPEREPRESENTATION",
                   f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                   _refs([solid]))
@@ -322,7 +324,7 @@ def gen_ifc(
             ca_w, sa_w = seg[0]/L, seg[1]/L
 
             cur = offset_m
-            for j in range(max(1, ant)):
+            for j in range(max(0, ant)):
                 if cur + dw > L:
                     break
                 opening, geo = _add_opening(
@@ -333,10 +335,10 @@ def gen_ifc(
                 if opening and geo:
                     (o_pl, _, ox, oy, oz, ca_d, sa_d, dw2, dh2) = geo
                     # IfcDoor inne i åpningen
-                    dp = rect_profile_2d(dw2, dh2)
+                    dp = rect_profile_2d(dw2, tk * winding)
                     ds = E("IFCEXTRUDEDAREASOLID",
-                           f"#{dp}", "$", f"#{d3(0.,1.,0.)}",
-                           f"{tk:.6f}")
+                           f"#{dp}", f"#{axis3d()}", f"#{d3(0.,0.,1.)}",
+                           f"{dh2:.6f}")
                     dr_rep  = E("IFCSHAPEREPRESENTATION",
                                 f"#{context}", _ifc_text("Body"),
                                 _ifc_text("SweptSolid"), _refs([ds]))
@@ -359,7 +361,7 @@ def gen_ifc(
                       f"#{opening}", f"#{door_e}")
                     products.append(door_e)
 
-                cur += dw + 0.25
+                cur += dw + 0.20
 
     # ── Klassfronter / tilpassede åpninger ────────────────────────────────────
     if apninger:
@@ -374,10 +376,10 @@ def gen_ifc(
             if opening and geo:
                 (o_pl, _, ox, oy, oz, ca_d, sa_d, w2, h2) = geo
                 # IfcWindow for klassfronter
-                wp = rect_profile_2d(w2, h2)
+                wp = rect_profile_2d(w2, tk * winding)
                 ws = E("IFCEXTRUDEDAREASOLID",
-                       f"#{wp}", "$", f"#{d3(0.,1.,0.)}",
-                       f"{tk:.6f}")
+                       f"#{wp}", f"#{axis3d()}", f"#{d3(0.,0.,1.)}",
+                       f"{h2:.6f}")
                 wr  = E("IFCSHAPEREPRESENTATION",
                         f"#{context}", _ifc_text("Body"),
                         _ifc_text("SweptSolid"), _refs([ws]))
@@ -401,12 +403,12 @@ def gen_ifc(
     # ── Gulv ──────────────────────────────────────────────────────────────────
     floor_prof  = polygon_profile_2d(pts_a)
     floor_solid = E("IFCEXTRUDEDAREASOLID",
-                    f"#{floor_prof}", "$", f"#{d3(0,0,1)}", "0.005000")
+                    f"#{floor_prof}", f"#{axis3d()}", f"#{d3(0,0,1)}", "0.005000")
     floor_rep   = E("IFCSHAPEREPRESENTATION",
                     f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                     _refs([floor_solid]))
     floor_shape = E("IFCPRODUCTDEFINITIONSHAPE","$","$",_refs([floor_rep]))
-    floor_pl    = placement(f"#{storey_pl}", 0, 0, UC_h - 0.005)
+    floor_pl    = placement(f"#{storey_pl}", 0, 0, (BATTEN_HEIGHT if IS_FRYS else 0.0) - 0.005)
     floor_e     = E("IFCSLAB", _ifc_text(ifc_guid()),"$",
                     _ifc_text("Gulvflate"),"$","$",
                     f"#{floor_pl}", f"#{floor_shape}","$",".FLOOR.")
@@ -415,11 +417,11 @@ def gen_ifc(
 
     # ── Takpaneler ────────────────────────────────────────────────────────────
     pw_mm  = max(1, int(round(panelbredde_m * 1000)))
-    z_roof = UC_h + h   # underkant tak = topp vegg
+    z_roof = base + h   # underkant tak = topp vegg
 
     try:
         roof_panels = generate_roof_floor_panels(
-            pts_a.tolist(), pw_mm, prefix="T", label="Tak", cut_position="end")
+            roof_outline(pts_a.tolist(),tk,rom_type), pw_mm, prefix="T", label="Tak", cut_position="end")
     except Exception:
         roof_panels = []
 
@@ -428,7 +430,7 @@ def gen_ifc(
             pa    = np.array(p.polygon, dtype=float)
             rprof = polygon_profile_2d(pa)
             rs    = E("IFCEXTRUDEDAREASOLID",
-                      f"#{rprof}", "$", f"#{d3(0,0,1)}", f"{roof_tk:.6f}")
+                      f"#{rprof}", f"#{axis3d()}", f"#{d3(0,0,1)}", f"{roof_tk:.6f}")
             rrep  = E("IFCSHAPEREPRESENTATION",
                       f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                       _refs([rs]))
@@ -443,7 +445,7 @@ def gen_ifc(
     else:
         rprof = polygon_profile_2d(pts_a)
         rs    = E("IFCEXTRUDEDAREASOLID",
-                  f"#{rprof}", "$", f"#{d3(0,0,1)}", f"{roof_tk:.6f}")
+                  f"#{rprof}", f"#{axis3d()}", f"#{d3(0,0,1)}", f"{roof_tk:.6f}")
         rrep  = E("IFCSHAPEREPRESENTATION",
                   f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                   _refs([rs]))
@@ -459,25 +461,60 @@ def gen_ifc(
     if IS_FRYS:
         try:
             floor_panels = generate_roof_floor_panels(
-                pts_a.tolist(), pw_mm, prefix="G", label="Gulv PIR", cut_position="end")
+                floor_outline(pts_a.tolist(),tk), pw_mm, prefix="G", label="Gulv PIR", cut_position="end")
         except Exception:
             floor_panels = []
         for p in floor_panels:
             pa   = np.array(p.polygon, dtype=float)
             gp   = polygon_profile_2d(pa)
             gs   = E("IFCEXTRUDEDAREASOLID",
-                     f"#{gp}", "$", f"#{d3(0,0,1)}", "0.100000")
+                     f"#{gp}", f"#{axis3d()}", f"#{d3(0,0,1)}", f"{floor_tk:.6f}")
             gr   = E("IFCSHAPEREPRESENTATION",
                      f"#{context}", _ifc_text("Body"), _ifc_text("SweptSolid"),
                      _refs([gs]))
             gsh  = E("IFCPRODUCTDEFINITIONSHAPE","$","$",_refs([gr]))
-            gpl  = placement(f"#{storey_pl}", 0, 0, UC_h)
+            gpl  = placement(f"#{storey_pl}", 0, 0, BATTEN_HEIGHT)
             ge   = E("IFCSLAB", _ifc_text(ifc_guid()),"$",
                      _ifc_text(f"{p.name} – {p.kind}"),"$",
                      _ifc_text(f"{p.width_mm}×{p.span_mm} mm"),
                      f"#{gpl}", f"#{gsh}","$",".FLOOR.")
-            assign_mat(ge, mat_panel)
+            assign_mat(ge, mat_pir_floor)
             products.append(ge)
+
+    if IS_FRYS:
+        board_shape = extrude(polygon_profile_2d(pts_a), FLOOR_BOARD)
+        board_pl = placement(f"#{storey_pl}", 0, 0, base)
+        board = E("IFCSLAB", _ifc_text(ifc_guid()), "$",
+                  _ifc_text("Gulvfiberplate 12 mm"), "$", "$",
+                  f"#{board_pl}", f"#{board_shape}", "$", ".FLOOR.")
+        assign_mat(board, mat_board)
+        products.append(board)
+
+    # U-section follows the wall's inner face; nominal clear width = panel thickness.
+    for i in (range(nn) if not IS_FRYS else []):
+        if i in excluded_walls:
+            continue
+        a, b = pts_a[i], pts_a[(i+1) % nn]
+        seg = b-a
+        length = float(np.linalg.norm(seg))
+        if length < 1e-6:
+            continue
+        f = CHANNEL_FLANGE
+        # Local XY is the cross-section (width, height); extrusion runs along wall.
+        profile = np.array([[-f,0], [tk+f,0], [tk+f,UC_h], [tk,UC_h],
+                            [tk,f], [0,f], [0,UC_h], [-f,UC_h]])
+        profile[:, 1] *= -winding  # local Y points down for this outward-facing basis
+        lo,hi=wall_span(pts_a,i,tk,excluded_walls)
+        a=a+seg/length*lo
+        channel_shape = extrude(polygon_profile_2d(profile), hi-lo)
+        channel_pl = placement(f"#{storey_pl}", float(a[0]), float(a[1]), base if IS_FRYS else 0,
+                               axis=(float(seg[0]/length),float(seg[1]/length),0),
+                               ref=(float(winding*seg[1]/length),float(-winding*seg[0]/length),0))
+        channel = E("IFCBUILDINGELEMENTPROXY", _ifc_text(ifc_guid()), "$",
+                    _ifc_text(f"U-kanal {pan['t']} mm – vegg {i+1}"), "$", "$",
+                    f"#{channel_pl}", f"#{channel_shape}", "$", ".ELEMENT.")
+        assign_mat(channel, mat_channel)
+        products.append(channel)
 
     E("IFCRELCONTAINEDINSPATIALSTRUCTURE",
       _ifc_text(ifc_guid()),"$","$","$",

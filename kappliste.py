@@ -1,8 +1,10 @@
 from __future__ import annotations
+from construction import roof_outline
 import math
 from typing import Sequence
 import pandas as pd
 import streamlit as st
+from construction import floor_depth, floor_outline, wall_panel_layout
 from geometry import poly_area, wall_lengths, Point
 from panel_engine import generate_roof_floor_panels
 
@@ -43,6 +45,8 @@ def lag_kappliste(
     rom_type: str,
     tak_kapp_plassering: str = "slutt",
     apninger: tuple = (),
+    excluded_walls: tuple = (),
+    floor_panel_mm: int = 100,
 ) -> pd.DataFrame:
     """
     Kappliste for vegg, tak og gulv.
@@ -58,10 +62,7 @@ def lag_kappliste(
       - De klippes mot polygonet, slik at skrå/avskåret hjørne får riktig geometri.
       - Kapp kan ligge først eller sist. Standard er sluttkapp.
     """
-    wls_m = wall_lengths(pts)
     rader: list[dict] = []
-    el_nr = 1
-    rest_mm = 0
 
     def _cuts_for_panel(wall_idx, x_start_mm, panel_w_mm):
         """Finn utsparinger som overlapper dette panelet, returner (sill_mm, top_mm)."""
@@ -73,54 +74,20 @@ def lag_kappliste(
                 continue
             off_mm = ap_off * 1000; w_mm = ap_w * 1000
             if off_mm < x_end_mm and off_mm + w_mm > x_start_mm:
-                sill_mm = ap_sill * 1000
+                sill_mm = (floor_depth(rom_type) + ap_sill) * 1000
                 top_mm  = sill_mm + ap_h * 1000
                 cuts.append((sill_mm, top_mm))
         return cuts
 
-    for vi, wl_m in enumerate(wls_m):
-        vegg_label = f"Vegg {vi+1}"
-        L_mm = round(wl_m * 1000)
-        brukt_mm = 0
-
-        def _legg_til(base_type, bredde, x_start):
-            nonlocal el_nr
-            cuts = _cuts_for_panel(vi, x_start, bredde)
-            deler = _panel_utsparing_deler(base_type, bredde, H_mm, cuts)
-            pnavn = f"V{el_nr}"
-            for typ, b, h, merk in deler:
-                rader.append(dict(Elementnavn=pnavn, Vegg=vegg_label, Type=typ,
-                                  Bredde_mm=b, Høyde_mm=h,
-                                  Areal_m2=round(b/1000*h/1000, 3), Merknad=merk))
-            el_nr += 1
-
-        if rest_mm > 0:
-            bredde = min(rest_mm, L_mm)
-            _legg_til("Rest fra forrige", bredde, brukt_mm)
-            brukt_mm += bredde
-            rest_mm = max(rest_mm - L_mm, 0)
-
-        while brukt_mm + pw_mm <= L_mm:
-            _legg_til("Hel", pw_mm, brukt_mm)
-            brukt_mm += pw_mm
-
-        remaining = L_mm - brukt_mm
-        if remaining > 0:
-            cuts = _cuts_for_panel(vi, brukt_mm, remaining)
-            deler = _panel_utsparing_deler("Kapp (videreføres)", remaining, H_mm, cuts)
-            pnavn = f"V{el_nr}"
-            for typ, b, h, merk in deler:
-                if typ == "Kapp (videreføres)":
-                    merk = f"Kapp {remaining} mm – rest {pw_mm-remaining} mm videreføres"
-                rader.append(dict(Elementnavn=pnavn, Vegg=vegg_label, Type=typ,
-                                  Bredde_mm=b, Høyde_mm=h,
-                                  Areal_m2=round(b/1000*h/1000, 3), Merknad=merk))
-            el_nr += 1
-            rest_mm = pw_mm - remaining
+    for panel in wall_panel_layout(pts,pw_mm,floor_panel_mm/1000,excluded_walls):
+        cuts = _cuts_for_panel(panel['wall'],panel['start_mm'],panel['width_mm'])
+        for typ,b,h,merk in _panel_utsparing_deler(panel['kind'],panel['width_mm'],H_mm,cuts):
+            rader.append(dict(Elementnavn=panel['name'], Vegg=f"Vegg {panel['wall']+1}", Type=typ,
+                              Bredde_mm=b, Høyde_mm=h, Areal_m2=round(b*h/1e6,3), Merknad=merk))
 
     # Takpaneler – polygonbasert løsning.
     cut_pos = "start" if str(tak_kapp_plassering).lower().startswith("start") else "end"
-    takpaneler = generate_roof_floor_panels(pts, pw_mm, prefix="T", label="Tak", cut_position=cut_pos)
+    takpaneler = generate_roof_floor_panels(roof_outline(pts,floor_panel_mm/1000,rom_type), pw_mm, prefix="T", label="Tak", cut_position=cut_pos)
     for p in takpaneler:
         rader.append(dict(
             Elementnavn=p.name,
@@ -134,7 +101,7 @@ def lag_kappliste(
 
     # Gulvpaneler – kun fryserom, samme polygonlogikk som tak.
     if "Fryserom" in rom_type:
-        gulvpaneler = generate_roof_floor_panels(pts, pw_mm, prefix="G", label="Gulv PIR", cut_position=cut_pos)
+        gulvpaneler = generate_roof_floor_panels(floor_outline(pts,floor_panel_mm/1000), pw_mm, prefix="G", label="Gulv PIR", cut_position=cut_pos)
         for p in gulvpaneler:
             rader.append(dict(
                 Elementnavn=p.name,
@@ -146,12 +113,12 @@ def lag_kappliste(
                 Merknad=p.note,
             ))
 
-        # Sponplate oppgis som totalareal, men beholdes som én post.
+        # Floor fibreboard is listed as net area; sheet cutting is listed separately.
         area_m2 = poly_area(pts)
         rader.append(dict(
-            Elementnavn="SP1", Vegg="Gulv", Type="Sponplate m/ plastbelegg",
+            Elementnavn="SP1", Vegg="Gulv", Type="Gulvfiberplate 12 mm",
             Bredde_mm="", Høyde_mm="", Areal_m2=round(area_m2, 3),
-            Merknad=f"Sponplate med plastbelegg over gulvpanel · {area_m2:.2f} m²"
+            Merknad=f"12 mm gulvfiberplate innenfor vegger, se egen kappliste · {area_m2:.2f} m²"
         ))
 
     return pd.DataFrame(rader)
@@ -162,17 +129,35 @@ def kappliste_sammendrag(df_kapp: pd.DataFrame) -> dict:
     TAK_TYPER = ["Tak – hel", "Tak – startkapp", "Tak – sluttkapp"]
     GULV_TYPER = ["Gulv PIR – hel", "Gulv PIR – startkapp", "Gulv PIR – sluttkapp"]
 
-    vegg_df = df_kapp[df_kapp["Type"].isin(VEGG_TYPER)]
+    vegg_df = df_kapp[df_kapp["Vegg"].str.startswith("Vegg ")]
     tak_df = df_kapp[df_kapp["Type"].isin(TAK_TYPER)]
     gulv_df = df_kapp[df_kapp["Type"].isin(GULV_TYPER)]
-    spon_df = df_kapp[df_kapp["Type"] == "Sponplate m/ plastbelegg"]
+    spon_df = df_kapp[df_kapp["Type"].isin(("Gulvfiberplate 12 mm", "Beskyttelsesfiner 12 mm"))]
 
     return dict(
-        hele=len(df_kapp[df_kapp["Type"] == "Hel"]),
-        kapp=len(df_kapp[df_kapp["Type"] == "Kapp (videreføres)"]),
-        rest=len(df_kapp[df_kapp["Type"] == "Rest fra forrige"]),
-        tot_panel=len(vegg_df),
+        hele=df_kapp.loc[df_kapp["Type"] == "Hel", "Elementnavn"].nunique(),
+        kapp=df_kapp.loc[df_kapp["Type"] == "Kapp (videreføres)", "Elementnavn"].nunique(),
+        rest=df_kapp.loc[df_kapp["Type"] == "Rest fra forrige", "Elementnavn"].nunique(),
+        tot_panel=vegg_df.Elementnavn.nunique(),
         tak=len(tak_df),
         gulv=len(gulv_df),
         spon=len(spon_df),
     )
+
+
+def panel_order_rows(cut: pd.DataFrame, wall_height_mm: int, panel_width_mm: int):
+    """One full-width blank per named panel, shared by prices and purchase lists.
+
+    Opening sub-pieces keep the same name and therefore never buy another blank.
+    Net cutting dimensions are kept separately from the ordered blank area.
+    """
+    panels = cut[pd.to_numeric(cut.Bredde_mm, errors="coerce").notna()]
+    rows = []
+    for (zone, name), parts in panels.groupby(["Vegg", "Elementnavn"], sort=False):
+        length = wall_height_mm if str(zone).startswith("Vegg") else int(parts.Høyde_mm.sum())
+        rows.append(dict(Vegg=zone, Elementnavn=name, Leveringslengde_mm=length,
+                         Bredde_mm=panel_width_mm, Deler_stk=len(parts),
+                         Løpemeter=float(parts.Høyde_mm.sum()) / 1000,
+                         Areal_m2=float(parts.Areal_m2.sum()),
+                         Bestill_m2=panel_width_mm * length / 1_000_000))
+    return pd.DataFrame(rows)

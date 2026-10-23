@@ -1,14 +1,21 @@
 from __future__ import annotations
 from typing import Any
+from database import PANEL_DB
 
 from drawing_2d import stramo_plan, stramo_snitt, stramo_tak, tegn_veggoppstalt, stramo_produksjonstegninger, fig2png
 from drawing_3d import tegn_3d_med_panelbredde
 
 
 def tegn_plantegning(inp: Any, result: dict, bakgrunn=None, apninger=None):
+    if getattr(inp,"excluded_walls",()):
+        from dataclasses import asdict
+        from project_ui import assembly_plan
+        room={"input":asdict(inp),"position_mm":[0,0],"excluded_walls":list(inp.excluded_walls)}
+        return assembly_plan([room])
     info = lag_tegningsinfo(inp, result, "Plantegning")
     return stramo_plan(inp.pts, inp.hoyde_m, inp.panelbredde_m,
-                       inp.dorer, info, bakgrunn, apninger=apninger)
+                       inp.dorer, info, bakgrunn, apninger=apninger,
+                       wall_thickness=PANEL_DB[inp.panel_key]["t"] / 1000)
 
 
 def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", apninger=None):
@@ -21,7 +28,7 @@ def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", 
 def tegn_veggoppstaltt(inp: Any, result: dict, vegg_idx: int = 0, apninger=None):
     info = lag_tegningsinfo(inp, result, f"Veggoppstalt V{vegg_idx+1}")
     return tegn_veggoppstalt(inp.pts, inp.hoyde_m, inp.panelbredde_m,
-                              inp.dorer, info, vegg_idx, apninger=apninger)
+                              inp.dorer, info, vegg_idx, apninger=apninger, rom_type=inp.rom_type, excluded_walls=getattr(inp,"excluded_walls",()), wall_thickness=PANEL_DB[inp.panel_key]["t"]/1000)
 
 
 def tegn_taktegning(inp: Any, result: dict):
@@ -40,6 +47,7 @@ def tegn_produksjonsfigurer(inp: Any, result: dict, bare_tilpassede: bool = Fals
         rom_type=inp.rom_type,
         info=info,
         bare_tilpassede=bare_tilpassede,
+        excluded_walls=getattr(inp,"excluded_walls",()),
         dorer=getattr(inp, "dorer", []),
         apninger=getattr(inp, "apninger", []),
     )
@@ -49,7 +57,7 @@ def tegn_3d_modell(inp: Any, azimuth: int = -55, elevation: int = 28, apninger=N
     return tegn_3d_med_panelbredde(inp.pts, inp.hoyde_m, inp.dorer,
                                     inp.panel_key, inp.rom_type,
                                     inp.panelbredde_m, azimuth, elevation,
-                                    apninger=apninger)
+                                    apninger=apninger, excluded_walls=getattr(inp, "excluded_walls", ()))
 
 
 def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
@@ -70,19 +78,21 @@ def figur_som_png(fig, dpi: int = 180) -> bytes:
     return fig2png(fig, dpi=dpi)
 
 
-def figur_som_pdf(fig) -> bytes:
+def figur_som_pdf(fig, title="Tegninger") -> bytes:
     import io
+    from drawing_pdf import drawing_pdf
     buf = io.BytesIO()
     fig.savefig(buf, format="pdf", bbox_inches="tight")
-    return buf.getvalue()
+    return drawing_pdf(buf.getvalue(),title)
 
 
 def figurer_som_samlet_pdf(figs: list) -> bytes:
     """Slår sammen flere matplotlib-figurer til én PDF."""
     import io
+    from drawing_pdf import drawing_pdf
     from matplotlib.backends.backend_pdf import PdfPages
     buf = io.BytesIO()
     with PdfPages(buf) as pdf:
         for fig in figs:
             pdf.savefig(fig, bbox_inches="tight")
-    return buf.getvalue()
+    return drawing_pdf(buf.getvalue(),"Produksjonstegninger")

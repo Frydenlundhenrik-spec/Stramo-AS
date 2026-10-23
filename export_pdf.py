@@ -36,6 +36,23 @@ def _registrer_font() -> tuple[str, str]:
     return vanlig, fet
 
 
+def draw_pdf_footer(canvas, page_number: int, page_width: float, *,
+                    left: float = 40, right: float = 40, y: float = 24,
+                    total_pages: int | None = None, text_color=None) -> None:
+    """Draw the common company name and actual page number only."""
+    from reportlab.lib import colors
+    font, _ = _registrer_font()
+    canvas.saveState()
+    canvas.setFillColor(text_color if text_color is not None else colors.HexColor("#526b78"))
+    canvas.setFont(font, 8)
+    canvas.drawString(left, y, "Stramo AS")
+    page_label = f"Side {page_number}"
+    if total_pages is not None:
+        page_label += f" av {total_pages}"
+    canvas.drawRightString(page_width-right, y, page_label)
+    canvas.restoreState()
+
+
 def lag_enkel_pdf(tittel: str, linjer: Iterable[str]) -> bytes:
     """Enkel tekstbasert PDF – beholdes for FDV-bruk."""
     try:
@@ -79,11 +96,13 @@ def lag_enkel_pdf(tittel: str, linjer: Iterable[str]) -> bytes:
     for line in linjer:
         for del_ in _bryt(line):
             if y < 50:
+                draw_pdf_footer(c, c.getPageNumber(), width)
                 c.showPage()
                 y = height - 50
                 c.setFont(f_vanlig, 9)
             c.drawString(MARG, y, del_)
             y -= 14
+    draw_pdf_footer(c, c.getPageNumber(), width)
     c.save()
     return buffer.getvalue()
 
@@ -308,5 +327,9 @@ def lag_tilbuds_pdf(
         buf2.seek(0)
         story.append(Image(buf2, width=16.5*cm, height=10.5*cm, hAlign="CENTER"))
 
-    doc.build(story)
+    def footer(canvas, document):
+        draw_pdf_footer(canvas, document.page, A4[0],
+                        left=document.leftMargin, right=document.rightMargin)
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()

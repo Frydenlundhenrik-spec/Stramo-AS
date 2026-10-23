@@ -1,0 +1,181 @@
+{
+  "format": "stramo-project",
+  "version": 1,
+  "rooms": [
+    {
+      "id": "cc73e9e89c2440b59b802cb7a76cfdbf",
+      "input": {
+        "navn": "Tasty Fredrikstad Kjølerom",
+        "pnr": "138",
+        "tnr": "A-138",
+        "dato": "21.10.2026",
+        "maalestokk": "1:10",
+        "rom_type": "Kjølerom",
+        "panel_key": "PIR 80 mm",
+        "pts": [
+          [
+            0.0,
+            0.0
+          ],
+          [
+            8.96,
+            0.0
+          ],
+          [
+            8.96,
+            8.91
+          ],
+          [
+            2.41,
+            8.91
+          ],
+          [
+            2.41,
+            3.86
+          ],
+          [
+            0.0,
+            3.86
+          ]
+        ],
+        "hoyde_m": 2.4,
+        "panelbredde_m": 1.1,
+        "dorer": [
+          [
+            "Enkel kjøledør 1000×2100 mm",
+            1,
+            0,
+            6.1,
+            "Høyre"
+          ],
+          [
+            "Enkel kjøledør 1000×2100 mm",
+            1,
+            2,
+            2.7,
+            "Venstre"
+          ]
+        ],
+        "beslag_valg": [
+          "Hengsel – tung kjøledør (rustfritt)",
+          "Lukkemekanisme / låsekasse kjøl",
+          "Trykkventil / trykkutligningsplugg",
+          "Varmekabel dørkarm (m)",
+          "Terskel / rampe rustfritt stål"
+        ],
+        "apninger": [],
+        "excluded_walls": []
+      },
+      "form": {
+        "kind": "L-form",
+        "sides_mm": [
+          8960,
+          8910,
+          6550,
+          5050,
+          2410,
+          3860
+        ],
+        "turns": 0,
+        "mirrored": false
+      },
+      "prices": {
+        "dor_Enkel kjøledør 1000×2100 mm": 0.0
+      },
+      "position_mm": [
+        0,
+        0
+      ],
+      "excluded_walls": [],
+      "background": null
+    }
+  ],
+  "draft": {
+    "id": "cc73e9e89c2440b59b802cb7a76cfdbf",
+    "input": {
+      "navn": "Tasty Fredrikstad Kjølerom",
+      "pnr": "138",
+      "tnr": "A-138",
+      "dato": "21.10.2026",
+      "maalestokk": "1:10",
+      "rom_type": "Kjølerom",
+      "panel_key": "PIR 80 mm",
+      "pts": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          8.96,
+          0.0
+        ],
+        [
+          8.96,
+          8.91
+        ],
+        [
+          2.41,
+          8.91
+        ],
+        [
+          2.41,
+          3.86
+        ],
+        [
+          0.0,
+          3.86
+        ]
+      ],
+      "hoyde_m": 2.4,
+      "panelbredde_m": 1.1,
+      "dorer": [
+        [
+          "Enkel kjøledør 1000×2100 mm",
+          1,
+          0,
+          6.1,
+          "Høyre"
+        ],
+        [
+          "Enkel kjøledør 1000×2100 mm",
+          1,
+          2,
+          2.7,
+          "Venstre"
+        ]
+      ],
+      "beslag_valg": [
+        "Hengsel – tung kjøledør (rustfritt)",
+        "Lukkemekanisme / låsekasse kjøl",
+        "Trykkventil / trykkutligningsplugg",
+        "Varmekabel dørkarm (m)",
+        "Terskel / rampe rustfritt stål"
+      ],
+      "apninger": [],
+      "excluded_walls": []
+    },
+    "form": {
+      "kind": "L-form",
+      "sides_mm": [
+        8960,
+        8910,
+        6550,
+        5050,
+        2410,
+        3860
+      ],
+      "turns": 0,
+      "mirrored": false
+    },
+    "prices": {
+      "dor_Enkel kjøledør 1000×2100 mm": 0.0
+    },
+    "position_mm": [
+      0,
+      0
+    ],
+    "excluded_walls": [],
+    "background": null
+  },
+  "active_id": "cc73e9e89c2440b59b802cb7a76cfdbf"
+}

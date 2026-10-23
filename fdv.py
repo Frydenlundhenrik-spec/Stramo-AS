@@ -6,15 +6,15 @@ from database import PANEL_DB, DOR_DB, BESLAG_DB, GULV_DB_KJOL, GULV_DB_FRYS
 
 
 def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]], beslag_valg: list[str]) -> pd.DataFrame:
-    """Lager enkel FDV-oversikt som kan eksporteres videre."""
+    """Prosjektoversikt; originalvedlegg følger den samlede standardpakken."""
     panel = PANEL_DB[panel_key]
     rows = [
         {
             "Bygningsdel": "Vegger og tak",
-            "Produkt": panel["label"],
+            "Produkt": panel["label"] + " – PE25 polyesterlakk, 25 µm, RAL 9010",
             "Vedlikehold": "Visuell kontroll av skjøter, overflater og tettinger.",
             "Intervall": "Årlig",
-            "Dokumentasjon": "Produktdatablad, monteringsanvisning, eventuell ytelseserklæring.",
+            "Dokumentasjon": "Produktdatablad, ytelseserklæring, hygienesertifikat, EPD, teknisk katalog og monteringsanvisning i standardpakken. Kontroller valgt panel mot vedleggene.",
         }
     ]
 
@@ -22,9 +22,9 @@ def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]]
         rows.append({
             "Bygningsdel": "Gulv",
             "Produkt": GULV_DB_FRYS["label"],
-            "Vedlikehold": "Kontroller plastbelegg, skjøter og gjennomføringer. Utbedre skader raskt.",
+            "Vedlikehold": "Kontroller gulvfiberplaten, skjøter og gjennomføringer for skade og fukt. Produktspesifikke anvisninger ettersendes.",
             "Intervall": "Halvårlig",
-            "Dokumentasjon": "Produktdatablad for PIR-gulvpanel og sponplate/plastbelegg.",
+            "Dokumentasjon": "Paneldokumentasjon vedlagt. Dokumentasjon for 12 mm gulvfiberplate ettersendes. Gulvets understøttelse og tillatte belastning dokumenteres særskilt.",
         })
     else:
         rows.append({
@@ -41,10 +41,10 @@ def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]]
         d = DOR_DB[door_key]
         rows.append({
             "Bygningsdel": "Dør",
-            "Produkt": f"{d['label']} ({ant} stk)",
-            "Vedlikehold": "Kontroller pakning, hengsler, låsekasse, terskel, nødåpner og selvlukker.",
+            "Produkt": f"{'Fryseromsdør' if rom_type == 'Fryserom' else 'Kjøleromsdør'} {d['bw']} × {d['bh']} mm ({ant} stk)",
+            "Vedlikehold": "Kontroller pakning, hengsler, nødåpner og lukkefunksjon etter dørleverandørens anvisning.",
             "Intervall": "Kvartalsvis",
-            "Dokumentasjon": "FDV for dør, beslag og eventuelt varmekabel.",
+            "Dokumentasjon": "Dørleverandørens produktspesifikke FDV vedlegges separat.",
         })
 
     for beslag_key in beslag_valg:
@@ -57,6 +57,19 @@ def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]]
             "Dokumentasjon": "Produktdatablad / leverandørdokumentasjon.",
         })
 
+    rows.extend([{
+        "Bygningsdel": "Platebeslag",
+        "Produkt": "0,6 mm stål – PE25 polyesterlakk, 25 µm, RAL 9010",
+        "Vedlikehold": "Kontroller lakk, skjøter, festemidler og tetninger. Utbedre skader etter leverandørens anvisning.",
+        "Intervall": "Årlig",
+        "Dokumentasjon": "Beslagskatalog i standardpakken. Prosjektets måltegninger vedlegges aktuell leveranse.",
+    }, {
+        "Bygningsdel": "Skruer og fugemasse",
+        "Produkt": "22 mm hvite skruer; fugemasse bekreftes for leveransen",
+        "Vedlikehold": "Kontroller innfesting og tettinger. Produktspesifikke anvisninger ettersendes.",
+        "Intervall": "Årlig kontroll; produktanvisning ettersendes",
+        "Dokumentasjon": "Reserverte seksjoner i standardpakken. Produsent og produktdokumentasjon ettersendes.",
+    }])
     rows.append({
         "Bygningsdel": "Renhold",
         "Produkt": "Kjøle-/fryserom generelt",
@@ -74,6 +87,7 @@ def lag_fdv_tekst(prosjektnavn: str, panel_key: str, rom_type: str) -> str:
 ## Anlegg
 Romtype: {rom_type}  
 Panel: {panel['label']}  
+Overflate på paneler og platebeslag: PE25 polyesterlakk, 25 µm, RAL 9010  
 U-verdi: {panel['u']} W/m²K
 
 ## Drift
@@ -82,11 +96,12 @@ Rommet skal driftes i henhold til prosjektert temperatur og leverandørens krav 
 ## Vedlikehold
 Kontroller jevnlig dørfunksjon, pakninger, overganger, skjøter, terskler, beslag og gulvoverflate. Skader i paneloverflate eller tettinger bør utbedres raskt for å hindre fuktinntrenging og hygieniske avvik.
 
-## Dokumentasjon som bør legges ved
-- Produktdatablad for paneler
-- Monteringsanvisning
-- FDV for dør og beslag
-- Eventuell dokumentasjon på gulv, varmekabel og tettemasser
-- IFC-fil og montasjetegninger
-- Kappliste og materialliste
+## Standardpakken
+Den samlede PDF-en inneholder paneldatablad, ytelseserklæring, hygienesertifikat, EPD, teknisk panelkatalog, monteringsanvisning og beslagskatalog. Leverandørvedleggene er uendret og gjelder BALEX PIR STANDARD.
+
+## Dokumentasjon som ettersendes
+Egne seksjoner er reservert for 22 mm hvite skruer, fugemasse og 12 mm gulvfiberplater. Gulvfiberplaten beskytter fryseromsgulvet innenfor veggene; gulvpanelene ligger på 22 mm lekter.
+
+## Prosjektvedlegg
+Legg ved aktuelle tegninger, IFC, kapplister og materialliste. Dører, trykkventiler, kjølemaskineri og elektro dokumenteres separat der de inngår. Kontroller produktvalget mot faktisk leveranse; standardpakken er en del av samlet FDV.
 """

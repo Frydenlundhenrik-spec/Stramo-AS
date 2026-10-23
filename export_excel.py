@@ -16,7 +16,8 @@ def lag_excel(result: dict[str, Any], fdv_df: pd.DataFrame | None = None) -> byt
             {"Post": "Gulvareal", "Verdi": result["ov"]["A"], "Enhet": "m²"},
             {"Post": "Volum", "Verdi": result["ov"]["V"], "Enhet": "m³"},
             {"Post": "Omkrets", "Verdi": result["ov"]["P"], "Enhet": "m"},
-            {"Post": "Totalpris", "Verdi": result["tot_pris"], "Enhet": "kr"},
+            {"Post": "Totalpris" if result.get("pricing_complete",True) else "Priset delsum", "Verdi": result["tot_pris"], "Enhet": "kr"},
+            {"Post": "Manglende priser", "Verdi": "; ".join(result.get("missing_prices",[])), "Enhet": ""},
             {"Post": "CO₂", "Verdi": result["tot_co2"], "Enhet": "kg"},
         ]).to_excel(writer, index=False, sheet_name="Sammendrag")
         if fdv_df is not None:
