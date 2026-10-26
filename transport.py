@@ -27,8 +27,8 @@ def packages(rooms):
     return pd.DataFrame(rows)
 
 
-def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
-    """Fill across at the front, then stack supported packages up to trailer height."""
+def pack_floor(frame, length, width, height, clearance=0, stack_panels=True):
+    """Pack against the front and adjacent packages; stack within trailer height."""
     if min(length,width,height)<=0 or clearance<0:raise ValueError('Ugyldige trailermål eller klaring.')
     items=frame.to_dict('records')
     for r in items:
@@ -56,7 +56,8 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
             if w>b+clearance:free.append((x,y+b+clearance,z,a,w-b-clearance,h,level))
             if stack_panels and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]:
                 free.append((x,y,z+r["Høyde_mm"],a,b,h-r["Høyde_mm"],level+1))
-        score=(len(missing),max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0),
+        front_area=sum(r['Lastebredde_mm']*r['Høyde_mm'] for r in placed if r['X_mm']==0)
+        score=(len(missing),-front_area,max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0),
                sum(r['Lastelengde_mm']*r['Lastebredde_mm'] for r in placed if r['Z_mm']==0))
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
@@ -98,7 +99,7 @@ def transport_manifest(cargo, placed):
 def transport_ui(rooms):
     import streamlit as st
     st.header('Transport – lasteforslag')
-    st.caption('Elementer og beslag. To panelpakker i bredden når trailermålene tillater det. Utnytt høyden opp mot trailertaket før neste rad bakover. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
+    st.caption('Elementer og beslag. Første rad ligger helt mot frontveggen (0 mm), med pakkene inntil hverandre. To panelpakker i bredden når trailermålene tillater det. Utnytt høyden opp mot trailertaket før neste rad bakover. Last fra fronten og bakover mot bakdørene, i nummerert lasterekkefølge.')
     if not rooms:st.info('Legg til ferdige rom først.');return
     labels={r['id']:r['input']['navn'] for r in rooms}
     chosen=st.multiselect('Rom som skal transporteres',list(labels),default=list(labels),format_func=labels.get,key='transport_rooms')
@@ -109,14 +110,13 @@ def transport_ui(rooms):
     width=c[1].number_input('Innvendig bredde (mm)',min_value=500,value=2450,step=50)
     height=c[2].number_input('Innvendig høyde (mm)',min_value=500,value=2700,step=50)
     payload=c[3].number_input('Tillatt nyttelast (kg)',min_value=100,value=24000,step=500)
-    clearance=st.number_input('Klaring mellom kolli (mm)',min_value=0,max_value=500,value=30,step=10)
-    st.caption('Maksimum per pakke: 80 mm = 14 elementer + 150 mm strø (1270 mm). 100 mm = 11 elementer + 150 mm strø (1250 mm). Delpakker får faktisk elementhøyde + 150 mm strø. Antall pakker oppå hverandre styres av trailerhøyden og full understøttelse. I 2700 mm høyde får to fulle pakker plass; lavere delpakker kan gi flere lag. Panelpakker lastes i lengderetningen. Klaring gjelder mellom kolli på samme nivå. Emballasjemål og ukjente vekter kan endres nedenfor.')
+    st.caption('Maksimum per pakke: 80 mm = 14 elementer + 150 mm strø (1270 mm). 100 mm = 11 elementer + 150 mm strø (1250 mm). Delpakker får faktisk elementhøyde + 150 mm strø. Antall pakker oppå hverandre styres av trailerhøyden og full understøttelse. I 2700 mm høyde får to fulle pakker plass; lavere delpakker kan gi flere lag. Panelpakker lastes i lengderetningen. Ingen innlagt klaring mellom pakkene. Emballasjemål og ukjente vekter kan endres nedenfor.')
     stack_panels=st.checkbox('Stable panelpakker opp mot trailertaket med full understøttelse',value=True)
     base=packages(selected)
     import hashlib
     revision=hashlib.sha256(base.to_json().encode()).hexdigest()[:12]
     edited=st.data_editor(base,hide_index=True,disabled=['Kolli','Innhold','Antall','Grunnlag'],key='cargo_'+revision)
-    try:placed,missing=pack_floor(edited,length,width,height,clearance,stack_panels)
+    try:placed,missing=pack_floor(edited,length,width,height,stack_panels=stack_panels)
     except ValueError as exc:st.error(str(exc));return
     weight=pd.to_numeric(edited.Vekt_kg,errors='coerce')
     if (weight.dropna()<0).any():st.error('Vekt kan ikke være negativ.');return
@@ -127,13 +127,18 @@ def transport_ui(rooms):
     c.metric('Registrert vekt',f'{weight.sum():,.0f} kg')
     used_length = max((r['X_mm']+r['Lastelengde_mm'] for r in placed.to_dict('records')), default=0)
     d.metric('Brukt lastelengde', f'{used_length:.0f} mm')
+    if not placed.empty:
+        front_base=placed[placed.X_mm.eq(0) & placed.Z_mm.eq(0)]
+        remaining_width=width-front_base.Lastebredde_mm.sum()
+        if remaining_width>0:
+            st.info(f'Ledig bredde ved frontveggen: {remaining_width:.0f} mm. Pakkene ligger inntil hverandre; resterende sideplass må vurderes for utfylling/stenging i lastsikringsplanen.')
     if weight.isna().any():st.warning('Total transportvekt er ufullstendig: legg inn vekt for kolli uten vekt. Panelvekten omfatter ikke emballasje.')
     if weight.sum()>payload:st.error('Registrert vekt overstiger tillatt nyttelast.')
     if not missing.empty:
         st.warning('Disse kolliene fikk ikke plass i forslaget. Juster pakking/stabling eller bruk en ekstra trailer.')
         st.dataframe(missing,hide_index=True)
     fig=load_figure(placed,length,width,height);st.plotly_chart(fig,use_container_width=True)
-    st.caption('Geometrisk lasteforslag. Kontroller emballasje, tillatt stabling, støtte under lange paneler, aksellast og lastsikring før lasting. Forslaget er ikke en kontroll av aksellast eller lastsikring.')
+    st.caption('Geometrisk lasteforslag. Kontakt mellom pakker er ikke dokumentasjon på tilstrekkelig lastsikring. Frontveggens styrke, vektfordeling/aksellast, tillatt stabling, utfylling og surring må kontrolleres før lasting.')
     st.dataframe(placed,hide_index=True)
     manifest=transport_manifest(edited,placed)
     st.download_button('Last ned transportliste CSV',manifest.to_csv(index=False).encode('utf-8-sig'),'transportliste.csv','text/csv')

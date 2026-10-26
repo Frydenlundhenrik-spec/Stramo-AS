@@ -22,15 +22,20 @@ for thickness, per_package in ((80,14),(100,11)):
  assert (loaded.X_mm+loaded.Lastelengde_mm).max()==2400
  assert set(loaded.Z_mm)=={0,per_package*thickness+150}
  assert len(loaded[loaded.Z_mm.eq(0)])==2 and len(loaded[loaded.Z_mm.gt(0)])==2
- assert set(loaded.Y_mm)=={0,1130}
+ assert set(loaded.Y_mm)=={0,1100}
  # With only two packages, fill the width before placing a package on top.
  across,remainder=pack_floor(example.iloc[:2],4800,2450,2700)
  assert remainder.empty and across.Z_mm.eq(0).all() and across.X_mm.eq(0).all()
- assert set(across.Y_mm)=={0,1130}
+ assert set(across.Y_mm)=={0,1100}
  # Four packages must stay together at the front, not spread down a long trailer.
  front,remainder=pack_floor(example,13600,2450,2700)
  assert remainder.empty and front.X_mm.eq(0).all()
- assert set(front.Y_mm)=={0,1130} and len(front[front.Z_mm.gt(0)])==2
+ assert set(front.Y_mm)=={0,1100} and len(front[front.Z_mm.gt(0)])==2
+ # Successive rows touch: no artificial gaps laterally or lengthwise.
+ eight=pd.concat([example,example.assign(Kolli=[f'F{i}' for i in range(4)])],ignore_index=True)
+ touching,left=pack_floor(eight,4800,2200,2700)
+ assert left.empty and len(touching)==8
+ assert set(touching.X_mm)=={0,2400} and set(touching.Y_mm)=={0,1100}
  assert len(pack_floor(example,2400,2450,2700,stack_panels=False)[0])==2
  # Trailer height limits the stack, not a fixed number of packages.
  third=pd.concat([example.iloc[:2],example.iloc[:1].assign(Kolli='E4')],ignore_index=True)
@@ -67,7 +72,7 @@ assert p.X_mm.is_monotonic_increasing
 assert p.Lastenr.tolist()==list(range(1,len(p)+1))
 assert len(p)==len(f) and m.empty
 front_panels=p[p.Innhold.str.startswith('PIR') & p.X_mm.eq(0) & p.Z_mm.eq(0)]
-assert len(front_panels)==2 and set(front_panels.Y_mm)=={0,1130}
+assert len(front_panels)==2 and set(front_panels.Y_mm)=={0,1100}
 for upper in p[p.Z_mm.gt(0)].to_dict('records'):
  assert any(base['Z_mm']+base['Høyde_mm']==upper['Z_mm']
      and base['X_mm']<=upper['X_mm'] and base['Y_mm']<=upper['Y_mm']
