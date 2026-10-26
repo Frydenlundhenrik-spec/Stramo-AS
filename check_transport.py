@@ -21,6 +21,16 @@ for thickness, per_package in ((80,14),(100,11)):
  assert len(loaded)==4 and unloaded.empty
  assert (loaded.X_mm+loaded.Lastelengde_mm).max()==2400
  assert set(loaded.Z_mm)=={0,per_package*thickness+150}
+ assert len(loaded[loaded.Z_mm.eq(0)])==2 and len(loaded[loaded.Z_mm.gt(0)])==2
+ assert set(loaded.Y_mm)=={0,1130}
+ # With only two packages, fill the width before placing a package on top.
+ across,remainder=pack_floor(example.iloc[:2],4800,2450,2700)
+ assert remainder.empty and across.Z_mm.eq(0).all() and across.X_mm.eq(0).all()
+ assert set(across.Y_mm)=={0,1130}
+ # Four packages must stay together at the front, not spread down a long trailer.
+ front,remainder=pack_floor(example,13600,2450,2700)
+ assert remainder.empty and front.X_mm.eq(0).all()
+ assert set(front.Y_mm)=={0,1130} and len(front[front.Z_mm.gt(0)])==2
  assert len(pack_floor(example,2400,2450,2700,stack_panels=False)[0])==2
  # Even a tall trailer must never receive a third package on top.
  third=pd.concat([example.iloc[:2],example.iloc[:1].assign(Kolli='E4')],ignore_index=True)
@@ -44,6 +54,14 @@ pd.testing.assert_frame_equal(entered,f)
 assert p.X_mm.is_monotonic_increasing
 assert p.Lastenr.tolist()==list(range(1,len(p)+1))
 assert len(p)==len(f) and m.empty
+front_panels=p[p.Innhold.str.startswith('PIR') & p.X_mm.eq(0) & p.Z_mm.eq(0)]
+assert len(front_panels)==2 and set(front_panels.Y_mm)=={0,1130}
+for upper in p[p.Z_mm.gt(0)].to_dict('records'):
+ assert any(base['Z_mm']==0 and base['Høyde_mm']==upper['Z_mm']
+     and base['X_mm']<=upper['X_mm'] and base['Y_mm']<=upper['Y_mm']
+     and base['X_mm']+base['Lastelengde_mm']>=upper['X_mm']+upper['Lastelengde_mm']
+     and base['Y_mm']+base['Lastebredde_mm']>=upper['Y_mm']+upper['Lastebredde_mm']
+     for base in p.to_dict('records'))
 for i,a in enumerate(p.to_dict('records')):
  assert a['X_mm']>=0 and a['Y_mm']>=0 and a['X_mm']+a['Lastelengde_mm']<=13600 and a['Y_mm']+a['Lastebredde_mm']<=2450 and a['Z_mm']+a['Høyde_mm']<=2700
  for b in p.to_dict('records')[i+1:]:

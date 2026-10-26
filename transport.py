@@ -28,7 +28,7 @@ def packages(rooms):
 
 
 def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
-    """Longitudinal panel packages, at most two high, with full footprint support."""
+    """Fill across at the front before stacking, at most two high on full support."""
     if min(length,width,height)<=0 or clearance<0:raise ValueError('Ugyldige trailermål eller klaring.')
     items=frame.to_dict('records')
     for r in items:
@@ -37,7 +37,7 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
     candidates=[]
     for sort in (lambda r:r['Lengde_mm']*r['Bredde_mm'],lambda r:max(r['Lengde_mm'],r['Bredde_mm']),lambda r:r['Bredde_mm']):
         free=[(0,0,0,length,width,height,0)];placed=[];missing=[]
-        for r in sorted(items,key=sort,reverse=True):
+        for r in sorted(items,key=lambda r:(str(r.get('Innhold','')).startswith('PIR'),sort(r)),reverse=True):
             choices=[]
             if r['Høyde_mm']<=height:
                 for i,(x,y,z,l,w,h,level) in enumerate(free):
@@ -46,7 +46,7 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
                     orientations = [(r['Lengde_mm'],r['Bredde_mm'])]
                     if not is_panel: orientations.append((r['Bredde_mm'],r['Lengde_mm']))
                     for a,b in orientations:
-                        if a<=l and b<=w:choices.append((x,l*w-a*b,z,y,i,a,b))
+                        if a<=l and b<=w:choices.append((x,z,l*w-a*b,y,i,a,b))
             if not choices:missing.append(r);continue
             _,_,_,_,i,a,b=min(choices)
             x,y,z,l,w,h,level=free.pop(i)
@@ -60,7 +60,7 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
     placed.sort(key=lambda r:(r['X_mm'],r['Z_mm'],r['Y_mm']))
-    for number,r in enumerate(placed,1):r['Lastenr']=number
+    placed=[dict(Lastenr=number,**r) for number,r in enumerate(placed,1)]
     return pd.DataFrame(placed),pd.DataFrame(missing)
 
 
@@ -81,7 +81,7 @@ def load_figure(placed,length,width,height):
     fig.update_layout(scene=dict(aspectmode='data',xaxis_title='Fra front mot bakdører (mm)',yaxis_title='Bredde (mm)',zaxis_title='Høyde (mm)',
         annotations=[dict(x=x,y=width/2,z=height,text=label,showarrow=False,font=dict(size=14,color='#374151'))
                      for x,label in ((0,'FRONT'),(length,'BAKDØRER'))],
-        camera=dict(eye=dict(x=1.6,y=-2,z=1.7),up=dict(x=0,y=0,z=1))),height=620,margin=dict(l=0,r=0,t=0,b=0))
+        camera=dict(eye=dict(x=1.6,y=-2,z=2.6),up=dict(x=0,y=0,z=1))),height=620,margin=dict(l=0,r=0,t=0,b=0))
     return fig
 
 
@@ -97,7 +97,7 @@ def transport_manifest(cargo, placed):
 def transport_ui(rooms):
     import streamlit as st
     st.header('Transport – lasteforslag')
-    st.caption('Elementer og beslag. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
+    st.caption('Elementer og beslag. To panelpakker i bredden og opptil to i høyden når trailermålene tillater det. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
     if not rooms:st.info('Legg til ferdige rom først.');return
     labels={r['id']:r['input']['navn'] for r in rooms}
     chosen=st.multiselect('Rom som skal transporteres',list(labels),default=list(labels),format_func=labels.get,key='transport_rooms')
