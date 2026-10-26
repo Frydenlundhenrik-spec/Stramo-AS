@@ -7,6 +7,23 @@ rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
 f=packages(rooms);p,m=pack_floor(f,13600,2450,2700)
 assert len(p)+len(m)==len(f)
 assert f[f.Innhold.str.startswith('PIR')].Antall.sum()==75
+for thickness, per_package in ((80,14),(100,11)):
+ panel = f[f.Innhold.str.startswith(f'PIR {thickness} mm')]
+ assert panel.Antall.between(1,per_package).all()
+ assert (panel.Høyde_mm == panel.Antall*thickness+150).all()
+ assert panel.Bredde_mm.eq(1100).all()
+ assert panel[panel.Lengde_mm.eq(2400)].Antall.max()==per_package
+ # User's example: four full packages, two across and two high, use 2400 mm.
+ example=pd.DataFrame([dict(Kolli=f'E{i}',Innhold=f'PIR {thickness} mm',Antall=per_package,
+     Lengde_mm=2400,Bredde_mm=1100,Høyde_mm=per_package*thickness+150) for i in range(4)])
+ loaded,unloaded=pack_floor(example,2400,2450,2700)
+ assert len(loaded)==4 and unloaded.empty
+ assert (loaded.X_mm+loaded.Lastelengde_mm).max()==2400
+ assert set(loaded.Z_mm)=={0,per_package*thickness+150}
+ assert len(pack_floor(example,2400,2450,2700,stack_panels=False)[0])==2
+ # Even a tall trailer must never receive a third package on top.
+ third=pd.concat([example.iloc[:2],example.iloc[:1].assign(Kolli='E4')],ignore_index=True)
+ assert len(pack_floor(third,2400,1100,5000)[0])==2
 fiber=f[f.Innhold.str.startswith('Gulvplate')].iloc[0]
 assert fiber.Antall==7 and '1500 × 3000 mm' in fiber.Innhold
 assert (fiber.Lengde_mm,fiber.Bredde_mm,fiber.Høyde_mm)==(3040,1540,134)

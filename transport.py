@@ -6,17 +6,18 @@ from purchase_summary import grouped_panels
 from cutlist_pdf import project_materials
 
 
-def packages(rooms, stack_mm=1200):
+def packages(rooms):
     rows=[]
     def add(name, qty, l,w,h,kg=None,note='Foreløpig emballasjemål – kontroller'):
         rows.append(dict(Kolli=f'K{len(rows)+1}',Innhold=name,Antall=qty,Lengde_mm=int(l),Bredde_mm=int(w),Høyde_mm=int(h),Vekt_kg=kg,Grunnlag=note))
     for _,p in grouped_panels(rooms).iterrows():
-        per=max(1,int((stack_mm-50)//(p.Tykkelse_mm+5)))
+        per = {80: 14, 100: 11}.get(p.Tykkelse_mm, max(1, int(1120 // p.Tykkelse_mm)))
         remaining=int(p.Bestill_hele_elementer)
         while remaining:
             n=min(per,remaining);remaining-=n
-            add(f'{p.Panel} · {p.Leveringslengde_mm:g} × {p.Bredde_mm:g}',n,p.Leveringslengde_mm+40,p.Bredde_mm+40,50+n*(p.Tykkelse_mm+5),
-                p.Bestill_vekt_kg*n/p.Bestill_hele_elementer,'Panelvekt uten emballasje; foreslått 50 mm underlag, 5 mm mellomlag og 20 mm endebeskyttelse')
+            add(f'{p.Panel} · {p.Leveringslengde_mm:g} × {p.Bredde_mm:g}',n,p.Leveringslengde_mm,p.Bredde_mm,150+n*p.Tykkelse_mm,
+                p.Bestill_vekt_kg*n/p.Bestill_hele_elementer,
+                f'Maks. {per} elementer per pakke; 150 mm underlag/emballasje i høyden. Panelvekt uten emballasje.')
     for _,r in project_materials(rooms).iterrows():
         if r.Gruppe=='Elementer':continue
         if r.Produkt in ('Fugemasse', 'Skum', 'Alarm', 'Pakninger') and pd.isna(r.Stk) and pd.isna(r.Løpemeter):
@@ -44,7 +45,7 @@ def packages(rooms, stack_mm=1200):
 
 
 def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
-    """Try three ordering heuristics; rotate only in plan; panel stacks require full footprint support."""
+    """Longitudinal panel packages, at most two high, with full footprint support."""
     if min(length,width,height)<=0 or clearance<0:raise ValueError('Ugyldige trailermål eller klaring.')
     items=frame.to_dict('records')
     for r in items:
@@ -52,23 +53,26 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
             raise ValueError('Alle kolli må ha positive mål.')
     candidates=[]
     for sort in (lambda r:r['Lengde_mm']*r['Bredde_mm'],lambda r:max(r['Lengde_mm'],r['Bredde_mm']),lambda r:r['Bredde_mm']):
-        free=[(0,0,0,length,width,height,False)];placed=[];missing=[]
+        free=[(0,0,0,length,width,height,0)];placed=[];missing=[]
         for r in sorted(items,key=sort,reverse=True):
             choices=[]
             if r['Høyde_mm']<=height:
-                for i,(x,y,z,l,w,h,panel_only) in enumerate(free):
-                    if r["Høyde_mm"]>h or (panel_only and not str(r.get("Innhold","")).startswith("PIR")):continue
-                    for a,b in ((r['Lengde_mm'],r['Bredde_mm']),(r['Bredde_mm'],r['Lengde_mm'])):
+                for i,(x,y,z,l,w,h,level) in enumerate(free):
+                    is_panel = str(r.get("Innhold","")).startswith("PIR")
+                    if r["Høyde_mm"]>h or (level and not is_panel):continue
+                    orientations = [(r['Lengde_mm'],r['Bredde_mm'])]
+                    if not is_panel: orientations.append((r['Bredde_mm'],r['Lengde_mm']))
+                    for a,b in orientations:
                         if a<=l and b<=w:choices.append((x+a,l*w-a*b,z,y,i,a,b))
             if not choices:missing.append(r);continue
             _,_,_,_,i,a,b=min(choices)
-            x,y,z,l,w,h,panel_only=free.pop(i)
+            x,y,z,l,w,h,level=free.pop(i)
             placed.append(dict(r,X_mm=x,Y_mm=y,Z_mm=z,Lastelengde_mm=a,Lastebredde_mm=b))
             # Disjoint guillotine rectangles with clearance between packages.
-            if l>a+clearance:free.append((x+a+clearance,y,z,l-a-clearance,w,h,panel_only))
-            if w>b+clearance:free.append((x,y+b+clearance,z,a,w-b-clearance,h,panel_only))
-            if stack_panels and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]+clearance:
-                free.append((x,y,z+r["Høyde_mm"]+clearance,a,b,h-r["Høyde_mm"]-clearance,True))
+            if l>a+clearance:free.append((x+a+clearance,y,z,l-a-clearance,w,h,level))
+            if w>b+clearance:free.append((x,y+b+clearance,z,a,w-b-clearance,h,level))
+            if stack_panels and level == 0 and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]:
+                free.append((x,y,z+r["Høyde_mm"],a,b,h-r["Høyde_mm"],1))
         score=(len(missing),max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0))
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
@@ -113,11 +117,10 @@ def transport_ui(rooms):
     width=c[1].number_input('Innvendig bredde (mm)',min_value=500,value=2450,step=50)
     height=c[2].number_input('Innvendig høyde (mm)',min_value=500,value=2700,step=50)
     payload=c[3].number_input('Tillatt nyttelast (kg)',min_value=100,value=24000,step=500)
-    stack=st.number_input('Maks. foreslått panelstabel (mm)',min_value=200,max_value=3000,value=1200,step=100)
     clearance=st.number_input('Klaring mellom kolli (mm)',min_value=0,max_value=500,value=30,step=10)
-    st.caption('Trailermål er startverdier som må kontrolleres. Paneler stables innenfor hvert kolli. Valgfri stabling av panelkolli krever godkjent emballasje og full understøttelse. Øvrige kolli står på gulvet. Tre plasseringer prøves og det beste forslaget velges. Emballasjemål og ukjente vekter kan endres nedenfor.')
-    stack_panels=st.checkbox('Tillat panelkolli oppå panelkolli med full understøttelse',value=True)
-    base=packages(selected,stack)
+    st.caption('80 mm: maks. 14 elementer + 150 mm underlag/emballasje = 1270 mm pakkehøyde. 100 mm: maks. 11 elementer + 150 mm = 1250 mm. Delpakker får høyde etter faktisk antall. Panelpakker lastes i lengderetningen, maksimalt to oppå hverandre. Fire pakker à 2400 mm bruker 2400 mm lastelengde når to får plass i bredden og to i høyden. Klaring gjelder mellom kolli på samme nivå. Emballasjemål og ukjente vekter kan endres nedenfor.')
+    stack_panels=st.checkbox('Tillat to panelpakker i høyden med full understøttelse',value=True)
+    base=packages(selected)
     material = project_materials(selected)
     unknown = material[material.Produkt.isin(['Fugemasse','Skum','Pakninger','Alarm']) & material.Stk.isna() & material.Løpemeter.isna()]
     if not unknown.empty:
@@ -129,11 +132,13 @@ def transport_ui(rooms):
     except ValueError as exc:st.error(str(exc));return
     weight=pd.to_numeric(edited.Vekt_kg,errors='coerce')
     if (weight.dropna()<0).any():st.error('Vekt kan ikke være negativ.');return
-    a,b,c=st.columns(3)
+    a,b,c,d=st.columns(4)
     a.metric('Plasserte kolli',f'{len(placed)} / {len(edited)}')
     area=sum(r['Lastelengde_mm']*r['Lastebredde_mm'] for r in placed.to_dict('records') if r['Z_mm']==0)
     b.metric('Utnyttet gulvareal',f'{100*area/(length*width):.1f} %')
     c.metric('Registrert vekt',f'{weight.sum():,.0f} kg')
+    used_length = max((r['X_mm']+r['Lastelengde_mm'] for r in placed.to_dict('records')), default=0)
+    d.metric('Brukt lastelengde', f'{used_length:.0f} mm')
     if weight.isna().any():st.warning('Total transportvekt er ufullstendig: legg inn vekt for kolli uten vekt. Panelvekten omfatter ikke emballasje.')
     if weight.sum()>payload:st.error('Registrert vekt overstiger tillatt nyttelast.')
     if not missing.empty:
