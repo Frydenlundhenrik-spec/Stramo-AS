@@ -32,9 +32,21 @@ for thickness, per_package in ((80,14),(100,11)):
  assert remainder.empty and front.X_mm.eq(0).all()
  assert set(front.Y_mm)=={0,1130} and len(front[front.Z_mm.gt(0)])==2
  assert len(pack_floor(example,2400,2450,2700,stack_panels=False)[0])==2
- # Even a tall trailer must never receive a third package on top.
+ # Trailer height limits the stack, not a fixed number of packages.
  third=pd.concat([example.iloc[:2],example.iloc[:1].assign(Kolli='E4')],ignore_index=True)
- assert len(pack_floor(third,2400,1100,5000)[0])==2
+ assert len(pack_floor(third,2400,1100,2700)[0])==2
+ assert len(pack_floor(third,2400,1100,5000)[0])==3
+ # Small packages may form three or more layers, each including its own 150 mm strø.
+ partial=example.iloc[:1].copy()
+ partial['Antall']=2
+ partial['Høyde_mm']=2*thickness+150
+ partial=pd.concat([partial.assign(Kolli=f'P{i}') for i in range(10)],ignore_index=True)
+ tall,left=pack_floor(partial,2400,1100,2700)
+ capacity=2700//(2*thickness+150)
+ assert len(tall)==capacity and len(left)==10-capacity
+ assert tall.Z_mm.tolist()==[i*(2*thickness+150) for i in range(capacity)]
+ assert (tall.Z_mm+tall.Høyde_mm).max()<=2700
+ assert len(pack_floor(partial,2400,1100,2700,stack_panels=False)[0])==1
 # Only elements and trims are cargo, even when accessories have quantities.
 materials=project_materials(rooms)
 trims=materials[materials.Gruppe.eq('Beslag')]
@@ -57,7 +69,7 @@ assert len(p)==len(f) and m.empty
 front_panels=p[p.Innhold.str.startswith('PIR') & p.X_mm.eq(0) & p.Z_mm.eq(0)]
 assert len(front_panels)==2 and set(front_panels.Y_mm)=={0,1130}
 for upper in p[p.Z_mm.gt(0)].to_dict('records'):
- assert any(base['Z_mm']==0 and base['Høyde_mm']==upper['Z_mm']
+ assert any(base['Z_mm']+base['Høyde_mm']==upper['Z_mm']
      and base['X_mm']<=upper['X_mm'] and base['Y_mm']<=upper['Y_mm']
      and base['X_mm']+base['Lastelengde_mm']>=upper['X_mm']+upper['Lastelengde_mm']
      and base['Y_mm']+base['Lastebredde_mm']>=upper['Y_mm']+upper['Lastebredde_mm']

@@ -17,7 +17,7 @@ def packages(rooms):
             n=min(per,remaining);remaining-=n
             add(f'{p.Panel} · {p.Leveringslengde_mm:g} × {p.Bredde_mm:g}',n,p.Leveringslengde_mm,p.Bredde_mm,150+n*p.Tykkelse_mm,
                 p.Bestill_vekt_kg*n/p.Bestill_hele_elementer,
-                f'Maks. {per} elementer per pakke; 150 mm underlag/emballasje i høyden. Panelvekt uten emballasje.')
+                f'Maks. {per} elementer per pakke; 150 mm strø per pakke i høyden. Panelvekt uten strø.')
     for _,r in project_materials(rooms).iterrows():
         if r.Gruppe!='Beslag':continue
         n=int(r.Stk)
@@ -28,7 +28,7 @@ def packages(rooms):
 
 
 def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
-    """Fill across at the front before stacking, at most two high on full support."""
+    """Fill across at the front, then stack supported packages up to trailer height."""
     if min(length,width,height)<=0 or clearance<0:raise ValueError('Ugyldige trailermål eller klaring.')
     items=frame.to_dict('records')
     for r in items:
@@ -54,9 +54,10 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
             # Disjoint guillotine rectangles with clearance between packages.
             if l>a+clearance:free.append((x+a+clearance,y,z,l-a-clearance,w,h,level))
             if w>b+clearance:free.append((x,y+b+clearance,z,a,w-b-clearance,h,level))
-            if stack_panels and level == 0 and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]:
-                free.append((x,y,z+r["Høyde_mm"],a,b,h-r["Høyde_mm"],1))
-        score=(len(missing),max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0))
+            if stack_panels and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]:
+                free.append((x,y,z+r["Høyde_mm"],a,b,h-r["Høyde_mm"],level+1))
+        score=(len(missing),max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0),
+               sum(r['Lastelengde_mm']*r['Lastebredde_mm'] for r in placed if r['Z_mm']==0))
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
     placed.sort(key=lambda r:(r['X_mm'],r['Z_mm'],r['Y_mm']))
@@ -97,7 +98,7 @@ def transport_manifest(cargo, placed):
 def transport_ui(rooms):
     import streamlit as st
     st.header('Transport – lasteforslag')
-    st.caption('Elementer og beslag. To panelpakker i bredden og opptil to i høyden når trailermålene tillater det. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
+    st.caption('Elementer og beslag. To panelpakker i bredden når trailermålene tillater det. Utnytt høyden opp mot trailertaket før neste rad bakover. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
     if not rooms:st.info('Legg til ferdige rom først.');return
     labels={r['id']:r['input']['navn'] for r in rooms}
     chosen=st.multiselect('Rom som skal transporteres',list(labels),default=list(labels),format_func=labels.get,key='transport_rooms')
@@ -109,8 +110,8 @@ def transport_ui(rooms):
     height=c[2].number_input('Innvendig høyde (mm)',min_value=500,value=2700,step=50)
     payload=c[3].number_input('Tillatt nyttelast (kg)',min_value=100,value=24000,step=500)
     clearance=st.number_input('Klaring mellom kolli (mm)',min_value=0,max_value=500,value=30,step=10)
-    st.caption('80 mm: maks. 14 elementer + 150 mm underlag/emballasje = 1270 mm pakkehøyde. 100 mm: maks. 11 elementer + 150 mm = 1250 mm. Delpakker får høyde etter faktisk antall. Panelpakker lastes i lengderetningen, maksimalt to oppå hverandre. Fire pakker à 2400 mm bruker 2400 mm lastelengde når to får plass i bredden og to i høyden. Klaring gjelder mellom kolli på samme nivå. Emballasjemål og ukjente vekter kan endres nedenfor.')
-    stack_panels=st.checkbox('Tillat to panelpakker i høyden med full understøttelse',value=True)
+    st.caption('Maksimum per pakke: 80 mm = 14 elementer + 150 mm strø (1270 mm). 100 mm = 11 elementer + 150 mm strø (1250 mm). Delpakker får faktisk elementhøyde + 150 mm strø. Antall pakker oppå hverandre styres av trailerhøyden og full understøttelse. I 2700 mm høyde får to fulle pakker plass; lavere delpakker kan gi flere lag. Panelpakker lastes i lengderetningen. Klaring gjelder mellom kolli på samme nivå. Emballasjemål og ukjente vekter kan endres nedenfor.')
+    stack_panels=st.checkbox('Stable panelpakker opp mot trailertaket med full understøttelse',value=True)
     base=packages(selected)
     import hashlib
     revision=hashlib.sha256(base.to_json().encode()).hexdigest()[:12]
