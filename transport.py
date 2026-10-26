@@ -1,4 +1,4 @@
-"""Editable transport packages and deterministic floor loading proposals."""
+"""Element and trim packages, loaded from the front of the trailer backwards."""
 import math
 import pandas as pd
 import plotly.graph_objects as go
@@ -19,28 +19,11 @@ def packages(rooms):
                 p.Bestill_vekt_kg*n/p.Bestill_hele_elementer,
                 f'Maks. {per} elementer per pakke; 150 mm underlag/emballasje i høyden. Panelvekt uten emballasje.')
     for _,r in project_materials(rooms).iterrows():
-        if r.Gruppe=='Elementer':continue
-        if r.Produkt in ('Fugemasse', 'Skum', 'Alarm', 'Pakninger') and pd.isna(r.Stk) and pd.isna(r.Løpemeter):
-            continue
-        n=int(r.Stk) if pd.notna(r.Stk) else 1
-        if 'dør' in r.Produkt.lower():
-            import re
-            match=re.search(r'(\d+)×(\d+)',r.Produkt)
-            width,height=map(int,match.groups()) if match else (1000,2100)
-            add(r.Produkt,n,height+100,width+100,200*n,note='Foreslått dørkolli: 200 mm per dør; bekreft emballasje og tillatt stabling')
-        elif any(word in r.Produkt.lower() for word in ('finer', 'fiberplate', 'gulvplate')):
-            import re
-            w,l=map(int,re.search(r'(\d+) × (\d+)',r.Produkt).groups())
-            add(r.Produkt,n,l+40,w+40,50+12*n)
-        elif r.Produkt=='22 mm hvite skruer':add(r.Produkt,n,400,300,200)
-        elif r.Produkt=='Pakninger':add(f'Pakninger · {r.Løpemeter:g} m',1,400,300,200,note='Pakningslengde samlet i ett foreslått kolli; kontroller emballasje')
-        elif 'U-kanal' in r.Produkt or '2500 mm' in r.Produkt:
-            size=150 if '150' in r.Produkt else 100
-            side=math.ceil(math.sqrt(n))*size
-            add(r.Produkt,n,2540,side,side+50)
-        elif 'Terskel' in r.Produkt:add(r.Produkt,n,1200,300,200)
-        elif 'Trykkventil' in r.Produkt:add(r.Produkt,n,400,400,400)
-        else:add(r.Produkt,n,1200,800,400)
+        if r.Gruppe!='Beslag':continue
+        n=int(r.Stk)
+        size=150 if '150' in r.Produkt else 100
+        side=math.ceil(math.sqrt(n))*size
+        add(r.Produkt,n,2540,side,side+50)
     return pd.DataFrame(rows)
 
 
@@ -63,7 +46,7 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
                     orientations = [(r['Lengde_mm'],r['Bredde_mm'])]
                     if not is_panel: orientations.append((r['Bredde_mm'],r['Lengde_mm']))
                     for a,b in orientations:
-                        if a<=l and b<=w:choices.append((x+a,l*w-a*b,z,y,i,a,b))
+                        if a<=l and b<=w:choices.append((x,l*w-a*b,z,y,i,a,b))
             if not choices:missing.append(r);continue
             _,_,_,_,i,a,b=min(choices)
             x,y,z,l,w,h,level=free.pop(i)
@@ -76,6 +59,8 @@ def pack_floor(frame, length, width, height, clearance=30, stack_panels=True):
         score=(len(missing),max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0))
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
+    placed.sort(key=lambda r:(r['X_mm'],r['Z_mm'],r['Y_mm']))
+    for number,r in enumerate(placed,1):r['Lastenr']=number
     return pd.DataFrame(placed),pd.DataFrame(missing)
 
 
@@ -93,7 +78,10 @@ def load_figure(placed,length,width,height):
         fig.add_trace(go.Mesh3d(x=[p[0] for p in v],y=[p[1] for p in v],z=[p[2] for p in v],
             i=[0,0,4,4,0,0,1,1,2,2,3,3],j=[1,2,5,6,1,5,2,6,3,7,0,4],k=[2,3,6,7,5,4,6,5,7,6,4,7],
             color=palette[k%len(palette)],opacity=.85,name=r['Kolli'],text=f"{r['Kolli']}: {r['Innhold']} ({r['Antall']} stk)",hoverinfo='text',showlegend=False))
-    fig.update_layout(scene=dict(aspectmode='data',xaxis_title='Lengde (mm)',yaxis_title='Bredde (mm)',zaxis_title='Høyde (mm)',camera=dict(eye=dict(x=1.6,y=-2,z=1.7),up=dict(x=0,y=0,z=1))),height=620,margin=dict(l=0,r=0,t=0,b=0))
+    fig.update_layout(scene=dict(aspectmode='data',xaxis_title='Fra front mot bakdører (mm)',yaxis_title='Bredde (mm)',zaxis_title='Høyde (mm)',
+        annotations=[dict(x=x,y=width/2,z=height,text=label,showarrow=False,font=dict(size=14,color='#374151'))
+                     for x,label in ((0,'FRONT'),(length,'BAKDØRER'))],
+        camera=dict(eye=dict(x=1.6,y=-2,z=1.7),up=dict(x=0,y=0,z=1))),height=620,margin=dict(l=0,r=0,t=0,b=0))
     return fig
 
 
@@ -101,12 +89,15 @@ def transport_manifest(cargo, placed):
     """Include every package, including packages that do not fit the proposal."""
     manifest = cargo.copy()
     manifest['Status'] = manifest.Kolli.isin(placed.get('Kolli', [])).map({True:'Plassert',False:'Ikke plassert'})
-    return manifest.merge(placed.reindex(columns=['Kolli','X_mm','Y_mm','Z_mm','Lastelengde_mm','Lastebredde_mm']),on='Kolli',how='left')
+    manifest=manifest.merge(placed.reindex(columns=['Kolli','Lastenr','X_mm','Y_mm','Z_mm','Lastelengde_mm','Lastebredde_mm']),on='Kolli',how='left')
+    manifest['Lastenr']=manifest.Lastenr.astype('Int64')
+    return manifest.sort_values('Lastenr',na_position='last').reset_index(drop=True)
 
 
 def transport_ui(rooms):
     import streamlit as st
     st.header('Transport – lasteforslag')
+    st.caption('Elementer og beslag. Last fra fronten av traileren (0 mm) og bakover mot bakdørene, i nummerert lasterekkefølge.')
     if not rooms:st.info('Legg til ferdige rom først.');return
     labels={r['id']:r['input']['navn'] for r in rooms}
     chosen=st.multiselect('Rom som skal transporteres',list(labels),default=list(labels),format_func=labels.get,key='transport_rooms')
@@ -121,10 +112,6 @@ def transport_ui(rooms):
     st.caption('80 mm: maks. 14 elementer + 150 mm underlag/emballasje = 1270 mm pakkehøyde. 100 mm: maks. 11 elementer + 150 mm = 1250 mm. Delpakker får høyde etter faktisk antall. Panelpakker lastes i lengderetningen, maksimalt to oppå hverandre. Fire pakker à 2400 mm bruker 2400 mm lastelengde når to får plass i bredden og to i høyden. Klaring gjelder mellom kolli på samme nivå. Emballasjemål og ukjente vekter kan endres nedenfor.')
     stack_panels=st.checkbox('Tillat to panelpakker i høyden med full understøttelse',value=True)
     base=packages(selected)
-    material = project_materials(selected)
-    unknown = material[material.Produkt.isin(['Fugemasse','Skum','Pakninger','Alarm']) & material.Stk.isna() & material.Løpemeter.isna()]
-    if not unknown.empty:
-        st.info('Tilbehør uten oppgitt mengde er ikke pakket i lasteforslaget: ' + ', '.join(unknown.Produkt) + '.')
     import hashlib
     revision=hashlib.sha256(base.to_json().encode()).hexdigest()[:12]
     edited=st.data_editor(base,hide_index=True,disabled=['Kolli','Innhold','Antall','Grunnlag'],key='cargo_'+revision)

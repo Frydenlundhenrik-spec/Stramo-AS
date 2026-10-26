@@ -54,10 +54,7 @@ for _, order in grouped.iterrows():
     assert (loads.Lengde_mm==order.Leveringslengde_mm).all()
     assert (loads.Bredde_mm==order.Bredde_mm).all()
     assert (loads.Høyde_mm==loads.Antall*order.Tykkelse_mm+150).all()
-fiber=freight[freight.Innhold.str.contains('Gulvplate')]
-assert len(fiber)==1 and fiber.iloc[0].Antall==7
-assert '1500 × 3000 mm' in fiber.iloc[0].Innhold
-assert (fiber.iloc[0].Lengde_mm,fiber.iloc[0].Bredde_mm,fiber.iloc[0].Høyde_mm)==(3040,1540,134)
+assert not freight.Innhold.str.contains('Gulvplate').any()
 
 # A wall opening changes cut sub-pieces, never the number of purchased full blanks.
 inp = world_input(rooms[1])
