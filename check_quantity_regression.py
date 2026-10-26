@@ -50,8 +50,10 @@ for _, order in grouped.iterrows():
     loads=freight[freight.Innhold.eq(name)]
     assert loads.Antall.sum()==order.Bestill_hele_elementer
     assert np.isclose(loads.Vekt_kg.sum(),order.Bestill_vekt_kg)
-    assert (loads.Lengde_mm==order.Leveringslengde_mm+40).all()
-    assert (loads.Bredde_mm==order.Bredde_mm+40).all()
+    # Approved packing: panel footprint stays at element size; 150 mm is added in height.
+    assert (loads.Lengde_mm==order.Leveringslengde_mm).all()
+    assert (loads.Bredde_mm==order.Bredde_mm).all()
+    assert (loads.Høyde_mm==loads.Antall*order.Tykkelse_mm+150).all()
 fiber=freight[freight.Innhold.str.contains('Gulvplate')]
 assert len(fiber)==1 and fiber.iloc[0].Antall==7
 assert '1500 × 3000 mm' in fiber.iloc[0].Innhold
