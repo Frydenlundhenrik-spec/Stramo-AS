@@ -2,6 +2,8 @@
 import math
 import pandas as pd
 import plotly.graph_objects as go
+from shapely.geometry import box
+from shapely.ops import unary_union
 from purchase_summary import grouped_panels
 from cutlist_pdf import project_materials
 
@@ -27,15 +29,65 @@ def packages(rooms):
     return pd.DataFrame(rows)
 
 
+def _front_contact(row, connected):
+    """Envelope contact only: no strength, friction or dunnage capacity is inferred."""
+    if row['X_mm']==0:return 100.0, 'Frontvegg'
+    y,z=row['Y_mm'],row['Z_mm']
+    face=box(y,z,y+row['Lastebredde_mm'],z+row['Høyde_mm'])
+    contacts=[];names=[]
+    for other in connected:
+        if abs(other['X_mm']+other['Lastelengde_mm']-row['X_mm'])>1e-6:continue
+        oy,oz=other['Y_mm'],other['Z_mm']
+        contact=face.intersection(box(oy,oz,oy+other['Lastebredde_mm'],oz+other['Høyde_mm']))
+        if contact.area>0:contacts.append(contact);names.append(str(other['Kolli']))
+    covered=unary_union(contacts).area if contacts else 0
+    return min(100.0,100*covered/face.area), ', '.join(names) or 'Ingen'
+
+
+def forward_support(placed):
+    """Trace full front-face contact back to the bulkhead, including upper layers."""
+    result=placed.copy();connected=[];checks={}
+    for row in sorted(placed.to_dict('records'),key=lambda r:r['X_mm']):
+        percent,names=_front_contact(row,connected)
+        complete=percent>=100-1e-7
+        checks[row['Kolli']]=(percent,names,complete)
+        if complete:connected.append(row)
+    for i,column in enumerate(('Frontkontakt_pct','Anlegg_mot','Sammenheng_til_front')):
+        result[column]=[checks[r['Kolli']][i] for r in placed.to_dict('records')]
+    return result
+
+
+def _join_floor_spaces(free):
+    """Join adjacent floor space so a package may cross a previous row boundary."""
+    while True:
+        pair=None
+        for i,a in enumerate(free):
+            for j,b in enumerate(free):
+                if i==j or a[2]!=0 or b[2]!=0 or a[5:]!=b[5:]:continue
+                lo,hi=max(a[1],b[1]),min(a[1]+a[4],b[1]+b[4])
+                if a[0]+a[3]==b[0] and hi>lo:
+                    pair=(i,j,a,b,lo,hi);break
+            if pair:break
+        if not pair:return free
+        i,j,a,b,lo,hi=pair
+        free=[r for k,r in enumerate(free) if k not in (i,j)]
+        free.append((a[0],lo,0,a[3]+b[3],hi-lo,a[5],a[6]))
+        for x,y,z,l,w,h,level in (a,b):
+            if lo>y:free.append((x,y,z,l,lo-y,h,level))
+            if hi<y+w:free.append((x,hi,z,l,y+w-hi,h,level))
+
+
 def pack_floor(frame, length, width, height, clearance=0, stack_panels=True):
-    """Pack against the front and adjacent packages; stack within trailer height."""
+    """Require contact all the way to the front; stack within trailer height."""
     if min(length,width,height)<=0 or clearance<0:raise ValueError('Ugyldige trailermål eller klaring.')
     items=frame.to_dict('records')
     for r in items:
         if any(pd.isna(r[c]) or r[c]<=0 for c in ('Lengde_mm','Bredde_mm','Høyde_mm')):
             raise ValueError('Alle kolli må ha positive mål.')
     candidates=[]
-    for sort in (lambda r:r['Lengde_mm']*r['Bredde_mm'],lambda r:max(r['Lengde_mm'],r['Bredde_mm']),lambda r:r['Bredde_mm']):
+    # ponytail: six greedy layouts, not a global packing optimum; leave unsupported cargo unplaced.
+    for sort,fit_first in ((sort,fit) for sort in (
+            lambda r:r['Lengde_mm']*r['Bredde_mm'],lambda r:max(r['Lengde_mm'],r['Bredde_mm']),lambda r:r['Bredde_mm']) for fit in (False,True)):
         free=[(0,0,0,length,width,height,0)];placed=[];missing=[]
         for r in sorted(items,key=lambda r:(str(r.get('Innhold','')).startswith('PIR'),sort(r)),reverse=True):
             choices=[]
@@ -46,7 +98,11 @@ def pack_floor(frame, length, width, height, clearance=0, stack_panels=True):
                     orientations = [(r['Lengde_mm'],r['Bredde_mm'])]
                     if not is_panel: orientations.append((r['Bredde_mm'],r['Lengde_mm']))
                     for a,b in orientations:
-                        if a<=l and b<=w:choices.append((x,z,l*w-a*b,y,i,a,b))
+                        if a<=l and b<=w:
+                            candidate=dict(r,X_mm=x,Y_mm=y,Z_mm=z,Lastelengde_mm=a,Lastebredde_mm=b)
+                            if _front_contact(candidate,placed)[0]<100-1e-7:continue
+                            rank=(l*w-a*b,x,z,y) if fit_first else (x,z,l*w-a*b,y)
+                            choices.append((*rank,i,a,b))
             if not choices:missing.append(r);continue
             _,_,_,_,i,a,b=min(choices)
             x,y,z,l,w,h,level=free.pop(i)
@@ -56,17 +112,20 @@ def pack_floor(frame, length, width, height, clearance=0, stack_panels=True):
             if w>b+clearance:free.append((x,y+b+clearance,z,a,w-b-clearance,h,level))
             if stack_panels and str(r.get("Innhold","")).startswith("PIR") and h>r["Høyde_mm"]:
                 free.append((x,y,z+r["Høyde_mm"],a,b,h-r["Høyde_mm"],level+1))
+            free=_join_floor_spaces(free)
         front_area=sum(r['Lastebredde_mm']*r['Høyde_mm'] for r in placed if r['X_mm']==0)
-        score=(len(missing),-front_area,max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0),
+        front_width=sum(r['Lastebredde_mm'] for r in placed if r['X_mm']==0 and r['Z_mm']==0)
+        score=(len(missing),-front_area,-front_width,max((r['X_mm']+r['Lastelengde_mm'] for r in placed),default=0),
                sum(r['Lastelengde_mm']*r['Lastebredde_mm'] for r in placed if r['Z_mm']==0))
         candidates.append((score,placed,missing))
     _,placed,missing=min(candidates,key=lambda c:c[0])
     placed.sort(key=lambda r:(r['X_mm'],r['Z_mm'],r['Y_mm']))
     placed=[dict(Lastenr=number,**r) for number,r in enumerate(placed,1)]
-    return pd.DataFrame(placed),pd.DataFrame(missing)
+    return forward_support(pd.DataFrame(placed)),pd.DataFrame(missing)
 
 
 def load_figure(placed,length,width,height):
+    placed=forward_support(placed)
     fig=go.Figure()
     edges=[(0,1),(1,2),(2,3),(3,0),(4,5),(5,6),(6,7),(7,4),(0,4),(1,5),(2,6),(3,7)]
     def vertices(x,y,z,l,w,h):
@@ -79,11 +138,15 @@ def load_figure(placed,length,width,height):
         v=vertices(r['X_mm'],r['Y_mm'],r['Z_mm'],r['Lastelengde_mm'],r['Lastebredde_mm'],r['Høyde_mm'])
         fig.add_trace(go.Mesh3d(x=[p[0] for p in v],y=[p[1] for p in v],z=[p[2] for p in v],
             i=[0,0,4,4,0,0,1,1,2,2,3,3],j=[1,2,5,6,1,5,2,6,3,7,0,4],k=[2,3,6,7,5,4,6,5,7,6,4,7],
-            color=palette[k%len(palette)],opacity=.85,name=r['Kolli'],text=f"{r['Kolli']}: {r['Innhold']} ({r['Antall']} stk)",hoverinfo='text',showlegend=False))
+            color=palette[k%len(palette)] if r['Sammenheng_til_front'] else '#b42318',opacity=.85,name=r['Kolli'],
+            text=f"{r['Kolli']}: {r['Innhold']} ({r['Antall']} stk)<br>Anlegg mot: {r['Anlegg_mot']}<br>Frontkontakt i modellen: {r['Frontkontakt_pct']:.1f} %<br>"+
+                 ('Sammenheng til frontveggen' if r['Sammenheng_til_front'] else 'Mangler sammenheng til frontveggen'),hoverinfo='text',showlegend=False))
+    fig.add_annotation(x=0,y=-.06,xref='paper',yref='paper',xanchor='left',showarrow=False,
+        text='Geometrisk kontakt mellom kollienes ytre mål. Strø og emballasje er ikke heldekkende støtteflater.<br>Frontveggens styrke, stabling, utfylling, surring og aksellast må kontrolleres før lasting.',font=dict(size=12,color='#374151'))
     fig.update_layout(scene=dict(aspectmode='data',xaxis_title='Fra front mot bakdører (mm)',yaxis_title='Bredde (mm)',zaxis_title='Høyde (mm)',
         annotations=[dict(x=x,y=width/2,z=height,text=label,showarrow=False,font=dict(size=14,color='#374151'))
                      for x,label in ((0,'FRONT'),(length,'BAKDØRER'))],
-        camera=dict(eye=dict(x=1.6,y=-2,z=2.6),up=dict(x=0,y=0,z=1))),height=620,margin=dict(l=0,r=0,t=0,b=0))
+        camera=dict(eye=dict(x=1.6,y=-2,z=2.6),up=dict(x=0,y=0,z=1))),height=680,margin=dict(l=0,r=0,t=0,b=70))
     return fig
 
 
@@ -91,7 +154,8 @@ def transport_manifest(cargo, placed):
     """Include every package, including packages that do not fit the proposal."""
     manifest = cargo.copy()
     manifest['Status'] = manifest.Kolli.isin(placed.get('Kolli', [])).map({True:'Plassert',False:'Ikke plassert'})
-    manifest=manifest.merge(placed.reindex(columns=['Kolli','Lastenr','X_mm','Y_mm','Z_mm','Lastelengde_mm','Lastebredde_mm']),on='Kolli',how='left')
+    manifest=manifest.merge(forward_support(placed).reindex(columns=['Kolli','Lastenr','X_mm','Y_mm','Z_mm','Lastelengde_mm','Lastebredde_mm',
+        'Frontkontakt_pct','Anlegg_mot','Sammenheng_til_front']),on='Kolli',how='left')
     manifest['Lastenr']=manifest.Lastenr.astype('Int64')
     return manifest.sort_values('Lastenr',na_position='last').reset_index(drop=True)
 
@@ -135,8 +199,10 @@ def transport_ui(rooms):
     if weight.isna().any():st.warning('Total transportvekt er ufullstendig: legg inn vekt for kolli uten vekt. Panelvekten omfatter ikke emballasje.')
     if weight.sum()>payload:st.error('Registrert vekt overstiger tillatt nyttelast.')
     if not missing.empty:
-        st.warning('Disse kolliene fikk ikke plass i forslaget. Juster pakking/stabling eller bruk en ekstra trailer.')
+        st.warning('Disse kolliene er ikke plassert: forslaget fant ingen plass innenfor trailermålene med full understøttelse og sammenhengende frontkontakt. Endre pakkingen eller planlegg annen transport og lastsikring.')
         st.dataframe(missing,hide_index=True)
+    if not placed.empty:
+        st.info(f'Kontakt mot frontveggen: {int(placed.Sammenheng_til_front.sum())} av {len(placed)} plasserte kolli har sammenhengende kontakt i modellen. Hver pakke ligger mot frontveggen eller pakker foran over hele sin modellerte bredde og høyde, også i øvre lag.')
     fig=load_figure(placed,length,width,height);st.plotly_chart(fig,use_container_width=True)
     st.caption('Geometrisk lasteforslag. Kontakt mellom pakker er ikke dokumentasjon på tilstrekkelig lastsikring. Frontveggens styrke, vektfordeling/aksellast, tillatt stabling, utfylling og surring må kontrolleres før lasting.')
     st.dataframe(placed,hide_index=True)

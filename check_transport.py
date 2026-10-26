@@ -1,7 +1,7 @@
 from pathlib import Path
 from copy import deepcopy
 from project_file import decode_project
-from transport import packages,pack_floor,load_figure
+from transport import packages,pack_floor,load_figure,forward_support
 from cutlist_pdf import project_materials
 import pandas as pd
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
@@ -71,6 +71,7 @@ pd.testing.assert_frame_equal(entered,f)
 assert p.X_mm.is_monotonic_increasing
 assert p.Lastenr.tolist()==list(range(1,len(p)+1))
 assert len(p)==len(f) and m.empty
+assert p.Sammenheng_til_front.all() and p.Frontkontakt_pct.eq(100).all()
 front_panels=p[p.Innhold.str.startswith('PIR') & p.X_mm.eq(0) & p.Z_mm.eq(0)]
 assert len(front_panels)==2 and set(front_panels.Y_mm)=={0,1100}
 for upper in p[p.Z_mm.gt(0)].to_dict('records'):
@@ -102,3 +103,55 @@ assert len(transport_manifest(f,p.iloc[:0]))==len(f)
 small,missing=pack_floor(f,1000,500,500)
 unloaded=transport_manifest(f,small)
 assert unloaded.Status.eq('Ikke plassert').all() and unloaded.Lastenr.isna().all()
+assert unloaded.Sammenheng_til_front.isna().all()
+assert manifest.Sammenheng_til_front.all() and manifest.Anlegg_mot.notna().all()
+
+# Independent front-face cases: contact is checked in both Y and Z, not merely X.
+def item(k,x,y=0,z=0,w=1000,h=1000):
+ return dict(Kolli=k,X_mm=x,Y_mm=y,Z_mm=z,Lastelengde_mm=1000,Lastebredde_mm=w,Høyde_mm=h)
+def audit(*rows):return forward_support(pd.DataFrame(rows)).set_index('Kolli')
+chain=audit(item('C',2000),item('B',1000),item('A',0))
+assert chain.Sammenheng_til_front.all() and chain.loc['C','Anlegg_mot']=='B'
+gap=audit(item('A',1),item('B',1001))
+assert not gap.Sammenheng_til_front.any()  # Touching an unblocked package is not a chain to front.
+rear_gap=audit(item('A',0),item('B',1001))
+assert not rear_gap.loc['B','Sammenheng_til_front']
+low=audit(item('A',0,h=800),item('B',1000))
+assert low.loc['B','Frontkontakt_pct']==80 and not low.loc['B','Sammenheng_til_front']
+offset=audit(item('A',0),item('B',1000,y=500))
+assert offset.loc['B','Frontkontakt_pct']==50
+upper=audit(item('A',0),item('B',1000,z=1000))
+assert upper.loc['B','Frontkontakt_pct']==0
+# Adjacent front packages can jointly cover a face, without counting edges as support.
+joint=audit(item('A',0,w=500),item('B',0,y=500,w=500),item('C',1000))
+assert joint.loc['C','Sammenheng_til_front']
+stacked=audit(item('A',0,h=500),item('B',0,z=500,h=500),item('C',1000))
+assert stacked.loc['C','Sammenheng_til_front']
+edge=audit(item('A',0),item('B',1000,y=1000))
+assert edge.loc['B','Frontkontakt_pct']==0
+# Do not silently place a rear package without contact, even when physical space remains.
+two=pd.DataFrame([dict(Kolli=k,Innhold='PIR 80 mm',Lengde_mm=2400,Bredde_mm=1100,Høyde_mm=1270) for k in ('A','B')])
+loaded,left=pack_floor(two,5000,1100,1270,clearance=10)
+assert len(loaded)==1 and len(left)==1
+# Different lengths, widths and heights exercise floor-space joins and stacked packing.
+import random
+rng=random.Random(26)
+for _ in range(30):
+ cargo=pd.DataFrame([dict(Kolli=f'R{i}',Innhold='PIR 80 mm' if i<7 else 'Beslag',
+     Lengde_mm=rng.choice((1200,2400,3910,6000)),Bredde_mm=rng.choice((400,700,1100)),
+     Høyde_mm=rng.choice((310,450,710,1250,1270))) for i in range(10)])
+ loaded,left=pack_floor(cargo,13600,2450,2700)
+ assert len(loaded)+len(left)==10 and loaded.Sammenheng_til_front.all()
+ boxes=loaded.to_dict('records')
+ for i,a in enumerate(boxes):
+  assert 0<=a['X_mm']<a['X_mm']+a['Lastelengde_mm']<=13600
+  assert 0<=a['Y_mm']<a['Y_mm']+a['Lastebredde_mm']<=2450
+  assert 0<=a['Z_mm']<a['Z_mm']+a['Høyde_mm']<=2700
+  if a['Z_mm']:
+   assert any(b['Z_mm']+b['Høyde_mm']==a['Z_mm'] and b['X_mm']<=a['X_mm'] and b['Y_mm']<=a['Y_mm']
+       and b['X_mm']+b['Lastelengde_mm']>=a['X_mm']+a['Lastelengde_mm']
+       and b['Y_mm']+b['Lastebredde_mm']>=a['Y_mm']+a['Lastebredde_mm'] for b in boxes)
+  for b in boxes[i+1:]:
+   assert any(a[pos]+a[size]<=b[pos] or b[pos]+b[size]<=a[pos]
+       for pos,size in (('X_mm','Lastelengde_mm'),('Y_mm','Lastebredde_mm'),('Z_mm','Høyde_mm')))
+print('PASS: full front-face contact, upper layers, lateral offsets, gaps and complete chain to bulkhead')

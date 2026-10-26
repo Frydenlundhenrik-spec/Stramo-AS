@@ -17,5 +17,12 @@ assert not any('Klaring mellom kolli' in n.label for n in a.number_input)
 assert any('inntil hverandre' in c.value for c in a.caption)
 assert any('250 mm' in notice.value and 'frontveggen' in notice.value for notice in a.info)
 assert next(m.value for m in a.metric if m.label=='Plasserte kolli')=='12 / 12'
+assert any('12 av 12' in notice.value and 'Kontakt mot frontveggen' in notice.value for notice in a.info)
+# Tight trailer: packages without a supported location must remain visibly unplaced.
+for control in a.number_input:
+ if control.label=='Innvendig lengde (mm)':control.set_value(2400)
+a.run()
+assert not a.exception
+assert any('ikke plassert' in w.value and 'frontkontakt' in w.value for w in a.warning)
 faulthandler.cancel_dump_traceback_later()
 print('PASS: Transport module with all project rooms, 3D and downloads')
