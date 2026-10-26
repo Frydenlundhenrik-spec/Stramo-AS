@@ -405,7 +405,7 @@ def assembly_ui():
             st.rerun()
     fig = assembly_plan(rooms)
     st.pyplot(fig)
-    pdf = figur_som_pdf(fig)
+    pdf = figur_som_pdf(fig, "Plantegning")
     plt.close(fig)
     st.download_button("Last ned sammenstilling PDF",pdf,"sammenstilling.pdf","application/pdf")
     show_roof = st.checkbox("Vis gjennomsiktig tak i samlet 3D",value=True,key="assembly_roof_transparent")
