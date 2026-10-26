@@ -144,7 +144,8 @@ with st.sidebar:
     pnr         = st.text_input("Prosjektnr", st.session_state.get("pnr", "1001"), key="ed_pnr")
     tnr         = st.text_input("Tegningsnr", st.session_state.get("tnr", "A101"), key="ed_tnr")
     dato        = st.text_input("Dato", st.session_state.get("dato", datetime.today().strftime("%d.%m.%Y")), key="ed_date")
-    maalestokk  = st.text_input("Målestokk", st.session_state.get("maalestokk", "1:10"), key="ed_scale")
+    maalestokk = "Ikke målfast"
+    st.caption("Målestokk: Ikke målfast – bruk påførte mål.")
 
     st.caption("Lagre arbeidet med «Last ned prosjektfil» nederst i sidepanelet.")
 
@@ -515,7 +516,7 @@ if bakfil is None and current_room.get("background"):
 # ── Hoved-header ──────────────────────────────────────────────────────────────
 st.title(f"❄️ {navn.strip() or 'Kjølerom'}")
 st.caption(
-    f"{rom_type} · Panel: {result['panel']['label']} · Elementbredde: {pw_mm} mm · Versjon 2026.10.26-r08"
+    f"{rom_type} · Panel: {result['panel']['label']} · Elementbredde: {pw_mm} mm · Versjon 2026.10.26-r09"
 )
 st.divider()
 

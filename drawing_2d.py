@@ -27,6 +27,9 @@ HATCH_COL = "#555"
 RED       = "#000000"
 GREEN     = "#000000"
 ORANGE    = "#555555"
+# Figures fit their available canvas and may be resized in the app/PDF export.
+# A user-entered ratio cannot describe their physical print scale reliably.
+DRAWING_SCALE = "Ikke målfast"
 
 
 # ── Hjelpefunksjoner ──────────────────────────────────────────────────────────
@@ -222,7 +225,7 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
         ("Prosjektnr", info["pnr"],          0.62, False,  8),
         ("Tegningsnr", info["tnr"],          0.52, False,  8),
         ("Dato",       info["dato"],         0.42, False,  8),
-        ("Målestokk",  info["maal"],         0.32, False,  8),
+        ("Målestokk",  DRAWING_SCALE,       0.32, False,  8),
         ("Areal",      f"{info['A']:.2f} m²",0.22, False,  8),
         ("Omkrets",    f"{info['P']:.2f} m", 0.12, False,  8),
     ]
@@ -426,7 +429,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
         return fig
     _tegn_fig_title_block(fig, info)
     ax.text((xmn+xmx)/2, ymn - 2.05,
-            f"PLANTEGNING  –  {info['maal']}  ·  Utvendige mål",
+            f"PLANTEGNING  –  {DRAWING_SCALE}  ·  Utvendige mål",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
 
     ax.set_xlim(xmn - 2.0, xmx + 2.1)
@@ -565,9 +568,9 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
                 fontsize=8, color=BLUE, va="top", zorder=14,
                 bbox=dict(fc="white", ec=BLUE, pad=5, linewidth=0.8))
 
-    _draw_panel_plan(axes[0][0], panels, f"TAKTEGNING – {info['maal']}")
+    _draw_panel_plan(axes[0][0], panels, f"TAKTEGNING – {DRAWING_SCALE}")
     if is_frys:
-        _draw_panel_plan(axes[0][1], gulv_panels, f"GULV PIR – {info['maal']}", show_gulv=True)
+        _draw_panel_plan(axes[0][1], gulv_panels, f"GULV PIR – {DRAWING_SCALE}", show_gulv=True)
 
     fig.tight_layout(rect=[0, 0, 0.79, 0.97], pad=0.5)
     _tegn_fig_title_block(fig, info)
@@ -747,7 +750,7 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
         _dh(ax, x, x+w, H, f"{round(w*1000)}", ey=H + 0.20, fs=5.5)
 
     ax.text(L/2, H + 0.55,
-            f"VEGG {vegg_idx+1}  –  {info['maal']}",
+            f"VEGG {vegg_idx+1}  –  {DRAWING_SCALE}",
             ha="center", va="bottom", fontsize=9, fontweight="bold", color=BLUE)
 
     # Tittelblokken må stå klar av høyde-målet til høyre (ex=L+0.90 + tekst).
@@ -925,7 +928,7 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
                     bbox=dict(fc="#fff3cd", ec=RED, pad=1.5))
 
     ax.text(L/2, -DIM_OFF-1.0,
-            f"Prinsippsnitt langs {vl_left}  –  {seksjon}  –  {info['maal']}",
+            f"Prinsippsnitt langs {vl_left}  –  {seksjon}  –  {DRAWING_SCALE}",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
     # Tittelblokken må stå klar av det ytterste høyde-målet ("... mm tot.",
     # ex=L+DIM_OFF+0.35) – ellers stipler målsettingen inn i boksen.

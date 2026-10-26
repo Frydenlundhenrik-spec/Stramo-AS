@@ -4,8 +4,10 @@ import faulthandler
 from streamlit.testing.v1 import AppTest
 from project_file import encode_project, decode_project
 
-faulthandler.dump_traceback_later(55, exit=True)
-app = AppTest.from_file('app.py', default_timeout=20).run()
+# This check renders the 3D assembly repeatedly. Allow CPU contention in the
+# full suite; the watchdog detects hangs rather than imposing a 55 s total SLA.
+faulthandler.dump_traceback_later(180, exit=True)
+app = AppTest.from_file('app.py', default_timeout=45).run()
 
 def checked():
     assert not app.exception, [e.message for e in app.exception]

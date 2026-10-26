@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any
 from database import PANEL_DB
 
-from drawing_2d import stramo_plan, stramo_snitt, stramo_tak, tegn_veggoppstalt, stramo_produksjonstegninger, fig2png
+from drawing_2d import DRAWING_SCALE, stramo_plan, stramo_snitt, stramo_tak, tegn_veggoppstalt, stramo_produksjonstegninger, fig2png
 from drawing_3d import tegn_3d_med_panelbredde
 
 
@@ -62,7 +62,7 @@ def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
         "pnr":  inp.pnr,
         "tnr":  inp.tnr,
         "dato": inp.dato,
-        "maal": inp.maalestokk,
+        "maal": DRAWING_SCALE,
         "ttype": ttype,
         "A": ov["A"],
         "P": ov["P"],

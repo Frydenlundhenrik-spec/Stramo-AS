@@ -29,11 +29,11 @@ with TemporaryDirectory(prefix="stramo-check-fdv-") as temporary:
     compact_overview = " ".join(overview.split())
     for required in ("Tasty Fredrikstad", "138", "Kjølerom 1", "Fryserom 1", "PE25", "25 µm", "gulvplate"):
         assert required in overview, required
-    assert "Revisjon 08" in overview and "26.10.2026" in overview
+    assert "Revisjon 09" in overview and "26.10.2026" in overview
     assert "oppdragsgiver 22.10.2026" in overview
     assert "10 mm omknekk" in compact_overview and "ombrett" not in overview
     assert "1500 × 3000 mm" in compact_overview
-    assert "Revisjon 08 - 26.10.2026" in reader.metadata.subject
+    assert "Revisjon 09 - 26.10.2026" in reader.metadata.subject
     assert len(reader.outline) == 11
     with (output / "Dokumentregister.csv").open(encoding="utf-8-sig", newline="") as stream:
         register = list(csv.DictReader(stream, delimiter=";"))

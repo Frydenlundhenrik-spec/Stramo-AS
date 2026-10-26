@@ -52,7 +52,7 @@ assert abs(mat[mat.Gruppe=='Elementer'].Areal_m2.sum()-274.593)<1e-6
 mat.to_csv(root/'Materialgrunnlag.csv',index=False,encoding='utf-8-sig')
 panels=mat[mat.Gruppe=='Elementer']
 (root/'LES-MEG.txt').write_text(
-    'TASTY FREDRIKSTAD – revisjon 08, 26.10.2026\n'
+    'TASTY FREDRIKSTAD – revisjon 09, 26.10.2026\n'
     'Kjølerom, fryserom og hele prosjektet har egne mapper.\n'
     f'Elementer: {int(panels.Stk.sum())} stk; {panels.Areal_m2.sum():.3f} m²; {panels.Vekt_kg.sum():.3f} kg panelvekt.\n'
     'Beslag: 13 U-kanaler, 40 innvendige og 41 utvendige vinkler. 2500 mm per lengde.\n'

@@ -30,6 +30,9 @@ def restore_editor(room):
     for key in list(st.session_state):
         if _editor_key(str(key)):
             del st.session_state[key]
+    # Explicitly synchronize the existing radio widget with the calculation
+    # page; deleting its key alone leaves the browser's old selection visible.
+    st.session_state["ed_module"] = "Kalkulasjon"
     st.session_state["background_revision"] = st.session_state.get("background_revision",0)+1
     st.session_state["editor_background"] = None
     if room is None:

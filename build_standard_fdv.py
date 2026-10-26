@@ -56,7 +56,7 @@ def pdf(path,story,first_page=1):
         chrome(c,doc,first_page)
     SimpleDocTemplate(str(path),pagesize=A4,leftMargin=44,rightMargin=44,topMargin=88,bottomMargin=50,
         title='Stramo standard FDV - paneler og beslag',author='Stramo',
-        subject='Revisjon 08 - 26.10.2026').build(story,onFirstPage=page_chrome,onLaterPages=page_chrome)
+        subject='Revisjon 09 - 26.10.2026').build(story,onFirstPage=page_chrome,onLaterPages=page_chrome)
 
 sources=[
  ('01_Paneler','01_Produktdatablad.pdf','Produktdatablad - PIR STANDARD','BALEX-pu-w-st-wall-sandwich-panel-polyurethane-core-2026-10-22.pdf'),
@@ -129,12 +129,12 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
         return [p('Standard FDV-pakke','title'),p('Paneler og beslag til kjøle- og fryserom','heading'),
          p('Dokumentgrunnlag: BALEX PIR STANDARD og teknisk dokumentasjon for beslag. Pakken inneholder originaldokumenter og en kort Stramo-oversikt for bruk og vedlikehold.'),
          p('Status ved utgivelse','sub'),p('Panel- og beslagsdokumentasjon er vedlagt. Egne seksjoner er reservert for skruer, fugemasse og 12 mm gulvplater. Disse produktdokumentene legges til senere.'),
-         table([['Prosjektopplysninger','Fylles ut for aktuell leveranse'],['Prosjekt / adresse',project_name],['Prosjektnummer / rom',f'{project_number} / {chr(10).join(room_names)}'.strip(' /')],['Dokument / dato','Revisjon 08 / 26.10.2026'],['Byggherre / eier',''],['Leverandør / montør / kontakt',''],['Leveringsdato / overleveringsdato','']],[177,330]),
+         table([['Prosjektopplysninger','Fylles ut for aktuell leveranse'],['Prosjekt / adresse',project_name],['Prosjektnummer / rom',f'{project_number} / {chr(10).join(room_names)}'.strip(' /')],['Dokument / dato','Revisjon 09 / 26.10.2026'],['Byggherre / eier',''],['Leverandør / montør / kontakt',''],['Leveringsdato / overleveringsdato','']],[177,330]),
          p('Pakkens omfang','sub'),p('Dette er en standard delpakke for paneler, platebeslag og tilhørende festing, fuging og gulvbeskyttelse. Prosjektets tegninger og materialliste legges ved aktuell leveranse. Dører, trykkventiler, kjølemaskineri og elektro dokumenteres separat der de inngår.'),
          p('Bruk av pakken','sub'),p('Kontroller produktvalg og revisjoner mot faktisk leveranse. Leverandørens originalanvisninger gjelder. Denne standardpakken er ikke en godkjenning av en bestemt konstruksjon eller en fullstendig FDV for hele kjøleanlegget.'),PageBreak(),
          p('Dokumentoversikt','title'),p('Sidene nedenfor viser plasseringen i den samlede PDF-en. Originalvedleggene beholder sin egen sidenummerering. Bokmerker gir direkte tilgang til hver del.'),
          table([['Dokument','Status','PDF-side']]+[[e['title'],e['status'],f"{e['start']}-{e['start']+e['pages']-1}"] for e in entries],[340,87,80]),
-         p('Redigering og supplering','sub'),p('De samme dokumentene ligger som enkeltfiler i nummererte mapper. Legg nye dokumenter i mappene for skruer, fugemasse og fiberplater, og oppdater dokumentregisteret. Den samlede PDF-en må bygges på nytt når dokumenter legges til.'),PageBreak(),
+         p('Redigering og supplering','sub'),p('De samme dokumentene ligger som enkeltfiler i nummererte mapper. Legg nye dokumenter i mappene for skruer, fugemasse og gulvplater, og oppdater dokumentregisteret. Den samlede PDF-en må bygges på nytt når dokumenter legges til.'),PageBreak(),
          p('Produkter og overflater','title'),
          p('Paneler','sub'),p('BALEX PIR STANDARD, produktkode PU-PIR-W-ST. Prosjektet kan benytte 80 mm panel i kjølerom og 100 mm panel i fryserom. Endelig tykkelse, bredde, lengde, ståltykkelse og profilering fremgår av prosjektets leveranseliste.'),
          p('Bekreftet overflatebelegg for panelene: PE25 polyesterlakk, 25 µm, RAL 9010. Beleggtypen og tykkelsen er oppgitt av oppdragsgiver 22.10.2026. Leverandørens originaldokumenter beskriver også andre produktalternativer; denne FDV-pakken gjelder det bekreftede PE25-belegget.'),
@@ -175,14 +175,14 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
         assert len(PdfReader(path).pages)==1
     writer=PdfWriter();writer.append(front,outline_item='Stramo - oversikt og vedlikehold')
     for e in entries:writer.append(e['path'],outline_item=e['title'],import_outline=False)
-    writer.add_metadata({'/Title':'Stramo standard FDV - paneler og beslag','/Author':'Stramo','/Subject':'Revisjon 08 - 26.10.2026. Felles FDV i app og leveranse. PE25 polyesterlakk, 25 µm, på paneler og beslag'})
+    writer.add_metadata({'/Title':'Stramo standard FDV - paneler og beslag','/Author':'Stramo','/Subject':'Revisjon 09 - 26.10.2026. Felles FDV i app og leveranse. PE25 polyesterlakk, 25 µm, på paneler og beslag'})
     merged=OUT/'Stramo-standard-FDV.pdf'
     with merged.open('wb') as f:writer.write(f)
     assert len(PdfReader(merged).pages)==next_page-1
     with (OUT/'Dokumentregister.csv').open('w',encoding='utf-8-sig',newline='') as f:
         w=csv.writer(f,delimiter=';');w.writerow(['Dokument','Status','Fil','Originalfil','PDF_startside','Sider','SHA256'])
         for e in entries:w.writerow([e['title'],e['status'],str(e['path'].relative_to(OUT)),e['original'],e['start'],e['pages'],hashlib.sha256(e['path'].read_bytes()).hexdigest()])
-    (OUT/'LES-MEG.txt').write_text('STRAMO STANDARD FDV - revisjon 08, 26.10.2026\n\nRevisjon 06: Forenklet bunntekst med faktisk sidetall, omknekk-begrep og gulvplater 1500 × 3000 × 12 mm.\nRevisjon 04: Samme FDV-pakke i app og leveranse, med prosjekt og valgte rom. Originalvedlegg beholdt.\nRevisjon 03: Oppdatert visuelt Stramo-oppsett.\nRevisjon 02: PE25 polyesterlakk, 25 µm, RAL 9010 er bekreftet for paneler og beslag.\nÅpne Stramo-standard-FDV.pdf for hele pakken med bokmerker.\n00_FDV_oversikt.pdf inneholder den korte oversikten.\nLeverandørdokumentene ligger uendret i mapper 01 og 02.\nMapper 03, 04 og 05 er reservert for skruer, fugemasse og 12 mm gulvplater.\nFyll inn prosjektopplysninger og kontroller produktene mot leveransen.\nLegg ved prosjektets aktuelle tegninger og materialliste.\nOppdater Dokumentregister.csv og bygg samlet PDF på nytt ved supplering.\nDette er standarddelen for paneler og beslag, ikke full FDV for kjølemaskineri, elektro eller dører.\n',encoding='utf-8')
+    (OUT/'LES-MEG.txt').write_text('STRAMO STANDARD FDV - revisjon 09, 26.10.2026\n\nRevisjon 06: Forenklet bunntekst med faktisk sidetall, omknekk-begrep og gulvplater 1500 × 3000 × 12 mm.\nRevisjon 04: Samme FDV-pakke i app og leveranse, med prosjekt og valgte rom. Originalvedlegg beholdt.\nRevisjon 03: Oppdatert visuelt Stramo-oppsett.\nRevisjon 02: PE25 polyesterlakk, 25 µm, RAL 9010 er bekreftet for paneler og beslag.\nÅpne Stramo-standard-FDV.pdf for hele pakken med bokmerker.\n00_FDV_oversikt.pdf inneholder den korte oversikten.\nLeverandørdokumentene ligger uendret i mapper 01 og 02.\nMapper 03, 04 og 05 er reservert for skruer, fugemasse og 12 mm gulvplater.\nFyll inn prosjektopplysninger og kontroller produktene mot leveransen.\nLegg ved prosjektets aktuelle tegninger og materialliste.\nOppdater Dokumentregister.csv og bygg samlet PDF på nytt ved supplering.\nDette er standarddelen for paneler og beslag, ikke full FDV for kjølemaskineri, elektro eller dører.\n',encoding='utf-8')
     return merged
 
 
