@@ -25,6 +25,16 @@ for kind in ('Kjølerom','Fryserom'):
 
 project=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
 rooms=project['rooms']
+from project_ui import assembly_plan
+from shapely.geometry import Point
+fig = assembly_plan(rooms)
+door_labels = [text for text in fig.axes[0].texts if text.get_text() == '1000 × 2100 mm']
+assert len(door_labels) == 4
+for room, labels in zip(rooms, (door_labels[:2], door_labels[2:])):
+    inp = world_input(room)
+    outer = Polygon(floor_outline(inp.pts, PANEL_DB[inp.panel_key]['t']/1000))
+    assert all(not outer.covers(Point(label.get_position())) for label in labels)
+plt.close(fig)
 assert {m[1] for m in freezer_shared_walls(rooms)} == {3,4}
 for room, size in zip(rooms, ((8.96,8.91),(3.91,7.46))):
     inp=world_input(room); t=PANEL_DB[inp.panel_key]['t']/1000

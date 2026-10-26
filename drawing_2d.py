@@ -132,7 +132,7 @@ def _corner_angle(ax, pts_a, i, radius=0.16, fs=8, vis_utvendig=True):
     ax.plot(square[:,0], square[:,1], color=TOTAL_DIM_COL, lw=.8, zorder=12)
 
 
-def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0, height_mm=None, side=1):
+def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0, height_mm=None):
     """Chain dimensions from both wall corners, retaining the opening width."""
     start, _, end, _ = door_dimensions(wall_length, offset_m, dw)
     angle = math.degrees(math.atan2(dx_n[1], dx_n[0]))
@@ -148,7 +148,7 @@ def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0, heigh
         mid = (qa+qb)/2 + wall_perp*.07
         ax.text(*mid, label, rotation=angle, ha="center", va="center", fontsize=6,
                 color=color, zorder=12, bbox=dict(fc="white",ec="none",pad=.4))
-    offset = (.60 + lane*.60)*side
+    offset = .60 + lane*.60
     dimension(0,start,offset,f"{start*1000:.0f} mm", "#555")
     dimension(start,start+dw,offset,f"{dw*1000:.0f} × {height_mm} mm" if height_mm else f"Dør {dw*1000:.0f} mm", TOTAL_DIM_COL)
     dimension(start+dw,wall_length,offset,f"{end*1000:.0f} mm", "#555")
@@ -351,10 +351,9 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
             # Mål-piler: hjørne→dør og dørbredde
             from dimensions import exterior_door
             outer_start, outer_length, outer_offset = exterior_door(pts, WT, wall_idx, cursor)
-            middle = outer_start + dx_n*outer_length/2 - perp*.60
-            side = -1 if any(path.contains_point(middle) for path in dimension_obstacles) else 1
+            # Door dimensions stay outside their room, also beside a shared wall.
             _door_dim(ax, outer_start, dx_n, outer_offset, dw, -perp, outer_length, idx_d,
-                      height_mm=DOR_DB[dk]["bh"], side=side)
+                      height_mm=DOR_DB[dk]["bh"])
 
             cursor += dw + 0.20
         door_cursors[wall_idx] = cursor
