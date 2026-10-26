@@ -116,9 +116,9 @@ def lag_kappliste(
         # Floor fibreboard is listed as net area; sheet cutting is listed separately.
         area_m2 = poly_area(pts)
         rader.append(dict(
-            Elementnavn="SP1", Vegg="Gulv", Type="Gulvfiberplate 12 mm",
+            Elementnavn="SP1", Vegg="Gulv", Type="Gulvplate 12 mm",
             Bredde_mm="", Høyde_mm="", Areal_m2=round(area_m2, 3),
-            Merknad=f"12 mm gulvfiberplate innenfor vegger, se egen kappliste · {area_m2:.2f} m²"
+            Merknad=f"12 mm gulvplate innenfor vegger, se egen kappliste · {area_m2:.2f} m²"
         ))
 
     return pd.DataFrame(rader)
@@ -132,7 +132,7 @@ def kappliste_sammendrag(df_kapp: pd.DataFrame) -> dict:
     vegg_df = df_kapp[df_kapp["Vegg"].str.startswith("Vegg ")]
     tak_df = df_kapp[df_kapp["Type"].isin(TAK_TYPER)]
     gulv_df = df_kapp[df_kapp["Type"].isin(GULV_TYPER)]
-    spon_df = df_kapp[df_kapp["Type"].isin(("Gulvfiberplate 12 mm", "Beskyttelsesfiner 12 mm"))]
+    spon_df = df_kapp[df_kapp["Type"].isin(("Gulvplate 12 mm", "Beskyttelsesfiner 12 mm"))]
 
     return dict(
         hele=df_kapp.loc[df_kapp["Type"] == "Hel", "Elementnavn"].nunique(),

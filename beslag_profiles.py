@@ -32,18 +32,23 @@ def profile_png(kind, width):
     def dimension(a, b, label):
         ax.annotate("", b, a, arrowprops=dict(arrowstyle="<->", color="#667783", lw=.8))
         x, y = (a[0]+b[0])/2, (a[1]+b[1])/2
-        ax.text(x, y, str(label), ha="center", va="center", fontsize=12, fontweight="bold",
+        ax.text(x, y, f"{label} mm", ha="center", va="center", fontsize=12, fontweight="bold",
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
     def hem(x, y):
-        ax.text(x, y, "10 mm omknekk", fontsize=9, ha="center", va="top", color=ink)
+        ax.text(x, y, "10 mm", fontsize=9, ha="center", va="top", color=ink)
     if kind == "inner":
         # Inside angle: finish on the concave face; returns fold to the back.
-        line([10, 0, 0, 50, 50, 52, 52], [52, 52, 50, 50, 0, 0, 10])
+        line([10, 0, 0, 50, 50, 48.8, 48.8], [48.8, 48.8, 50, 50, 0, 0, 10])
         dimension((0, 65), (50, 65), 50)
         dimension((66, 0), (66, 50), 50)
         line([42, 42, 50], [50, 42, 42])
         ax.text(34, 34, "90°", fontsize=9)
-        hem(25, -17)
+        hem(6, 42)
+        hem(38, 9)
+        ax.plot([0,0],[50,68],color=ink,lw=.5)
+        ax.plot([50,50],[50,68],color=ink,lw=.5)
+        ax.plot([50,69],[0,0],color=ink,lw=.5)
+        ax.plot([50,69],[50,50],color=ink,lw=.5)
         ax.annotate("RAL 9010\nlakkert side", (31, 50), (-33, 18), fontsize=10,
                     ha="center", va="center",
                     arrowprops=dict(arrowstyle="->", color=ink, connectionstyle="angle,angleA=0,angleB=90,rad=3"))
@@ -62,10 +67,15 @@ def profile_png(kind, width):
         dimension((width+22, 0), (width+22, 50), 50)
         line([width-8, width-8, width], [0, 8, 8])
         ax.text(width-27, 14, "90°", fontsize=9)
-        hem(width*.5, -29)
+        hem(width-12, 39)
+        hem(12, 39 if kind == "channel" else 14)
+        ax.plot([0,0],[0,-19],color=ink,lw=.5)
+        ax.plot([width,width],[0,-19],color=ink,lw=.5)
+        ax.plot([width,width+26],[0,0],color=ink,lw=.5)
+        ax.plot([width,width+26],[50,50],color=ink,lw=.5)
         ax.text(width*.5, 66, "RAL 9010 - lakkert side", fontsize=10,
                 ha="center", va="center")
-        ax.annotate("", (width, 25), (width+9, 60),
+        ax.annotate("", (width, 25), (width*.65, 60),
                     arrowprops=dict(arrowstyle="->", color=ink,
                                     connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
         ax.set_xlim(-36, width+40)

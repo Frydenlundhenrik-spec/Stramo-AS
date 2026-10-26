@@ -143,7 +143,7 @@ def door_keys(room_type, doors):
 
 def roof_outline(pts, thickness, room_type):
     """Freezer roof and floor use the same outside-wall footprint."""
-    return floor_outline(pts, thickness) if room_type == "Fryserom" else pts
+    return floor_outline(pts, thickness)
 
 
 def fixing_screw_count(pts, height, room_type, thickness, excluded_walls=()):

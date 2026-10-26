@@ -10,7 +10,7 @@ out=Path('output/pdf');out.mkdir(parents=True,exist_ok=True)
 tmp=Path('tmp/pdfs');tmp.mkdir(parents=True,exist_ok=True)
 f=project_materials(rooms)
 assert not f.duplicated(['Produkt','Høyde_mm','Bredde_mm','Tykkelse_mm']).any()
-assert f[f.Gruppe=='Elementer'].Stk.sum()==77
+assert f[f.Gruppe=='Elementer'].Stk.sum()==75
 assert f[f.Produkt.str.contains('50×50')].shape[0]==1
 assert f[f.Produkt.str.contains('1000')].Stk.sum()==4
 f.to_csv(out/'materialliste-prosjekt.csv',index=False,encoding='utf-8-sig')
@@ -24,7 +24,7 @@ for kind in ('alle','elementer','beslag','finer','materialer'):
     if kind=='beslag':assert len(reader.pages)==1
     if kind=='finer':
         assert len(reader.pages)==1
-        assert 'Gulvplater – totalsummer' in text and '40,5' in text
+        assert 'Gulvplater – totalsummer' in text and '31,5' in text
     if kind=='materialer':
         assert len(reader.pages)==2
         elements,accessories=[p.extract_text() for p in reader.pages]

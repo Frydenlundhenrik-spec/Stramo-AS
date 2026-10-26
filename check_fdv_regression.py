@@ -27,13 +27,13 @@ with TemporaryDirectory(prefix="stramo-check-fdv-") as temporary:
     assert len(reader.pages) == expected_pages
     overview = "\n".join(page.extract_text() for page in reader.pages[:5])
     compact_overview = " ".join(overview.split())
-    for required in ("Tasty Fredrikstad", "138", "Kjølerom 1", "Fryserom 1", "PE25", "25 µm", "gulvfiberplate"):
+    for required in ("Tasty Fredrikstad", "138", "Kjølerom 1", "Fryserom 1", "PE25", "25 µm", "gulvplate"):
         assert required in overview, required
-    assert "Revisjon 06" in overview and "23.10.2026" in overview
+    assert "Revisjon 08" in overview and "26.10.2026" in overview
     assert "oppdragsgiver 22.10.2026" in overview
     assert "10 mm omknekk" in compact_overview and "ombrett" not in overview
     assert "1500 × 3000 mm" in compact_overview
-    assert "Revisjon 06 - 23.10.2026" in reader.metadata.subject
+    assert "Revisjon 08 - 26.10.2026" in reader.metadata.subject
     assert len(reader.outline) == 11
     with (output / "Dokumentregister.csv").open(encoding="utf-8-sig", newline="") as stream:
         register = list(csv.DictReader(stream, delimiter=";"))
@@ -68,5 +68,5 @@ for room_type, panel in (("Kjølerom", "PIR 80 mm"), ("Fryserom", "PIR 100 mm"))
     assert "PE25" in content and "25 µm" in content
     assert "sponplate" not in content and "plastbelegg" not in content and "beskyttelsesfiner" not in content
     if room_type == "Fryserom":
-        assert "gulvfiberplate" in frame.to_csv(index=False)
+        assert "gulvplate" in frame.to_csv(index=False)
 print(f"PASS: FDV scope, {expected_pages} pages, seven unchanged suppliers, three placeholders, PE25 and floor terminology")

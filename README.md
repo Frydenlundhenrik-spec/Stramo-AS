@@ -1,6 +1,6 @@
 # Stramo kjøleromssystem
 
-Versjon **2026.10.23-r07**. App for kjøle- og fryserom, med flere rom i samme prosjekt.
+Versjon **2026.10.26-r08**. App for kjøle- og fryserom, med flere rom i samme prosjekt.
 
 ## Kjør lokalt
 
@@ -17,7 +17,7 @@ Appen trenger ingen API-nøkler. AI-assistenten er fjernet.
 
 ## Innhold
 
-- Kalkulasjon med vegg- og takareal, fryseromsgulv, gulvfiberplater og beslag.
+- Kalkulasjon med vegg- og takareal, fryseromsgulv, gulvplater og beslag.
 - FDV med logo, PE25 25 µm og inkluderte leverandørdokumenter.
 - Montasjetegninger: plan, vegger, prinsippsnitt, paneler, tak/gulv, 3D og IFC.
 - Kapplister og materiallister for ett rom eller hele prosjektet.
@@ -25,10 +25,13 @@ Appen trenger ingen API-nøkler. AI-assistenten er fjernet.
 - Transportforslag med status for alle kolli, også de som ikke er plassert.
 - U-verdi og varmetap under kalkulasjon.
 
-Målene er innvendige rommål. Veggpanelene legges på utsiden av romkonturen.
+Mål i skjemaer og plantegninger er utvendige rommål. Dørplassering måles fra utvendige hjørner.
+Snitt viser både innvendig fri høyde og utvendig totalhøyde. Gulv- og takpaneler går til ytterkant; taket ligger oppå veggene.
 90-graders hjørner har rette støtskjøter. Tegninger, IFC og mengder bruker samme panelinndeling.
 Siste smale panel bestilles som ett helt element. Bare beslag får 10 % kapp og rundes opp til hele lengder på 2500 mm.
-Gulvfiberplatenes standard er 1500 × 3000 × 12 mm.
+Gulvplatenes standard er 1500 × 3000 × 12 mm. De ligger innenfor veggene.
+Avkapp med begge restmål over 200 mm vurderes for gjenbruk, med 3 mm sagspor.
+PIR 80 mm har standardpris 900 kr/m²; PIR 100 mm har 1000 kr/m².
 
 ## Prosjektfiler og Tasty-eksempel
 
@@ -51,7 +54,7 @@ For å generere Tasty-tegningspakken fra kommandolinjen:
 
 Testene kjøres i en midlertidig kopi og endrer ikke prosjektfilene dine.
 Kontroll av en generert tegningspakke: `python check_delivery.py output/Tasty`.
-Revisjon 07 er lokalt kontrollert med 41 regresjonsskript og 22 kontroller av den installerte appen.
+Revisjon 08 er lokalt kontrollert med 41 regresjonsskript, inkludert appens seks moduler, eksport, yttermål og gjenbruk av gulvplateavkapp.
 
 ## Publisering
 
@@ -59,5 +62,5 @@ Eksisterende Streamlit Community Cloud-app bruker dette repositoriet, `main`, `a
 Avhengighetene er låst til versjonene som ble testet. Logo og standard-FDV ligger i `assets/`.
 
 Transport er et lasteforslag og kontrollerer ikke lastsikring eller aksellast.
-Ukjente vekter og mengder vises som manglende. FDV for skruer, fugemasse og fiberplater ettersendes.
+Ukjente vekter og mengder vises som manglende. FDV for skruer, fugemasse og gulvplater ettersendes.
 Varmeberegninger med manglende U-verdier eller forutsetninger er foreløpige.

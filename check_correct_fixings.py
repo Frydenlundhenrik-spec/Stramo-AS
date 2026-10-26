@@ -9,7 +9,7 @@ rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
 f=project_materials(rooms)
 assert not f.Produkt.str.contains('Varmekabel|Låsekasse|Hengsel|U-kanal 100').any()
 assert f.Produkt.str.contains('Kjøleromsdør').any() and f.Produkt.str.contains('Fryseromsdør').any()
-assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==452
+assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==444
 assert f.loc[f.Produkt.eq('Trykkventil'),'Gruppe'].tolist()==['Tilbehør']
 for r in rooms:
  inp=world_input(r);result=beregn_prosjekt(inp)

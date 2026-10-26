@@ -22,6 +22,7 @@ from montasje import (
     figur_som_png, figur_som_pdf, figurer_som_samlet_pdf, lag_tegningsinfo,
 )
 from ifc_export import gen_ifc
+from kappliste import panel_order_rows
 from export_excel import lag_excel
 from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
 from project_ui import (prepare_project, upload_project, capture_room, room_controls, project_download, assembly_ui, new_room_controls, finishing_ui)
@@ -124,14 +125,14 @@ with st.sidebar:
         st.image(str(LOGO_PATH), width=170)
     else:
         st.title("❄️ Stramo")
-    st.caption("Kalkulasjon · FDV · Montasje · Kappliste · IFC")
+    st.caption("Kalkulasjon · FDV · Montasje · Elementer")
 
     # Keep an open session on the calculation page after removing the old menu item.
     if st.session_state.get("ed_module") == "U-verdi og varmetap":
         st.session_state["ed_module"] = "Kalkulasjon"
     modul = st.radio(
         "Velg modul",
-        ["Kalkulasjon", "FDV", "Montasjetegninger", "Kapplister", "Rom og sammenstilling", "Transport"],
+        ["Kalkulasjon", "FDV", "Montasjetegninger", "Elementer", "Rom og sammenstilling", "Transport"],
         key="ed_module",
     )
 
@@ -153,7 +154,7 @@ with st.sidebar:
     rom_type = st.radio("Romtype", ["Kjølerom", "Fryserom"], key="ed_room_type")
 
     if rom_type == "Fryserom":
-        st.caption("22 mm lekter → gulvpanel som vegg/tak → vegger på gulvpanel → 12 mm gulvfiberplate innenfor vegger.")
+        st.caption("22 mm lekter → gulvpanel som vegg/tak → vegger på gulvpanel → 12 mm gulvplate innenfor vegger.")
         st.number_input("Gulvplate bredde (mm)",min_value=100,max_value=10000,value=1500,key="ed_finer_width")
         st.number_input("Gulvplate lengde (mm)",min_value=100,max_value=10000,value=3000,key="ed_finer_length")
     with st.expander("Tilbehør – mengder for dette rommet"):
@@ -165,7 +166,7 @@ with st.sidebar:
             else:
                 st.number_input(label, min_value=0, max_value=1000000, value=0, key=f"ed_accessory_{accessory}")
     st.subheader("Kapp og bestillingsgrunnlag")
-    st.caption("Beslag: 10 % svinn/kapp, avrundet opp til hele 2500 mm lengder. Ingen prosentvis kapptillegg på paneler eller gulvfiberplater.")
+    st.caption("Beslag: 10 % svinn/kapp, avrundet opp til hele 2500 mm lengder. Ingen prosentvis kapptillegg på paneler eller gulvplater.")
     # Alle paneltyper kan velges fritt
     _panel_keys = list(PANELER.keys())
     _documented_panels = {"PIR 80 mm", "PIR 100 mm", "PIR 120 mm"}
@@ -195,7 +196,7 @@ with st.sidebar:
     # ── Romform ───────────────────────────────────────────────────────────────
     st.divider()
     st.subheader("🏠 Romform")
-    st.caption("Rommål og døravstander måles fra innvendige veggflater. Yttermål inkluderer paneltykkelsen.")
+    st.caption("Rommål er utvendige mål. Døravstander måles fra utvendig hjørne til dørkant.")
     form_valg = st.selectbox("Form", list(FORM_MALER.keys()), key="ed_shape")
     st.caption(FORM_MALER[form_valg]["besk"])
     H_mm = st.number_input("Veggpanelhøyde (mm)", min_value=1800, max_value=8000, value=2500, step=50, key="ed_height")
@@ -285,6 +286,10 @@ with st.sidebar:
             with c2:
                 py_mm = st.number_input(f"Y{i+1} (mm)", value=dy, step=50.0, key=f"py{i}")
             pts.append((px_mm / 1000.0, py_mm / 1000.0))
+
+    origin = st.session_state.get("ed_form_origin", [0, 0])
+    pts = [(x+origin[0]/1000, y+origin[1]/1000) for x,y in pts]
+    exterior_pts = list(pts)
 
     # Polygon-validering
     poly_ok = True
@@ -424,7 +429,19 @@ with st.sidebar:
         prices = st.session_state["pris_override"]
         prices["skruer"] = st.number_input("22 mm hvite skruer (kr/stk)", min_value=0.0, value=float(prices.get("skruer",0)), key="ed_screw_price")
         if rom_type == "Fryserom":
-            prices["gulv_finer"] = st.number_input("Gulvfiberplate 12 mm (kr/m²)", min_value=0.0, value=float(prices.get("gulv_finer",0)), key="ed_board_price")
+            prices["gulv_finer"] = st.number_input("Gulvplate 12 mm (kr/m²)", min_value=0.0, value=float(prices.get("gulv_finer",0)), key="ed_board_price")
+
+# Convert exterior user dimensions once, before all calculations and exports.
+from dimensions import inside_from_outside, corner_shift
+try:
+    pts = inside_from_outside(exterior_pts, pan_info.tykkelse_mm/1000)
+    dorer_full = [(key, count, wall, offset-corner_shift(pts, pan_info.tykkelse_mm/1000, wall), hinge)
+                  for key,count,wall,offset,hinge in dorer_full]
+    apninger_list = [(wall, offset-corner_shift(pts, pan_info.tykkelse_mm/1000, wall), width, height, sill, label)
+                     for wall,offset,width,height,sill,label in apninger_list]
+except ValueError as exc:
+    st.error(str(exc))
+    st.stop()
 
 # ── Beregning (caches dersom input ikke er endret) ────────────────────────────
 import json as _json
@@ -459,7 +476,7 @@ inp = ProjectInput(
 )
 
 # Portable room snapshot includes only project data, never secrets or chat history.
-form_data = {"waste_pct":10,"panel_kg_m2":0,"panel_stock_mm":0,"kind": form_valg, "plywood_width_mm": st.session_state.get("ed_finer_width",1500), "plywood_length_mm": st.session_state.get("ed_finer_length",3000)}
+form_data = {"dimension_basis":"external", "origin_mm":origin, "waste_pct":10,"panel_kg_m2":0,"panel_stock_mm":0,"kind": form_valg, "plywood_width_mm": st.session_state.get("ed_finer_width",1500), "plywood_length_mm": st.session_state.get("ed_finer_length",3000)}
 form_data["accessory_quantities"] = {key: st.session_state.get(f"ed_accessory_{key}", 0) or None
                                      for key in ("fugemasse", "skum", "pakninger", "alarm")}
 form_data["thermal"] = thermal_data
@@ -467,7 +484,7 @@ if form_valg == "L-form":
     form_data.update(sides_mm=[st.session_state[f"l_side_{j}"] for j in range(6)],
                      turns=st.session_state.get("l_turns",0), mirrored=st.session_state.get("l_mirrored",False))
 elif form_valg == "Egendefinert polygon":
-    form_data["points_mm"] = [[x*1000,y*1000] for x,y in pts]
+    form_data["points_mm"] = [[(x-origin[0]/1000)*1000,(y-origin[1]/1000)*1000] for x,y in exterior_pts]
 else:
     form_data.update(length_mm=L_mm,width_mm=B_mm)
     if form_valg == "Femkant – avskåret hjørne":
@@ -498,7 +515,7 @@ if bakfil is None and current_room.get("background"):
 # ── Hoved-header ──────────────────────────────────────────────────────────────
 st.title(f"❄️ {navn.strip() or 'Kjølerom'}")
 st.caption(
-    f"{rom_type} · Panel: {result['panel']['label']} · Elementbredde: {pw_mm} mm · Versjon 2026.10.23-r07"
+    f"{rom_type} · Panel: {result['panel']['label']} · Elementbredde: {pw_mm} mm · Versjon 2026.10.26-r08"
 )
 st.divider()
 
@@ -519,17 +536,17 @@ elif modul == "Kalkulasjon":
                ("Takareal", areas[cuts.Vegg.eq("Tak")].sum(), "m²")]
     if rom_type == "Fryserom":
         metrics.extend([("Gulvpanel", areas[cuts.Type.str.startswith("Gulv PIR")].sum(), "m²"),
-                        ("Gulvfiberplater", poly_area(inp.pts), "m²")])
+                        ("Gulvplater", poly_area(inp.pts), "m²")])
     materials = project_materials([current_room])
     metrics.append(("Beslag", materials.loc[materials.Gruppe.eq("Beslag"), "Løpemeter"].sum(), "LM"))
     for column, (label, value, unit) in zip(st.columns(len(metrics)), metrics):
         with column:
             card(label, f"{value:.2f} {unit}".replace(".", ","))
     st.subheader("Materialliste")
-    st.dataframe(result["df_mat"].drop(columns=["CO₂ (kg)"], errors="ignore"), use_container_width=True, hide_index=True)
+    st.dataframe(result["df_mat"].drop(columns=["CO₂ (kg)", "NS3420"], errors="ignore"), use_container_width=True, hide_index=True)
     st.download_button(
         "Last ned materialliste CSV",
-        result["df_mat"].to_csv(index=False).encode("utf-8-sig"),
+        result["df_mat"].drop(columns=["NS3420"], errors="ignore").to_csv(index=False).encode("utf-8-sig"),
         f"{navn or 'prosjekt'}_materialliste.csv", "text/csv",
     )
     with st.expander("U-verdi og varmetap"):
@@ -579,15 +596,16 @@ elif modul == "Montasjetegninger":
             "Last ned plantegning PDF", pdf,
             f"{tnr}_{navn or 'prosjekt'}_plan.pdf", "application/pdf",
         )
+        wall_orders = panel_order_rows(result["df_kapp"], H_mm, pw_mm)
         vdf = pd.DataFrame([{
-            "Vegg": f"V{i+1}", "Lengde (m)": round(w, 3),
-            "Lengde (mm)": round(w*1000),
-            "Antall elementer": int(result["df_mat"].loc[result["df_mat"].Post == f"Vegg {i+1}", "Mengde"].sum()),
-        } for i, w in enumerate(wall_lengths(pts))])
+            "Vegg": f"V{i+1}", "Utvendig lengde (m)": round(w, 3),
+            "Utvendig lengde (mm)": round(w*1000),
+            "Antall elementer": int(wall_orders.Vegg.eq(f"Vegg {i+1}").sum()),
+        } for i, w in enumerate(wall_lengths(exterior_pts))])
         st.dataframe(vdf, use_container_width=True, hide_index=True)
 
     with tab_snitt:
-        wls = wall_lengths(pts)
+        wls = wall_lengths(exterior_pts)
         vegg_options = [f"Vegg {i+1}  ({wls[i]*1000:.0f} mm)" for i in retained_walls]
         valgt  = st.selectbox("Velg snitt-vegg", vegg_options)
         v_idx  = retained_walls[vegg_options.index(valgt)]
@@ -632,12 +650,6 @@ elif modul == "Montasjetegninger":
         )
 
     with tab_prod:
-        st.info(
-            "Produksjonstegninger viser hvert element med nøyaktige mål, vinkler og "
-            "snittbeskrivelse – klart for verkstedproduksjon og modulmontering på byggeplass. "
-            "**F** = Fabrikkant (ingen kapping)  ·  **RK** = Rett kapp (90°)  ·  "
-            "**VK** = Vinklet kapp (se snittvinkel i tabell per element)."
-        )
         vis_bare_tilpassede = st.checkbox(
             "Vis kun tilpassede elementer (kapp, start, skrå)",
             value=False,
@@ -703,14 +715,13 @@ elif modul == "Transport":
     from transport import transport_ui
     transport_ui(st.session_state["project_rooms"] or [current_room])
 
-elif modul == "Kapplister":
-    st.header("🔪 Kapplister")
+elif modul == "Elementer":
+    st.header("Elementer")
     sam = result["sam"]
     c1, c2, c3 = st.columns(3)
     with c1: st.info(f"Veggelementer: {sam['tot_panel']} stk")
     with c2: st.info(f"Takelementer: {sam['tak']} stk")
     with c3: st.info(f"Gulvelementer: {sam['gulv']} stk" if "Fryserom" in rom_type else "Kjølerom: ingen gulvpanel")
-    st.caption("Taklogikk: elementer har samme bredde som veggelementer og går vegg-til-vegg.")
     from purchase_summary import element_cutlist, panel_summary_ui
     cut_export = element_cutlist([current_room])
     st.dataframe(cut_export, use_container_width=True, hide_index=True)
@@ -724,7 +735,7 @@ elif modul == "Kapplister":
 
 finishing_ui(st.session_state["project_rooms"] if modul == "Rom og sammenstilling" else [current_room])
 from cutlist_pdf import pdf_downloads, material_downloads
-if modul in ("Kapplister", "Rom og sammenstilling"):
+if modul in ("Elementer", "Rom og sammenstilling"):
     export_rooms = st.session_state["project_rooms"] if modul == "Rom og sammenstilling" else [current_room]
     if modul == "Rom og sammenstilling" and export_rooms:
         export_options = ["Alle rom"] + [r["id"] for r in export_rooms]

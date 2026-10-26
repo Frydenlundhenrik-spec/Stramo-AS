@@ -6,12 +6,12 @@ import pandas as pd
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 f=packages(rooms);p,m=pack_floor(f,13600,2450,2700)
 assert len(p)+len(m)==len(f)
-assert f[f.Innhold.str.startswith('PIR')].Antall.sum()==77
-fiber=f[f.Innhold.str.startswith('Gulvfiberplate')].iloc[0]
-assert fiber.Antall==9 and '1500 × 3000 mm' in fiber.Innhold
-assert (fiber.Lengde_mm,fiber.Bredde_mm,fiber.Høyde_mm)==(3040,1540,158)
+assert f[f.Innhold.str.startswith('PIR')].Antall.sum()==75
+fiber=f[f.Innhold.str.startswith('Gulvplate')].iloc[0]
+assert fiber.Antall==7 and '1500 × 3000 mm' in fiber.Innhold
+assert (fiber.Lengde_mm,fiber.Bredde_mm,fiber.Høyde_mm)==(3040,1540,134)
 screws=f[f.Innhold.eq('22 mm hvite skruer')].iloc[0]
-assert screws.Antall==452 and (screws.Lengde_mm,screws.Bredde_mm,screws.Høyde_mm)==(400,300,200)
+assert screws.Antall==444 and (screws.Lengde_mm,screws.Bredde_mm,screws.Høyde_mm)==(400,300,200)
 # Unspecified accessories must not become invented one-piece cargo.
 manual=deepcopy(rooms)
 for room in manual:

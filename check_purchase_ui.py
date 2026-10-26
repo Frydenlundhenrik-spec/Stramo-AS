@@ -2,7 +2,7 @@ from streamlit.testing.v1 import AppTest
 a=AppTest.from_file('app.py',default_timeout=60).run()
 keys={n.key for n in a.number_input}
 assert 'ed_waste_pct' not in keys and 'ed_panel_weight' not in keys
-a.radio(key='ed_module').set_value('Kapplister').run()
+a.radio(key='ed_module').set_value('Elementer').run()
 assert not a.exception,[e.message for e in a.exception]
 assert any('Antall (stk)' in d.value.columns for d in a.dataframe)
 a.button(key='add_finished_room').click().run()

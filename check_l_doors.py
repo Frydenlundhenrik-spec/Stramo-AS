@@ -58,11 +58,11 @@ def check():
     out = Path(__file__).parent / "qa"
     out.mkdir(exist_ok=True)
     for title, fig in (
-        ("l-plan", stramo_plan(pts,2.5,1.1,doors,info)),
-        ("l-door", tegn_veggoppstalt(pts,2.5,1.1,doors,info,rom_type="Fryserom")),
+        ("l-plan", stramo_plan(pts,2.5,1.1,doors,info,wall_thickness=.1)),
+        ("l-door", tegn_veggoppstalt(pts,2.5,1.1,doors,info,rom_type="Fryserom",wall_thickness=.1)),
     ):
         labels = [text.get_text() for text in fig.axes[0].texts]
-        assert "350 mm" in labels and "4750 mm" in labels
+        assert "450 mm" in labels and "4850 mm" in labels
         if title == "l-plan":
             assert "Senter 800 mm" not in labels
         else:

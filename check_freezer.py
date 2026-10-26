@@ -50,7 +50,7 @@ def run():
                 data = gen_ifc(pts,2.5,"Kontroll",panel,inp.dorer,room,1.1)
                 model = ifcopenshell.file.from_string(data.decode("utf-8"))
                 floors = [s for s in model.by_type("IfcSlab") if __import__('re').match(r'^G\d',s.Name or '')]
-                boards = [s for s in model.by_type("IfcSlab") if s.Name.startswith("Gulvfiberplate")]
+                boards = [s for s in model.by_type("IfcSlab") if s.Name.startswith("Gulvplate")]
                 assert len(floors) == result["sam"]["gulv"]
                 assert len(boards) == (1 if room == "Fryserom" else 0)
                 assert len(model.by_type("IfcBuildingElementProxy")) == (0 if room == "Fryserom" else len(pts))
@@ -72,7 +72,7 @@ def run():
                 assert np.isclose(min(doors[0].z),finished_floor(room,panel))
                 assert any(t.name == f"U-kanal {width} mm" for t in fig3.data) == (room == "Kjølerom")
                 if room == "Fryserom":
-                    assert any(t.name == "Gulvfiberplate 12 mm" and np.isclose(max(t.z),finished_floor(room,panel)) for t in fig3.data)
+                    assert any(t.name == "Gulvplate 12 mm" and np.isclose(max(t.z),finished_floor(room,panel)) for t in fig3.data)
                 section = tegn_snitt(inp,result)
                 roof = tegn_taktegning(inp,result)
                 elevation = tegn_veggoppstaltt(inp,result)

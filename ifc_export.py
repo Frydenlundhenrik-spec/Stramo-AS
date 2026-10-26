@@ -167,7 +167,7 @@ def gen_ifc(
     mat_floor = E("IFCMATERIAL", _ifc_text("Gulvplate"))
     mat_door  = E("IFCMATERIAL", _ifc_text(f"Isolert {rom_type.lower()}sdør"))
     mat_pir_floor = E("IFCMATERIAL", _ifc_text("Gulvpanel, samme type som vegg"))
-    mat_board = E("IFCMATERIAL", _ifc_text("Gulvfiberplate 12 mm"))
+    mat_board = E("IFCMATERIAL", _ifc_text("Gulvplate 12 mm"))
     mat_channel = E("IFCMATERIAL", _ifc_text("Rustfritt stål"))
     mat_glass = E("IFCMATERIAL", _ifc_text("Klassfrontåpning"))
 
@@ -485,7 +485,7 @@ def gen_ifc(
         board_shape = extrude(polygon_profile_2d(pts_a), FLOOR_BOARD)
         board_pl = placement(f"#{storey_pl}", 0, 0, base)
         board = E("IFCSLAB", _ifc_text(ifc_guid()), "$",
-                  _ifc_text("Gulvfiberplate 12 mm"), "$", "$",
+                  _ifc_text("Gulvplate 12 mm"), "$", "$",
                   f"#{board_pl}", f"#{board_shape}", "$", ".FLOOR.")
         assign_mat(board, mat_board)
         products.append(board)

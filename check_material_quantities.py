@@ -9,20 +9,20 @@ from purchase_summary import grouped_panels
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 f=project_materials(rooms);p=f[f.Gruppe=='Elementer'];g=grouped_panels(rooms)
 assert not p.duplicated(['Produkt','Høyde_mm','Bredde_mm','Tykkelse_mm']).any()
-assert p.Stk.sum()==77
+assert p.Stk.sum()==75
 assert abs(p.Areal_m2.sum()-g.Bestill_m2.sum())<1e-8
 assert abs(p.Vekt_kg.sum()-g.Bestill_vekt_kg.sum())<1e-8
-assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==452
+assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==444
 assert project_materials(rooms[:1]).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==84
-assert project_materials(rooms[1:]).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==368
+assert project_materials(rooms[1:]).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==360
 clone=deepcopy(rooms);clone[0]['input']['hoyde_m']=2.401
 assert project_materials(clone[:1]).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==96
 assert f[f.Gruppe=='Beslag'].Areal_m2.isna().all()
-assert project_materials(rooms+deepcopy(rooms)).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==904
+assert project_materials(rooms+deepcopy(rooms)).query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==888
 out=Path('output/pdf');out.mkdir(parents=True,exist_ok=True)
 f.to_csv(out/'materialliste-prosjekt.csv',index=False,encoding='utf-8-sig')
 data=cutting_pdf(rooms,'materialer');(out/'materialliste-prosjekt.pdf').write_bytes(data)
-r=PdfReader(BytesIO(data));assert '452' in '\n'.join(p.extract_text() for p in r.pages)
+r=PdfReader(BytesIO(data));assert '444' in '\n'.join(p.extract_text() for p in r.pages)
 doc=pdfium.PdfDocument(data)
 for i in range(len(doc)):doc[i].render(scale=1.25).to_pil().save(f'tmp/pdfs/materialer-new-{i+1}.png')
 print(f.to_string(index=False));print('PASS: grouped material quantities, allowance, shared-wall screws, 400 mm ceiling and PDF',len(r.pages),'pages')

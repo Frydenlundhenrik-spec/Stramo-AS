@@ -8,34 +8,34 @@
         "navn": "Tasty Fredrikstad Kjølerom",
         "pnr": "138",
         "tnr": "A-138",
-        "dato": "23.10.2026",
+        "dato": "26.10.2026",
         "maalestokk": "1:10",
         "rom_type": "Kjølerom",
         "panel_key": "PIR 80 mm",
         "pts": [
           [
-            0.0,
-            0.0
+            0.08,
+            0.08
           ],
           [
-            8.96,
-            0.0
+            8.88,
+            0.08
           ],
           [
-            8.96,
-            8.91
+            8.88,
+            8.83
           ],
           [
-            2.41,
-            8.91
+            2.63,
+            8.83
           ],
           [
-            2.41,
-            3.86
+            2.63,
+            3.78
           ],
           [
-            0.0,
-            3.86
+            0.08,
+            3.78
           ]
         ],
         "hoyde_m": 2.4,
@@ -45,14 +45,14 @@
             "Enkel kjøledør 1000×2100 mm",
             1,
             0,
-            6.1,
+            6.02,
             "Høyre"
           ],
           [
             "Enkel kjøledør 1000×2100 mm",
             1,
             2,
-            2.7,
+            2.62,
             "Venstre"
           ]
         ],
@@ -71,9 +71,9 @@
         "sides_mm": [
           8960,
           8910,
-          6550,
+          6410,
           5050,
-          2410,
+          2550,
           3860
         ],
         "turns": 0,
@@ -91,7 +91,12 @@
           "heat_flux_limit": null
         },
         "plywood_width_mm": 1500,
-        "plywood_length_mm": 3000
+        "plywood_length_mm": 3000,
+        "dimension_basis": "external",
+        "origin_mm": [
+          0,
+          0
+        ]
       },
       "prices": {
         "dor_Enkel kjøledør 1000×2100 mm": 0.0
@@ -112,26 +117,26 @@
         "navn": "Tasty Fredrikstad Fryserom",
         "pnr": "138",
         "tnr": "A-138",
-        "dato": "23.10.2026",
+        "dato": "26.10.2026",
         "maalestokk": "1:10",
         "rom_type": "Fryserom",
         "panel_key": "PIR 100 mm",
         "pts": [
           [
-            0,
-            0
+            0.1,
+            0.1
           ],
           [
-            3.91,
-            0
+            3.81,
+            0.1
           ],
           [
-            3.91,
-            7.46
+            3.81,
+            7.36
           ],
           [
-            0,
-            7.46
+            0.1,
+            7.36
           ]
         ],
         "hoyde_m": 2.4,
@@ -141,14 +146,14 @@
             "Fryserom enkel 1000×2100 mm",
             1,
             0,
-            2.1,
+            2.0,
             "Høyre"
           ],
           [
             "Fryserom enkel 1000×2100 mm",
             1,
             1,
-            5.7,
+            5.6000000000000005,
             "Venstre"
           ]
         ],
@@ -179,12 +184,17 @@
           "heat_flux_limit": null
         },
         "plywood_width_mm": 1500,
-        "plywood_length_mm": 3000
+        "plywood_length_mm": 3000,
+        "dimension_basis": "external",
+        "origin_mm": [
+          0,
+          0
+        ]
       },
       "prices": {},
       "position_mm": [
-        -1600,
-        3960
+        -1280,
+        3780
       ],
       "excluded_walls": [],
       "background": null
@@ -196,34 +206,34 @@
       "navn": "Tasty Fredrikstad Kjølerom",
       "pnr": "138",
       "tnr": "A-138",
-      "dato": "23.10.2026",
+      "dato": "26.10.2026",
       "maalestokk": "1:10",
       "rom_type": "Kjølerom",
       "panel_key": "PIR 80 mm",
       "pts": [
         [
-          0.0,
-          0.0
+          0.08,
+          0.08
         ],
         [
-          8.96,
-          0.0
+          8.88,
+          0.08
         ],
         [
-          8.96,
-          8.91
+          8.88,
+          8.83
         ],
         [
-          2.41,
-          8.91
+          2.63,
+          8.83
         ],
         [
-          2.41,
-          3.86
+          2.63,
+          3.78
         ],
         [
-          0.0,
-          3.86
+          0.08,
+          3.78
         ]
       ],
       "hoyde_m": 2.4,
@@ -233,14 +243,14 @@
           "Enkel kjøledør 1000×2100 mm",
           1,
           0,
-          6.1,
+          6.02,
           "Høyre"
         ],
         [
           "Enkel kjøledør 1000×2100 mm",
           1,
           2,
-          2.7,
+          2.62,
           "Venstre"
         ]
       ],
@@ -259,9 +269,9 @@
       "sides_mm": [
         8960,
         8910,
-        6550,
+        6410,
         5050,
-        2410,
+        2550,
         3860
       ],
       "turns": 0,
@@ -279,7 +289,12 @@
         "heat_flux_limit": null
       },
       "plywood_width_mm": 1500,
-      "plywood_length_mm": 3000
+      "plywood_length_mm": 3000,
+      "dimension_basis": "external",
+      "origin_mm": [
+        0,
+        0
+      ]
     },
     "prices": {
       "dor_Enkel kjøledør 1000×2100 mm": 0.0

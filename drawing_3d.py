@@ -214,7 +214,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
 
         for p in generate_roof_floor_panels(pts, int(round(panelbredde_m*1000)), prefix="F"):
             pa = np.array(p.polygon, dtype=float)
-            _add_polygon_mesh(fig, pa, finished_floor(rom_type, panel_key), name="Gulvfiberplate 12 mm", color="#d4a96a", opacity=0.8)
+            _add_polygon_mesh(fig, pa, finished_floor(rom_type, panel_key), name="Gulvplate 12 mm", color="#d4a96a", opacity=0.8)
             _add_vertical_faces(fig, pa, wall_base(rom_type,panel_key), finished_floor(rom_type, panel_key), name="Fiberplate tykkelse", color="#d4a96a")
 
     # Vegger

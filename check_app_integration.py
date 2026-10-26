@@ -51,7 +51,7 @@ def check():
                 assert "PE25" in overview and "25 µm" in overview
                 assert all(r["input"]["navn"] in overview for r in project["rooms"])
                 assert "Ettersendes" in overview
-                assert "Skruer" in overview and "Fugemasse" in overview and "Gulvfiberplater" in overview
+                assert "Skruer" in overview and "Fugemasse" in overview and "Gulvplater" in overview
     print("PASS: all six UI modules; FDV download uses actual 244-page pack, both rooms, PE25 and pending-document slots")
 
     app = AppTest.from_file("app.py", default_timeout=60).run()

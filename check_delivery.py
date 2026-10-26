@@ -16,5 +16,5 @@ assert not (root/'01-Kjolerom'/'04-Vegg-V4.pdf').exists()
 assert not (root/'01-Kjolerom'/'04-Vegg-V5.pdf').exists()
 assert len(PdfReader(root/'03-Sammenstilling'/'00-Alle-prosjekttegninger.pdf').pages)==2+sum(len(PdfReader(root/n/'00-Alle-tegninger.pdf').pages) for n in ('01-Kjolerom','02-Fryserom'))
 production='\n'.join(p.extract_text() for p in PdfReader(root/'02-Fryserom'/'05-Produksjonstegninger.pdf').pages)
-assert '4110' in production and '3910' not in production
-print('PASS: merged books match source pages; freezer production 4110 mm; two doors per IFC; shared-wall exclusions')
+assert '3910' in production and '4110' not in production
+print('PASS: merged books match source pages; freezer production 3910 mm; two doors per IFC; shared-wall exclusions')

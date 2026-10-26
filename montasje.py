@@ -7,15 +7,10 @@ from drawing_3d import tegn_3d_med_panelbredde
 
 
 def tegn_plantegning(inp: Any, result: dict, bakgrunn=None, apninger=None):
-    if getattr(inp,"excluded_walls",()):
-        from dataclasses import asdict
-        from project_ui import assembly_plan
-        room={"input":asdict(inp),"position_mm":[0,0],"excluded_walls":list(inp.excluded_walls)}
-        return assembly_plan([room])
     info = lag_tegningsinfo(inp, result, "Plantegning")
     return stramo_plan(inp.pts, inp.hoyde_m, inp.panelbredde_m,
                        inp.dorer, info, bakgrunn, apninger=apninger,
-                       wall_thickness=PANEL_DB[inp.panel_key]["t"] / 1000)
+                       wall_thickness=PANEL_DB[inp.panel_key]["t"] / 1000, excluded_walls=inp.excluded_walls)
 
 
 def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", apninger=None):

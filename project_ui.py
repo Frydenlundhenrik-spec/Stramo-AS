@@ -37,7 +37,27 @@ def restore_editor(room):
         st.session_state["active_room_id"] = None
         st.session_state["draft_id"] = uuid.uuid4().hex
         return
-    data, form = room["input"], room["form"]
+    data = room["input"]
+    form = copy.deepcopy(room["form"])
+    from construction import floor_outline
+    from dimensions import corner_shift
+    from project_file import _form_points
+    thickness = PANEL_DB[data["panel_key"]]["t"]/1000
+    if form.get("dimension_basis") != "external":
+        outer = np.asarray(floor_outline(data["pts"], thickness))
+        if form["kind"] == "L-form":
+            form["sides_mm"] = [round(v*1000) for v in wall_lengths(outer)]
+        elif form["kind"] == "Rektangel":
+            form.update(length_mm=round(np.ptp(outer[:,0])*1000), width_mm=round(np.ptp(outer[:,1])*1000))
+        else:
+            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist())
+        generated = np.asarray(_form_points(form))
+        shift = outer[0]-generated[0]
+        if not np.allclose(generated+shift, outer):
+            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist())
+            shift = np.zeros(2)
+        form.update(dimension_basis="external", origin_mm=(shift*1000).tolist())
+    st.session_state["ed_form_origin"] = form.get("origin_mm", [0,0])
     from thermal import thermal_settings
     thermal = thermal_settings(room)
     st.session_state["ed_thermal_room_type"] = data["rom_type"]
@@ -66,9 +86,9 @@ def restore_editor(room):
             state.update(ed_cut_x=form["cut_x_mm"],ed_cut_y=form["cut_y_mm"])
     for i,(key,count,wall,offset,hinge) in enumerate(data["dorer"]):
         state.update({f"dt_{data['rom_type']}_{i}":key,f"da{i}":count,f"dw{i}":wall+1,
-                      f"do{i}":round(offset*1000),f"dh{i}":hinge})
+                      f"do{i}":round((offset+corner_shift(data["pts"], thickness, wall))*1000),f"dh{i}":hinge})
     for i,(wall,offset,width,height,sill,label) in enumerate(data.get("apninger") or []):
-        state.update({f"ap_w{i}":wall+1,f"ap_off{i}":round(offset*1000),f"ap_bw{i}":round(width*1000),
+        state.update({f"ap_w{i}":wall+1,f"ap_off{i}":round((offset+corner_shift(data["pts"], thickness, wall))*1000),f"ap_bw{i}":round(width*1000),
                       f"ap_bh{i}":round(height*1000),f"ap_sill{i}":round(sill*1000),f"ap_lbl{i}":label})
     for key,value in state.items():
         st.session_state[key] = value
@@ -232,13 +252,13 @@ def project_download(current):
 
 def finishing_ui(rooms):
     from geometry import beslag_beregning
-    from finishing import plywood_cuts, plywood_plan, trim_order, grouped_trim_bars
+    from finishing import plywood_cuts, plywood_plan, trim_order, grouped_trim_bars, board_count
     from construction import floor_depth
     if st.button("Beregn beslag og gulvplate-kappliste",key="calculate_finishing"):
         st.session_state["show_finishing"] = True
     if not st.session_state.get("show_finishing"):
         return
-    st.subheader("Beslag og gulvfiberplater")
+    st.subheader("Beslag og gulvplater")
     trim_rows, board_rows = [], []
     trim_totals, board_totals = [], []
     for room in rooms:
@@ -260,18 +280,18 @@ def finishing_ui(rooms):
             cuts = plywood_cuts(inp.pts,w,l)
             import math
             waste = 0
-            order = len(cuts)
+            order = board_count(cuts)
             board_totals.append(dict(Rom=name,Plate="SUM",Deler_stk=len(cuts),Areal_m2=sum(c["Areal_m2"] for c in cuts),
                 Kapp_prosent=waste,Bestill_stk=order,Bestill_m2=order*w*l/1000000))
-            st.write(f"{name}: {len(cuts)} gulvfiberplater à {w} × {l} × 12 mm. Innenfor veggene, monteres etter veggene.")
-            fig = plywood_plan(inp.pts,w,l)
+            st.write(f"{name}: {order} gulvplater à {w} × {l} × 12 mm. Innenfor veggene, monteres etter veggene.")
+            fig = plywood_plan(inp.pts,w,l,PANEL_DB[inp.panel_key]['t']/1000)
             for cut in cuts:
-                board_rows.append(dict(Rom=name,**{k:v for k,v in cut.items() if k!="polygon"}))
+                board_rows.append(dict(Rom=name,**{k:v for k,v in cut.items() if k in ("Plate", "Bredde_mm", "Lengde_mm", "Areal_m2", "Råplate")}))
             st.pyplot(fig)
             st.download_button('Last ned gulvplateplan PDF', figur_som_pdf(fig,'Gulvplateplan'),
                                f'{name}-gulvplateplan.pdf','application/pdf',key=f'floor_plan_{room["id"]}')
             plt.close(fig)
-    st.caption("Beslag: vegghjørner og takkant på begge sider; utelatte vegger tas ut. Kappforslag uten skjøteoverlapp/kuttap. Gulvfiberplater: én råplate per del, uten prosentvis kapptillegg eller gjenbruk av avkapp. Kontroller skjøter og monteringskrav før bestilling.")
+    st.caption("Beslag: vegghjørner og takkant på begge sider; utelatte vegger tas ut. Kappforslag uten skjøteoverlapp/kuttap. Gulvplater: avkapp over 200 mm i begge retninger vurderes for gjenbruk, med 3 mm sagspor. Ingen prosentvis kapptillegg. Kontroller skjøter og monteringskrav før bestilling.")
     for title,rows,filename in (("Gulvplater",board_rows,"gulvplater-kapp.csv"),):
         if rows:
             frame = pd.DataFrame(grouped_trim_bars(rows) if title=="Beslag" else rows)
@@ -286,122 +306,46 @@ def finishing_ui(rooms):
 
 
 def assembly_plan(rooms):
-    from geometry import polygon_winding
-    from database import DOR_DB
+    from drawing_2d import stramo_plan, _tegn_fig_title_block
+    from montasje import lag_tegningsinfo
+    from construction import floor_outline
     from matplotlib.path import Path as PolygonPath
-    from matplotlib.patches import Arc
-    from drawing_2d import _dim_along_wall, _dh, _dv
-    from construction import wall_polygon
     import textwrap
-    fig,ax = plt.subplots(figsize=(13,9))
-    all_points = []
-    inputs = [world_input(room) for room in rooms]
-    room_paths = [PolygonPath(np.asarray(inp.pts)) for inp in inputs]
-    door_bounds = []
-    for inp in inputs:
-        points = np.asarray(inp.pts)
-        winding = polygon_winding(points)
-        for key,count,wall,offset,*hinge_side in inp.dorer:
-            if wall in inp.excluded_walls:
-                continue
-            direction = points[(wall+1)%len(points)]-points[wall]
-            direction /= np.linalg.norm(direction)
-            width = DOR_DB[key]["bw"]/1000
-            outward = winding*np.array([direction[1],-direction[0]])
-            right = bool(hinge_side and hinge_side[0] == "Høyre")
-            for index in range(count):
-                start = points[wall]+direction*(offset+index*(width+.2))
-                hinge = start+direction*width if right else start
-                closed_direction = -direction if right else direction
-                angles = np.linspace(0,np.pi/2,17)
-                swing = hinge+width*(np.cos(angles)[:,None]*closed_direction+np.sin(angles)[:,None]*outward)
-                envelope = np.vstack([swing,hinge])
-                door_bounds.append((envelope.min(axis=0)-.12,envelope.max(axis=0)+.12))
-    for ri,inp in enumerate(inputs):
-        pts = np.array(inp.pts)
-        all_points.extend(np.vstack([wall_polygon(pts,i,PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls)
-                         for i in range(len(pts)) if i not in inp.excluded_walls]))
-        winding = polygon_winding(pts)
-        color = "#74b8cf" if inp.rom_type=="Fryserom" else "#e9c96e"
-        ax.fill(pts[:,0],pts[:,1],color=color,alpha=.2)
-        # Choose an interior location with clearance from every wall, also in an L-room.
-        gx, gy = np.meshgrid(np.linspace(pts[:,0].min(), pts[:,0].max(), 31),
-                             np.linspace(pts[:,1].min(), pts[:,1].max(), 31))
-        candidates = np.column_stack([gx.ravel(), gy.ravel()])
-        candidates = candidates[PolygonPath(pts).contains_points(candidates, radius=-.01)]
-        clearance = np.full(len(candidates), np.inf)
-        for a, b in zip(pts, np.roll(pts, -1, axis=0)):
-            edge = b - a
-            t = np.clip((candidates - a) @ edge / (edge @ edge), 0, 1)
-            clearance = np.minimum(clearance, np.linalg.norm(candidates - a - t[:,None]*edge, axis=1))
-        label_at = candidates[np.argmax(clearance)] if len(candidates) else pts.mean(axis=0)
-        ax.text(*label_at, textwrap.fill(inp.navn or inp.rom_type, width=24),
-                ha="center",va="center",fontsize=10,color="#07384c",bbox=dict(fc="white",ec="none",alpha=.85))
-        for i,a in enumerate(pts):
-            b = pts[(i+1)%len(pts)]
-            omitted = i in inp.excluded_walls
-            if not omitted:
-                wall = wall_polygon(pts, i, PANEL_DB[inp.panel_key]["t"]/1000,
-                                          excluded_walls=inp.excluded_walls)
-                if wall is not None:
-                    ax.fill(wall[:,0],wall[:,1],color="#183b50")
-            ax.plot([a[0],b[0]],[a[1],b[1]],color="#a0a0a0" if omitted else "#183b50",
-                    lw=1 if omitted else 3,linestyle="--" if omitted else "-")
-            mid = (a+b)/2
-            ax.annotate(f"V{i+1}",mid,xytext=(4,4),
-                        textcoords="offset points",fontsize=7,color="#555")
-            if not omitted:
-                outward = winding*np.array([(b-a)[1], -(b-a)[0]])/np.linalg.norm(b-a)
-                door_widths = [DOR_DB[d[0]]["bw"]/1000 for d in inp.dorer if d[1] > 0 and d[2] == i]
-                lane = max(.48, max(door_widths, default=0)+.30)
-                dimension_at = mid+outward*lane
-                if not any(path.contains_point(dimension_at) for j,path in enumerate(room_paths) if j != ri):
-                    for _ in range(16):
-                        endpoints = np.array([a,b])+outward*lane
-                        low, high = endpoints.min(axis=0), endpoints.max(axis=0)
-                        if not any(np.all(high >= door_low) and np.all(low <= door_high) for door_low,door_high in door_bounds):
-                            break
-                        lane += .25
-                    _dim_along_wall(ax, a, b, f"{np.linalg.norm(b-a)*1000:.0f} mm innv.", offset=lane,
-                                    fs=9, col="#07384c", winding=winding, total=True)
-        for key,count,wall,offset,*hinge_side in inp.dorer:
-            if wall in inp.excluded_walls:
-                continue
-            width = DOR_DB[key]["bw"]/1000
-            a,b = pts[wall],pts[(wall+1)%len(pts)]
-            direction = (b-a)/np.linalg.norm(b-a)
-            for k in range(count):
-                start = a+direction*(offset+k*(width+.2))
-                end = start+direction*width
-                outward=winding*np.array([direction[1],-direction[0]])
-                edge=outward*PANEL_DB[inp.panel_key]['t']/1000
-                opening=np.array([start,end,end+edge,start+edge])
-                ax.fill(opening[:,0],opening[:,1],color='white',zorder=5)
-                ax.plot([start[0],end[0]],[start[1],end[1]],color="white",lw=5,zorder=6)
-                ax.plot([start[0],end[0]],[start[1],end[1]],color="#b53737",lw=1.5,zorder=7)
-                outward = winding * np.array([direction[1], -direction[0]])
-                right = bool(hinge_side and hinge_side[0] == "Høyre")
-                hinge = end if right else start
-                angle = np.degrees(np.arctan2(direction[1], direction[0])) + (180 if right else 0)
-                t1, t2 = (0, 90) if right else (-90, 0)
-                if winding < 0:
-                    t1, t2 = -t2, -t1
-                leaf = hinge + outward * width
-                ax.add_patch(Arc(hinge, width*2, width*2, angle=angle, theta1=t1, theta2=t2,
-                                 color="#315b7d", lw=1))
-                ax.plot([hinge[0],leaf[0]],[hinge[1],leaf[1]],color="#315b7d",lw=1)
-    if len(rooms) > 1 and all_points:
-        xy = np.asarray(all_points)
-        low, high = xy.min(axis=0), xy.max(axis=0)
-        outer_lane = max([DOR_DB[d[0]]["bw"]/1000 for inp in inputs for d in inp.dorer if d[1] > 0]+[.9])+1.30
-        _dh(ax, low[0], high[0], low[1], f"{(high[0]-low[0])*1000:.0f} mm utvendig",
-            ey=low[1]-outer_lane, fs=11, col="#07384c", total=True)
-        _dv(ax, low[1], high[1], high[0], f"{(high[1]-low[1])*1000:.0f} mm utvendig",
-            ex=high[0]+outer_lane, fs=11, col="#07384c", total=True)
-    ax.set_aspect("equal"); ax.margins(.14)
-    ax.set_title("Plantegning", fontweight="bold", color="#07384c")
-    ax.axis("off")
-    fig.tight_layout()
+    fig, ax = plt.subplots(figsize=(18,11))
+    bounds=[]
+    room_paths=[PolygonPath(np.asarray(world_input(r).pts)) for r in rooms]
+    for room_index,room in enumerate(rooms):
+        inp=world_input(room)
+        info=lag_tegningsinfo(inp, beregn_prosjekt(inp), "Plantegning")
+        thickness=PANEL_DB[inp.panel_key]['t']/1000
+        if len(rooms)==1:
+            plt.close(fig)
+            return stramo_plan(inp.pts,inp.hoyde_m,inp.panelbredde_m,inp.dorer,info,
+                               apninger=inp.apninger,wall_thickness=thickness,excluded_walls=inp.excluded_walls)
+        stramo_plan(inp.pts,inp.hoyde_m,inp.panelbredde_m,inp.dorer,info,
+                    apninger=inp.apninger,wall_thickness=thickness,excluded_walls=inp.excluded_walls,ax=ax,
+                    dimension_obstacles=[p for i,p in enumerate(room_paths) if i!=room_index])
+        pts=np.asarray(inp.pts)
+        bounds.extend(floor_outline(pts,thickness))
+        gx,gy=np.meshgrid(np.linspace(pts[:,0].min(),pts[:,0].max(),31),np.linspace(pts[:,1].min(),pts[:,1].max(),31))
+        candidates=np.column_stack([gx.ravel(),gy.ravel()])
+        candidates=candidates[PolygonPath(pts).contains_points(candidates,radius=-.01)]
+        clearance=np.full(len(candidates),np.inf)
+        for p,q in zip(pts,np.roll(pts,-1,axis=0)):
+            edge=q-p;t=np.clip((candidates-p)@edge/(edge@edge),0,1)
+            clearance=np.minimum(clearance,np.linalg.norm(candidates-p-t[:,None]*edge,axis=1))
+        at=candidates[np.argmax(clearance)] if len(candidates) else pts.mean(axis=0)
+        ax.text(*at,textwrap.fill(inp.navn,24),ha='center',va='center',fontsize=10,color='#07384c',
+                bbox=dict(fc='white',ec='none',alpha=.9))
+    if rooms:
+        info.update(navn="Tasty Fredrikstad" if all('Tasty' in r['input']['navn'] for r in rooms) else ' / '.join(r['input']['navn'] for r in rooms),
+                    tnr='SAM-01', A=sum(beregn_prosjekt(world_input(r))['ov']['A'] for r in rooms), P=sum(beregn_prosjekt(world_input(r))["ov"]["P"] for r in rooms))
+        _tegn_fig_title_block(fig,info)
+        pts=np.asarray(bounds);low,high=pts.min(axis=0),pts.max(axis=0)
+        ax.set_xlim(low[0]-2.1,high[0]+2.1);ax.set_ylim(low[1]-2.1,high[1]+2.1)
+    ax.set_title('Plantegning · Utvendige mål',color='#07384c',fontsize=14,fontweight='bold')
+    ax.set_aspect('equal');ax.axis('off')
+    fig.subplots_adjust(left=.02,right=.79,top=.94,bottom=.03)
     return fig
 
 

@@ -56,7 +56,7 @@ def pdf(path,story,first_page=1):
         chrome(c,doc,first_page)
     SimpleDocTemplate(str(path),pagesize=A4,leftMargin=44,rightMargin=44,topMargin=88,bottomMargin=50,
         title='Stramo standard FDV - paneler og beslag',author='Stramo',
-        subject='Revisjon 06 - 23.10.2026').build(story,onFirstPage=page_chrome,onLaterPages=page_chrome)
+        subject='Revisjon 08 - 26.10.2026').build(story,onFirstPage=page_chrome,onLaterPages=page_chrome)
 
 sources=[
  ('01_Paneler','01_Produktdatablad.pdf','Produktdatablad - PIR STANDARD','BALEX-pu-w-st-wall-sandwich-panel-polyurethane-core-2026-10-22.pdf'),
@@ -107,7 +107,7 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
       'Teknisk datablad og sikkerhetsdatablad der dette foreligger/kreves.',
       'Dokumentasjon på egnede underlag, temperaturgrenser, herding, rengjøring og utskifting.'],
       'Bekreft kompatibilitet med panelenes lakk, tetninger og planlagte rengjøringsmidler. Ikke angi fugemassen som godkjent for direkte matkontakt uten dokumentasjon.'),
-     ('05_Fiberplater','Gulvfiberplater','12 mm beskyttende gulvfiberplate, 1500 × 3000 mm',[
+     ('05_Fiberplater','Gulvplater','12 mm beskyttende gulvplate, 1500 × 3000 mm',[
       'Produsent, produktnavn, artikkelnummer, tykkelse og plateformat.',
       'Produktdatablad og monterings-/vedlikeholdsanvisning.',
       'Opplysninger om fukt- og temperaturegenskaper, eventuell overflatebehandling og belastning.'],
@@ -128,8 +128,8 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
     def front_story():
         return [p('Standard FDV-pakke','title'),p('Paneler og beslag til kjøle- og fryserom','heading'),
          p('Dokumentgrunnlag: BALEX PIR STANDARD og teknisk dokumentasjon for beslag. Pakken inneholder originaldokumenter og en kort Stramo-oversikt for bruk og vedlikehold.'),
-         p('Status ved utgivelse','sub'),p('Panel- og beslagsdokumentasjon er vedlagt. Egne seksjoner er reservert for skruer, fugemasse og 12 mm gulvfiberplater. Disse produktdokumentene legges til senere.'),
-         table([['Prosjektopplysninger','Fylles ut for aktuell leveranse'],['Prosjekt / adresse',project_name],['Prosjektnummer / rom',f'{project_number} / {chr(10).join(room_names)}'.strip(' /')],['Dokument / dato','Revisjon 06 / 23.10.2026'],['Byggherre / eier',''],['Leverandør / montør / kontakt',''],['Leveringsdato / overleveringsdato','']],[177,330]),
+         p('Status ved utgivelse','sub'),p('Panel- og beslagsdokumentasjon er vedlagt. Egne seksjoner er reservert for skruer, fugemasse og 12 mm gulvplater. Disse produktdokumentene legges til senere.'),
+         table([['Prosjektopplysninger','Fylles ut for aktuell leveranse'],['Prosjekt / adresse',project_name],['Prosjektnummer / rom',f'{project_number} / {chr(10).join(room_names)}'.strip(' /')],['Dokument / dato','Revisjon 08 / 26.10.2026'],['Byggherre / eier',''],['Leverandør / montør / kontakt',''],['Leveringsdato / overleveringsdato','']],[177,330]),
          p('Pakkens omfang','sub'),p('Dette er en standard delpakke for paneler, platebeslag og tilhørende festing, fuging og gulvbeskyttelse. Prosjektets tegninger og materialliste legges ved aktuell leveranse. Dører, trykkventiler, kjølemaskineri og elektro dokumenteres separat der de inngår.'),
          p('Bruk av pakken','sub'),p('Kontroller produktvalg og revisjoner mot faktisk leveranse. Leverandørens originalanvisninger gjelder. Denne standardpakken er ikke en godkjenning av en bestemt konstruksjon eller en fullstendig FDV for hele kjøleanlegget.'),PageBreak(),
          p('Dokumentoversikt','title'),p('Sidene nedenfor viser plasseringen i den samlede PDF-en. Originalvedleggene beholder sin egen sidenummerering. Bokmerker gir direkte tilgang til hver del.'),
@@ -141,7 +141,7 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
          p('Platebeslag','sub'),p('Prosjekterte profiler: innvendig vinkel 50 × 50 mm, utvendig vinkel 50 × 150 mm og U-kanal for 80 mm kjøleromspanel med 50 mm sider. Angitt utførelse: 0,6 mm stål, RAL 9010, 10 mm omknekk og 2500 mm lengde. Fryserommet har gulvbeslag i stedet for U-kanal.'),
          p('Bekreftet overflatebelegg for beslagene: PE25 polyesterlakk, 25 µm, RAL 9010, oppgitt av oppdragsgiver 22.10.2026. Beslagskatalogen dokumenterer ikke automatisk de prosjekttilpassede profilene ovenfor. Faktisk produsent og ståltype bekreftes mot leveransen; Stramos beslagstegninger vedlegges som geometrigrunnlag.'),
          p('Hygiene og miljø','sub'),p('Hygienesertifikatet omfatter PIR STANDARD i blant annet næringsmiddelbygg uten direkte kontakt med mat. EPD-en beskriver miljøegenskaper og erstatter ikke monterings- eller vedlikeholdsanvisninger.'),
-         p('Gulv i fryserom','sub'),p('Planlagt løsning er panelgulv på 22 mm lekter, vegger oppå panelgulvet og 12 mm gulvfiberplate, 1500 × 3000 mm, innenfor veggene. Ytelseserklæringen beskriver vegger og himlinger. Gulvets understøttelse og tillatte flate-/punktlaster må derfor dokumenteres særskilt for valgt oppbygging.'),PageBreak(),
+         p('Gulv i fryserom','sub'),p('Planlagt løsning er panelgulv på 22 mm lekter, vegger oppå panelgulvet og 12 mm gulvplate, 1500 × 3000 mm, innenfor veggene. Ytelseserklæringen beskriver vegger og himlinger. Gulvets understøttelse og tillatte flate-/punktlaster må derfor dokumenteres særskilt for valgt oppbygging.'),PageBreak(),
          p('Renhold og vedlikehold','title'),
          p('Grunnlag','sub'),p('Oppsummeringen bygger på monteringsanvisningen side 12 og 35 samt teknisk panelkatalog side 34. De fullstendige leverandøranvisningene følger vedlagt.'),
          table([['Oppgave','Rutine'],
@@ -150,10 +150,10 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
          ['Metallspon og urenheter','Fjern metallspon slik at de ikke korroderer og skader lakken. Monteringsanvisningen beskriver nylonbørste og egnet rengjøring. Unngå bensin/petroleumsprodukter som rengjøringsmiddel.'],
          ['Lakkskader','Utbedre skader med kompatibel reparasjonslakk etter leverandørens anvisning. Vurder større skader med leverandøren.'],
          ['Skruer og tetninger','Løse festemidler ettertrekkes eller skiftes etter produktets anvisning; korroderte festemidler skiftes. Skadde eller manglende tetninger utbedres. Produktspesifikke anvisninger ettersendes.'],
-         ['Gulvfiberplate','Kontroller synlige skader og fuktpåvirkning. Rengjøringsmiddel, fukttoleranse og vedlikeholdsintervall fastsettes når valgt plate er dokumentert.']],[115,392]),
+         ['Gulvplate','Kontroller synlige skader og fuktpåvirkning. Rengjøringsmiddel, fukttoleranse og vedlikeholdsintervall fastsettes når valgt plate er dokumentert.']],[115,392]),
          p('Skader og avvik','sub'),p('Registrer sted, dato, skade og tiltak. Kontakt ansvarlig leverandør ved lekkasje, fukt i panelkjerne, løse beslag eller skader som ikke kan utbedres etter anvisningene.'),PageBreak(),
          p('Leveransekontroll og logg','title'),
-         table([['Kontrollpunkt','Notat / dokumentreferanse'],['Paneler: overflate','PE25 polyesterlakk, 25 µm, RAL 9010. Bekreftet 22.10.2026.'],['Beslag: overflate','PE25 polyesterlakk, 25 µm, RAL 9010. Produsent og ståltype kontrolleres mot leveransen.'],['Skruer: produkt og dokumenter','Ettersendes'],['Fugemasse: produkt og dokumenter','Ettersendes'],['12 mm gulvfiberplate: produkt og dokumenter','Ettersendes'],['Gulvoppbygging og belastning','Bekreftes for prosjektet'],['Prosjekttegninger / materialliste','Vedlegges aktuell leveranse'],['Kontrollert av / dato / revisjon','']],[270,237]),
+         table([['Kontrollpunkt','Notat / dokumentreferanse'],['Paneler: overflate','PE25 polyesterlakk, 25 µm, RAL 9010. Bekreftet 22.10.2026.'],['Beslag: overflate','PE25 polyesterlakk, 25 µm, RAL 9010. Produsent og ståltype kontrolleres mot leveransen.'],['Skruer: produkt og dokumenter','Ettersendes'],['Fugemasse: produkt og dokumenter','Ettersendes'],['12 mm gulvplate: produkt og dokumenter','Ettersendes'],['Gulvoppbygging og belastning','Bekreftes for prosjektet'],['Prosjekttegninger / materialliste','Vedlegges aktuell leveranse'],['Kontrollert av / dato / revisjon','']],[270,237]),
          p('Vedlikeholdslogg','sub'),table([['Dato / rom','Kontroll, avvik og tiltak','Utført av']]+[['','',''] for _ in range(5)],[90,317,100]),
          p('Dokumenthenvisninger','sub'),p('Produktdata: paneldatablad side 3-5. Overflater: teknisk panelkatalog side 15. Vedlikehold: monteringsanvisning side 12 og 35. Bruksområde: ytelseserklæring side 1 og hygienesertifikat. Beslag: teknisk beslagskatalog og prosjektets egne tegninger.')]
     front=OUT/'00_FDV_oversikt.pdf'
@@ -175,14 +175,14 @@ def build_standard_fdv(output_dir=None, source_dir=None, *, project_name="", pro
         assert len(PdfReader(path).pages)==1
     writer=PdfWriter();writer.append(front,outline_item='Stramo - oversikt og vedlikehold')
     for e in entries:writer.append(e['path'],outline_item=e['title'],import_outline=False)
-    writer.add_metadata({'/Title':'Stramo standard FDV - paneler og beslag','/Author':'Stramo','/Subject':'Revisjon 06 - 23.10.2026. Felles FDV i app og leveranse. PE25 polyesterlakk, 25 µm, på paneler og beslag'})
+    writer.add_metadata({'/Title':'Stramo standard FDV - paneler og beslag','/Author':'Stramo','/Subject':'Revisjon 08 - 26.10.2026. Felles FDV i app og leveranse. PE25 polyesterlakk, 25 µm, på paneler og beslag'})
     merged=OUT/'Stramo-standard-FDV.pdf'
     with merged.open('wb') as f:writer.write(f)
     assert len(PdfReader(merged).pages)==next_page-1
     with (OUT/'Dokumentregister.csv').open('w',encoding='utf-8-sig',newline='') as f:
         w=csv.writer(f,delimiter=';');w.writerow(['Dokument','Status','Fil','Originalfil','PDF_startside','Sider','SHA256'])
         for e in entries:w.writerow([e['title'],e['status'],str(e['path'].relative_to(OUT)),e['original'],e['start'],e['pages'],hashlib.sha256(e['path'].read_bytes()).hexdigest()])
-    (OUT/'LES-MEG.txt').write_text('STRAMO STANDARD FDV - revisjon 06, 23.10.2026\n\nRevisjon 06: Forenklet bunntekst med faktisk sidetall, omknekk-begrep og gulvfiberplater 1500 × 3000 × 12 mm.\nRevisjon 04: Samme FDV-pakke i app og leveranse, med prosjekt og valgte rom. Originalvedlegg beholdt.\nRevisjon 03: Oppdatert visuelt Stramo-oppsett.\nRevisjon 02: PE25 polyesterlakk, 25 µm, RAL 9010 er bekreftet for paneler og beslag.\nÅpne Stramo-standard-FDV.pdf for hele pakken med bokmerker.\n00_FDV_oversikt.pdf inneholder den korte oversikten.\nLeverandørdokumentene ligger uendret i mapper 01 og 02.\nMapper 03, 04 og 05 er reservert for skruer, fugemasse og 12 mm gulvfiberplater.\nFyll inn prosjektopplysninger og kontroller produktene mot leveransen.\nLegg ved prosjektets aktuelle tegninger og materialliste.\nOppdater Dokumentregister.csv og bygg samlet PDF på nytt ved supplering.\nDette er standarddelen for paneler og beslag, ikke full FDV for kjølemaskineri, elektro eller dører.\n',encoding='utf-8')
+    (OUT/'LES-MEG.txt').write_text('STRAMO STANDARD FDV - revisjon 08, 26.10.2026\n\nRevisjon 06: Forenklet bunntekst med faktisk sidetall, omknekk-begrep og gulvplater 1500 × 3000 × 12 mm.\nRevisjon 04: Samme FDV-pakke i app og leveranse, med prosjekt og valgte rom. Originalvedlegg beholdt.\nRevisjon 03: Oppdatert visuelt Stramo-oppsett.\nRevisjon 02: PE25 polyesterlakk, 25 µm, RAL 9010 er bekreftet for paneler og beslag.\nÅpne Stramo-standard-FDV.pdf for hele pakken med bokmerker.\n00_FDV_oversikt.pdf inneholder den korte oversikten.\nLeverandørdokumentene ligger uendret i mapper 01 og 02.\nMapper 03, 04 og 05 er reservert for skruer, fugemasse og 12 mm gulvplater.\nFyll inn prosjektopplysninger og kontroller produktene mot leveransen.\nLegg ved prosjektets aktuelle tegninger og materialliste.\nOppdater Dokumentregister.csv og bygg samlet PDF på nytt ved supplering.\nDette er standarddelen for paneler og beslag, ikke full FDV for kjølemaskineri, elektro eller dører.\n',encoding='utf-8')
     return merged
 
 

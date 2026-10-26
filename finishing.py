@@ -1,4 +1,4 @@
-"""Conservative cutting proposals: 2500 mm trims and one plywood blank per tile."""
+"""Cutting proposals for 2500 mm trims and reusable floor-board offcuts."""
 import math
 import re
 import numpy as np
@@ -65,20 +65,75 @@ def plywood_cuts(pts, width_mm=1500, length_mm=3000):
                     Merknad="Tilpasses polygon" if len(tile)!=4 else "Rektangulært kapp",
                     polygon=tile.tolist()))
         return rows
-    return min((layout(width_mm,length_mm),layout(length_mm,width_mm)),key=len)
+    options = [pack_boards(layout(w,h), width_mm, length_mm)
+               for w,h in ((width_mm,length_mm),(length_mm,width_mm))]
+    return min(options, key=lambda cuts: (board_count(cuts), len(cuts)))
 
 
-def plywood_plan(pts, width_mm=1500, length_mm=3000):
+def board_count(cuts):
+    return len({row['Råplate'] for row in cuts})
+
+
+def pack_boards(cuts, width_mm, length_mm, kerf_mm=3, reuse_min_mm=200):
+    """Rectangular bounding blanks, 90-degree rotation and guillotine cuts.
+
+    Only offcuts with BOTH usable dimensions strictly over 200 mm are reused.
+    Polygon-shaped waste is not assumed reusable. The 3 mm saw kerf is physical
+    cutting loss, not an added waste percentage. Coordinates permit verification.
+    """
+    results = []
+    for key in (lambda r:r['Bredde_mm']*r['Lengde_mm'],
+                lambda r:max(r['Bredde_mm'],r['Lengde_mm'])):
+        for split_vertical in (True, False):
+            free = []
+            packed = {}
+            sheets = 0
+            for row in sorted(cuts, key=key, reverse=True):
+                choices = []
+                for i,(sheet,x,y,w,h) in enumerate(free):
+                    for rotated,(a,b) in enumerate(((row['Bredde_mm'],row['Lengde_mm']),
+                                                    (row['Lengde_mm'],row['Bredde_mm']))):
+                        if a <= w and b <= h:
+                            choices.append((w*h-a*b, min(w-a,h-b), i, rotated, a,b))
+                if not choices:
+                    sheets += 1
+                    free.append((sheets,0,0,width_mm,length_mm))
+                    i = len(free)-1
+                    a,b = row['Bredde_mm'],row['Lengde_mm']
+                    rotated = 0
+                    if a > width_mm or b > length_mm:
+                        a,b=b,a; rotated=1
+                    if a > width_mm or b > length_mm:
+                        raise ValueError('Gulvplatedelen passer ikke råplateformatet.')
+                else:
+                    _,_,i,rotated,a,b=min(choices)
+                sheet,x,y,w,h=free.pop(i)
+                if split_vertical:
+                    rests=[(x+a+kerf_mm,y,w-a-kerf_mm,h),(x,y+b+kerf_mm,a,h-b-kerf_mm)]
+                else:
+                    rests=[(x+a+kerf_mm,y,w-a-kerf_mm,b),(x,y+b+kerf_mm,w,h-b-kerf_mm)]
+                free.extend((sheet,rx,ry,rw,rh) for rx,ry,rw,rh in rests
+                            if min(rw,rh)>reuse_min_mm)
+                packed[row['Plate']]=dict(row, Råplate=sheet, KappX_mm=x, KappY_mm=y,
+                                         Råbredde_mm=a, Rålengde_mm=b, Rotert=bool(rotated))
+            results.append([packed[row['Plate']] for row in cuts])
+    return min(results,key=board_count)
+
+
+def plywood_plan(pts, width_mm=1500, length_mm=3000, wall_thickness=.1):
     """Use the same numbered plate layout in the app and the drawing delivery."""
     import matplotlib.pyplot as plt
     cuts = plywood_cuts(pts, width_mm, length_mm)
     fig, ax = plt.subplots(figsize=(8, 9))
+    from construction import floor_outline
+    outer = np.asarray(floor_outline(pts,wall_thickness))*1000
+    ax.fill(outer[:,0],outer[:,1],facecolor='#e5ecef',edgecolor='#07384c',linewidth=1.5)
     for cut in cuts:
         polygon = np.asarray(cut['polygon']) * 1000
         ax.fill(polygon[:, 0], polygon[:, 1], facecolor='#dfd2e9', edgecolor='#526b78')
         center = polygon.mean(axis=0)
-        ax.text(*center, f"{cut['Plate']}\n{cut['Bredde_mm']} ×\n{cut['Lengde_mm']} mm",
-                ha='center', va='center', fontsize=10, color='#07384c')
+        ax.text(*center, f"{cut['Plate']}\nRåplate {cut['Råplate']}\n{cut['Bredde_mm']} ×\n{cut['Lengde_mm']} mm",
+                ha='center', va='center', fontsize=9, color='#07384c')
     ax.set_aspect('equal')
     ax.set_xlabel('mm'); ax.set_ylabel('mm')
     ax.set_title(f'Gulvplateplan – 12 mm\nPlateformat {width_mm} × {length_mm} mm', fontsize=14)

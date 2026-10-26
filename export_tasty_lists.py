@@ -45,11 +45,22 @@ for folder,selected in scopes:
 assert len(manifest)==14
 mat=project_materials(rooms)
 assert mat[mat.Produkt.str.startswith('U-kanal')].Stk.sum()==13
-assert mat[mat.Produkt.str.startswith('Gulvfiberplate')].Stk.sum()==9
-assert mat[mat.Gruppe=='Elementer'].Stk.sum()==77
-assert abs(mat[mat.Gruppe=='Elementer'].Vekt_kg.sum()-3442.2806)<1e-6
+assert mat[mat.Produkt.str.startswith('Gulvplate')].Stk.sum()==7
+assert mat[mat.Gruppe=='Elementer'].Stk.sum()==75
+assert abs(mat[mat.Gruppe=='Elementer'].Areal_m2.sum()-274.593)<1e-6
 (root/'Filkontroll.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
-(root/'LES-MEG.txt').write_text('TASTY FREDRIKSTAD - OPPDATERTE KAPPLISTER OG MATERIALLISTER\n23.10.2026 – revisjon 07\n\n01-Kjolerom: kjølerom alene, med fellesvegger utelatt som i prosjektet.\n02-Fryserom: fryserom alene, med alle fryseromsvegger.\n03-Hele-prosjektet: begge rom samlet, like produkter summert.\n\nNye regler: panelvekt beregnes automatisk fra Balex-produktdata (80 mm 11,8 kg/m²; 100 mm 12,6 kg/m²). Kun beslag, inkludert U-kanaler, får 10 % svinn/kapp, avrundet opp til hele 2500 mm lengder per rom og profil. Paneler og gulvplater har ikke prosentvis kapptillegg. Gulvplater følger eksisterende kapplan, én råplate per del.\n\nProsjektsum: 77 panelelementer, 282,953 m² bestilt panelareal, 3442,281 kg panelvekt uten tilbehør/emballasje. 41 innvendige vinkler, 41 utvendige vinkler, 13 U-kanaler, totalt 237,5 løpemeter. 9 gulvplater, 1500 × 3000 × 12 mm.\n\nProsjektgrunnlag: Tasty-Rom4-og-fryserom-med-dorer.json. Mål, dører og fellesvegger er beholdt.\n',encoding='utf-8')
+mat.to_csv(root/'Materialgrunnlag.csv',index=False,encoding='utf-8-sig')
+panels=mat[mat.Gruppe=='Elementer']
+(root/'LES-MEG.txt').write_text(
+    'TASTY FREDRIKSTAD – revisjon 08, 26.10.2026\n'
+    'Kjølerom, fryserom og hele prosjektet har egne mapper.\n'
+    f'Elementer: {int(panels.Stk.sum())} stk; {panels.Areal_m2.sum():.3f} m²; {panels.Vekt_kg.sum():.3f} kg panelvekt.\n'
+    'Beslag: 13 U-kanaler, 40 innvendige og 41 utvendige vinkler. 2500 mm per lengde.\n'
+    'Kun beslag får 10 % svinn før avrunding opp til hele lengder.\n'
+    'Gulvplater: 7 råplater 1500 × 3000 × 12 mm til 9 deler. Råplatenummer i kapplisten viser gjenbruk.\n'
+    'Avkapp brukes bare når begge restmål er over 200 mm og delen passer. Sagspor 3 mm.\n'
+    'Paneler bestilles i hele elementbredder på oppgitt lengde, uten prosentvis kapp.\n'
+    'Manglende manuelle tilbehørsmengder vises med strek og må fylles ut før komplett bestilling.\n',encoding='utf-8')
 for start in range(0,len(thumbs),9):
     sheet=Image.new('RGB',(1260,3*325),'#d9dfe3');draw=ImageDraw.Draw(sheet)
     for j,(label,im) in enumerate(thumbs[start:start+9]):

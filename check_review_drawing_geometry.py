@@ -68,7 +68,8 @@ for room in rooms:
         detail,ax = plt.subplots()
         _draw_one_panel(ax,local,panel,inp.panel_key,1)
         labels = [text.get_text() for text in ax.texts]
-        assert '270.0°' in labels and '90.0°' in labels
+        assert not any('°' in label for label in labels)
+        assert not any(label in ('F','RK','VK') for label in labels)
         assert not any('Snittvinkel' in label for label in labels)
         plt.close(detail)
 print('PASS: concave roof coverage, nonoverlapping triangles, clipped gray hatch, square wall ends, omitted neighbors and T3 cut/angle labels')

@@ -25,14 +25,14 @@ for kind,width in (('inner',50),('outer',150),('channel',80)):
     profile_png.cache_clear()
     with patch.object(Axes,'text',record_text),patch.object(Axes,'annotate',record_annotation):
         png=profile_png(kind,width)
-    assert labels.count('10 mm omknekk')==1 and not any('10 mm' in label for label in annotations)
-    assert str(width) in labels and '50' in labels
+    assert labels.count('10 mm')==2 and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
+    assert f'{width} mm' in labels and '50 mm' in labels
     assert Image.open(io.BytesIO(png)).size==(960,500)
 
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 combined=profile_rows(project_materials(rooms))
-assert sum(r['qty'] for r in combined)==95
-assert sum(r['lm'] for r in combined)==237.5
+assert sum(r['qty'] for r in combined)==94
+assert sum(r['lm'] for r in combined)==235
 for name,selection in [('prosjekt',rooms),('kjolerom',rooms[:1]),('fryserom',rooms[1:])]:
     rows=profile_rows(project_materials(selection))
     assert all(r['lm']==r['qty']*2.5 for r in rows)

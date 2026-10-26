@@ -15,6 +15,12 @@ VERSION = 1
 
 
 def form_points(form):
+    points = _form_points(form)
+    dx, dy = form.get("origin_mm", [0, 0])
+    return [(x+dx/1000, y+dy/1000) for x,y in points]
+
+
+def _form_points(form):
     kind = form["kind"]
     if kind == "L-form":
         return transform_polygon(l_polygon(form["sides_mm"]), form["turns"], form["mirrored"])
@@ -105,7 +111,18 @@ def validate_room(room):
         if kind == "Femkant – avskåret hjørne":
             integer(form["cut_x_mm"],50,form["length_mm"])
             integer(form["cut_y_mm"],50,form["width_mm"])
+    basis = form.get("dimension_basis", "internal")
+    if basis not in ("internal", "external"):
+        raise ValueError("Ukjent målgrunnlag.")
+    origin = form.get("origin_mm", [0, 0])
+    if not isinstance(origin, list) or len(origin) != 2:
+        raise ValueError("Ugyldig formopprinnelse.")
+    for value in origin:
+        number(value, -1000000, 1000000)
     built = form_points(form)
+    if basis == "external":
+        from dimensions import inside_from_outside
+        built = inside_from_outside(built, PANEL_DB[data["panel_key"]]["t"]/1000)
     if len(built) != len(pts) or not np.allclose(built,pts,atol=1e-8,rtol=0):
         raise ValueError("Rommets mål og geometri stemmer ikke overens i prosjektfilen.")
     if len(data["dorer"]) > 4 or len(data.get("apninger") or []) > 8:

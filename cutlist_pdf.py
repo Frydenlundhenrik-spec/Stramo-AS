@@ -12,15 +12,15 @@ from project_file import world_input
 from kalkulasjon import beregn_prosjekt
 from database import PANEL_DB
 from construction import fixing_screw_count
-from finishing import plywood_cuts, trim_order
+from finishing import plywood_cuts, trim_order, board_count
 from purchase_summary import with_totals, grouped_panels, grouped_cuts
 
 
 MATERIAL_COLUMNS = {
     "Elementer": ["Produkt","Høyde_mm","Bredde_mm","Tykkelse_mm","Stk","Areal_m2"],
-    "Beslag": ["Produkt","Stk","Løpemeter"],
+    "Beslag": ["Produkt","Stk"],
     "Dører": ["Produkt","Stk"],
-    "Tilbehør": ["Produkt","Stk","Løpemeter","Areal_m2"],
+    "Tilbehør": ["Produkt","Stk"],
 }
 
 
@@ -49,8 +49,8 @@ def project_materials(rooms):
             rows.append(dict(Gruppe="Beslag",Produkt=label+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",Stk=qty,Løpemeter=qty*2.5))
         if inp.rom_type=="Fryserom":
             w,l=form.get("plywood_width_mm",1500),form.get("plywood_length_mm",3000)
-            qty=len(plywood_cuts(inp.pts,w,l))
-            rows.append(dict(Gruppe="Tilbehør",Produkt=f"Gulvfiberplate 12 mm – {w} × {l} mm",Stk=qty,Areal_m2=qty*w*l/1e6))
+            qty=board_count(plywood_cuts(inp.pts,w,l))
+            rows.append(dict(Gruppe="Tilbehør",Produkt=f"Gulvplate 12 mm – {w} × {l} mm",Stk=qty,Areal_m2=qty*w*l/1e6))
         quantities=form.get("accessory_quantities",{})
         for key,label,column in (("fugemasse","Fugemasse","Stk"),("skum","Skum","Stk"),
                                  ("pakninger","Pakninger","Løpemeter"),("alarm","Alarm","Stk")):
@@ -114,6 +114,8 @@ def cutting_pdf(rooms, kind="alle"):
         text_columns=set(text_weights)|{"Plate","ID","Del"}
         weights=[text_weights.get(c,1) for c in frame.columns]
         widths=[(page_w-56)*w/sum(weights) for w in weights]
+        if category in ("Beslag", "Dører", "Tilbehør"):
+            widths=[(page_w-56)*.85, (page_w-56)*.15]
         header_style=ParagraphStyle("table_header",parent=normal,fontName=bold,textColor=colors.white,fontSize=7,leading=10)
         total_style=ParagraphStyle("table_total",parent=normal,fontName=bold,textColor=colors.white)
         def cell(text,col,style):
@@ -154,16 +156,16 @@ def cutting_pdf(rooms, kind="alle"):
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
             if title=="Elementer":
-                section("Materialliste – elementer")
+                section("Elementer")
             elif not accessory_page:
                 section("Materialliste")
                 accessory_page=True
             table(frame,title)
     if kind in ("alle","elementer") and rooms:
-        section("Elementkappliste – like dimensjoner summert")
+        section("Elementliste")
         story.append(para("Ferdige deler med samme høyde, bredde og tykkelse summeres på én linje. Paneltyper holdes adskilt. Vekt er estimert når leverandørvekt ikke er oppgitt.",note))
         table(with_totals(grouped_cuts(rooms),["Antall_stk","Areal_m2","Vekt_kg"],"Panel"))
-        section("Elementbestilling – like dimensjoner summert")
+        section("Elementbestilling")
         story.append(para("Lengder leveres på mål. Antallet følger beregnet behov uten prosentvis kapptillegg. Én råplate per element; avkapp deles ikke mellom elementer. Vekt merket ESTIMAT gjelder bare paneler, uten dører, beslag, gulvplater og emballasje.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))
     if kind in ("alle","beslag","beslagprofiler"):
@@ -188,9 +190,9 @@ def cutting_pdf(rooms, kind="alle"):
             form=room["form"];w,l=form.get("plywood_width_mm",1500),form.get("plywood_length_mm",3000)
             waste=0;cuts=plywood_cuts(inp.pts,w,l)
             section(f"Gulvplatekappliste – {inp.navn}")
-            story.append(para(f"Gulvfiberplate 12 mm, råplate {w} × {l} mm. Monteres innenfor veggene. Én råplate per del, uten prosentvis kapptillegg eller gjenbruk av avkapp; X/Y er plassering i prosjektets koordinatsystem.",note))
-            table(pd.DataFrame([{k:v for k,v in r.items() if k not in ("polygon","Tykkelse_mm")} for r in cuts]))
-            qty=len(cuts)
+            story.append(para(f"Gulvplate 12 mm, råplate {w} × {l} mm. Monteres innenfor veggene. Råplatenummer viser hvilke deler som kappes av samme plate. Avkapp over 200 mm i begge retninger vurderes for gjenbruk, med 3 mm sagspor.",note))
+            table(pd.DataFrame([{k:v for k,v in r.items() if k in ("Plate", "Bredde_mm", "Lengde_mm", "Areal_m2", "Råplate")} for r in cuts]))
+            qty=board_count(cuts)
             sums.append(dict(Rom=inp.navn,Deler_stk=len(cuts),Netto_m2=sum(r["Areal_m2"] for r in cuts),
                 Kapp_prosent=waste,Bestill_hele_plater=qty,Bestill_m2=qty*w*l/1e6))
         if sums:
@@ -234,7 +236,7 @@ def material_downloads(rooms, all_rooms=True):
     import streamlit as st
     if not rooms:return
     scope = "hele prosjektet" if all_rooms else "valgt rom"
-    st.subheader("Materialliste – " + scope + " – like produkter summert")
+    st.subheader("Elementliste")
     frame=project_materials(rooms)
     for title,part in material_tables(frame):
         display=part.rename(columns={"Produkt":"Produkt" if title=="Elementer" else title,"Stk":"Antall (stk)","Høyde_mm":"Høyde / lengde (mm)",

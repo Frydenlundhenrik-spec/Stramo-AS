@@ -12,6 +12,7 @@ from matplotlib.path import Path
 import matplotlib.patheffects as pe
 from database import PANEL_DB, DOR_DB
 from geometry import wall_lengths, ensure_ccw, Point, door_dimensions, polygon_winding
+from dimensions import exterior_door
 from panel_engine import generate_roof_floor_panels, main_axis_from_longest_wall
 from branding import logo_bilde, logo_sideforhold
 
@@ -115,69 +116,23 @@ def _side_label(ax, pts_a, i, nn, fs=5.5, avstand=0.38):
             bbox=dict(fc="white", ec="none", pad=0.2))
 
 
-def _corner_angle(ax, pts_a, i, radius=0.22, fs=5.8, vis_utvendig=True):
-    """
-    Tegner vinkelmerke ved hjørne i, med innvendig og utvendig grad.
-
-    Innsiden ligger til venstre for gangretningen i et CCW-polygon. Den
-    innvendige vinkelen er derfor sveipet mot klokka fra retningen mot neste
-    hjørne til retningen mot forrige (motsatt vei i et CW-polygon). Det gir
-    riktig verdi også for innadgående hjørner, f.eks. i L-formede rom.
-
-    Den utvendige vinkelen er resten av sirkelen, altså 360° − innvendig.
-    Det er vinkelen man måler på utsiden av hjørnet.
-    """
-    nn  = len(pts_a)
-    pc  = pts_a[i]
-    pm  = pts_a[(i - 1) % nn]
-    pn  = pts_a[(i + 1) % nn]
-    v1  = pm - pc
-    v2  = pn - pc
-    L1  = np.linalg.norm(v1); L2 = np.linalg.norm(v2)
-    if L1 < 1e-6 or L2 < 1e-6:
+def _corner_angle(ax, pts_a, i, radius=0.16, fs=8, vis_utvendig=True):
+    """An unlabelled square only at a convex right angle."""
+    pc = np.asarray(pts_a[i], float)
+    prev = np.asarray(pts_a[i-1], float)-pc
+    nxt = np.asarray(pts_a[(i+1)%len(pts_a)], float)-pc
+    if min(np.linalg.norm(prev), np.linalg.norm(nxt)) < 1e-8:
         return
-    v1n = v1 / L1; v2n = v2 / L2
-
-    a_prev = math.degrees(math.atan2(v1n[1], v1n[0]))   # mot forrige hjørne
-    a_next = math.degrees(math.atan2(v2n[1], v2n[0]))   # mot neste hjørne
-
-    start = a_next if _polygon_ccw(pts_a) else a_prev
-    slutt = a_prev if _polygon_ccw(pts_a) else a_next
-    ang   = (slutt - start) % 360
-    if ang < 1e-6:
-        ang = 360.0
-
-    ax.add_patch(Arc(tuple(pc), radius*2, radius*2,
-                     angle=0, theta1=start, theta2=start + ang,
-                     color="#555", lw=0.7, zorder=12))
-    # Etikett midt i vinkelbuen – havner alltid på innsiden av rommet
-    a_mid  = math.radians(start + ang / 2)
-    lx     = pc[0] + (radius + 0.15) * math.cos(a_mid)
-    ly     = pc[1] + (radius + 0.15) * math.sin(a_mid)
-    ax.text(lx, ly, f"{ang:.1f}°", ha="center", va="center",
-            fontsize=fs, color="#333", zorder=13,
-            bbox=dict(fc="white", ec="none", pad=0.2))
-
-    # På rette (90°) hjørner er utvendig vinkel alltid 270° og gir ingen ny
-    # informasjon – den vises derfor kun på skrå hjørner, der den faktisk
-    # varierer og er nyttig å lese av.
-    if not vis_utvendig or abs(ang - 90.0) < 0.05:
+    u, v = prev/np.linalg.norm(prev), nxt/np.linalg.norm(nxt)
+    turn = -u[0]*v[1]+u[1]*v[0]
+    if abs(float(u@v)) > 1e-6 or polygon_winding(pts_a)*turn <= 0:
         return
-
-    # Utvendig vinkel: resten av sirkelen, med bue og etikett på utsiden.
-    r_ut = radius * 1.55
-    ax.add_patch(Arc(tuple(pc), r_ut*2, r_ut*2,
-                     angle=0, theta1=start + ang, theta2=start + 360,
-                     color="#999", lw=0.6, linestyle=(0, (2, 2)), zorder=12))
-    a_ut = math.radians(start + ang / 2 + 180)
-    ux   = pc[0] + (r_ut + 0.17) * math.cos(a_ut)
-    uy   = pc[1] + (r_ut + 0.17) * math.sin(a_ut)
-    ax.text(ux, uy, f"{360 - ang:.1f}°", ha="center", va="center",
-            fontsize=fs * 0.85, color="#777", style="italic", zorder=13,
-            bbox=dict(fc="white", ec="none", pad=0.2))
+    r = min(radius, np.linalg.norm(prev)*.2, np.linalg.norm(nxt)*.2)
+    square = np.array([pc+u*r, pc+(u+v)*r, pc+v*r])
+    ax.plot(square[:,0], square[:,1], color=TOTAL_DIM_COL, lw=.8, zorder=12)
 
 
-def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0):
+def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0, height_mm=None, side=1):
     """Chain dimensions from both wall corners, retaining the opening width."""
     start, _, end, _ = door_dimensions(wall_length, offset_m, dw)
     angle = math.degrees(math.atan2(dx_n[1], dx_n[0]))
@@ -193,9 +148,9 @@ def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0):
         mid = (qa+qb)/2 + wall_perp*.07
         ax.text(*mid, label, rotation=angle, ha="center", va="center", fontsize=6,
                 color=color, zorder=12, bbox=dict(fc="white",ec="none",pad=.4))
-    offset = .60 + lane*.60
+    offset = (.60 + lane*.60)*side
     dimension(0,start,offset,f"{start*1000:.0f} mm", "#555")
-    dimension(start,start+dw,offset,f"Dør {dw*1000:.0f} mm", RED)
+    dimension(start,start+dw,offset,f"{dw*1000:.0f} × {height_mm} mm" if height_mm else f"Dør {dw*1000:.0f} mm", TOTAL_DIM_COL)
     dimension(start+dw,wall_length,offset,f"{end*1000:.0f} mm", "#555")
 
 
@@ -288,7 +243,7 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
 
 # ══ PLANTEGNING ══════════════════════════════════════════════════════════════
 
-def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_thickness=0.09):
+def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_thickness=0.09, excluded_walls=(), ax=None, dimension_obstacles=()):
     """
     Detaljert plantegning:
     • Vegger med element-oppdeling og nummerering
@@ -301,7 +256,11 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     xs, ys = pts_a[:, 0], pts_a[:, 1]
     wls    = wall_lengths(pts)
 
-    fig, ax = plt.subplots(figsize=(18, 11))
+    standalone = ax is None
+    if standalone:
+        fig, ax = plt.subplots(figsize=(18, 11))
+    else:
+        fig = ax.figure
     fig.patch.set_facecolor("white"); ax.set_facecolor("white")
 
     # Bakgrunnsbilde
@@ -318,10 +277,10 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     WT = wall_thickness
 
     # All views use the same physical panel spans and corner joints.
-    for panel in wall_panel_layout(pts,round(pw_m*1000),WT):
+    for panel in wall_panel_layout(pts,round(pw_m*1000),WT,excluded_walls):
         i=panel['wall']
         outline=wall_panel_polygon(pts,i,panel['start_mm']/1000,
-            (panel['start_mm']+panel['width_mm'])/1000,WT)
+            (panel['start_mm']+panel['width_mm'])/1000,WT,excluded_walls)
         ax.add_patch(MplPolygon(outline,closed=True,facecolor=WALL_FILL,
                                 edgecolor='black',hatch='////',linewidth=1.1,zorder=4))
         direction=(pts_a[(i+1)%nn]-pts_a[i])/wls[i]
@@ -334,7 +293,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     door_cursors = {}
     for entry in dorer:
         dk, ant, wall_idx, offset_m, hengsel = _door_entry(entry)
-        if ant <= 0 or wall_idx >= nn or wls[wall_idx] < 1e-6:
+        if wall_idx in excluded_walls or ant <= 0 or wall_idx >= nn or wls[wall_idx] < 1e-6:
             continue
         p1d   = pts_a[wall_idx]; p2d = pts_a[(wall_idx+1) % nn]
         vL    = wls[wall_idx]
@@ -390,7 +349,12 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
                     markersize=3.0, color=WALL_EDGE, zorder=8)
 
             # Mål-piler: hjørne→dør og dørbredde
-            _door_dim(ax, p1d, dx_n, cursor, dw, -perp, vL, idx_d)
+            from dimensions import exterior_door
+            outer_start, outer_length, outer_offset = exterior_door(pts, WT, wall_idx, cursor)
+            middle = outer_start + dx_n*outer_length/2 - perp*.60
+            side = -1 if any(path.contains_point(middle) for path in dimension_obstacles) else 1
+            _door_dim(ax, outer_start, dx_n, outer_offset, dw, -perp, outer_length, idx_d,
+                      height_mm=DOR_DB[dk]["bh"], side=side)
 
             cursor += dw + 0.20
         door_cursors[wall_idx] = cursor
@@ -435,39 +399,35 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
         ax.annotate(f"H{i+1}", pts_a[i], xytext=(5,5), textcoords="offset points",
                     fontsize=6, color="#1a3a5c", zorder=15)
 
-    # ── Målsetting ────────────────────────────────────────────────────────────
-    xmn, xmx = xs.min(), xs.max(); ymn, ymx = ys.min(), ys.max()
-    DIM_OFF = 0.55
-
-    # Ytre totalmål. Høyde-målet må stanse klart før tittelblokken (som
-    # starter 0.85 til høyre for xmx) – ellers stipler linjen helt inn i
-    # boksen og ser ut som to streker som stikker ut av rammen.
-    _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm innvendig", ey=ymn - 1.65, fs=10, total=True)
-    _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm innvendig", ex=xmx + 1.65, fs=10, total=True)
-
-    outer=np.vstack([wall_polygon(pts,i,WT) for i in range(nn)])
-    lo,hi=outer.min(axis=0),outer.max(axis=0)
-    ax.text((xmn+xmx)/2,ymx+1.55,
-            f"Yttermål {round((hi[0]-lo[0])*1000)} × {round((hi[1]-lo[1])*1000)} mm",
-            ha='center',fontsize=10,fontweight='bold',color=TOTAL_DIM_COL)
-
-    # Per-vegg mål (offset 0.30 utover fra veggen)
+    # All plan dimensions and extension lines originate at OUTSIDE corners.
+    outer = np.asarray(floor_outline(pts, WT))
+    xmn, ymn = outer.min(axis=0); xmx, ymx = outer.max(axis=0)
+    if standalone:
+        _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn-1.65, fs=10, total=True)
+        _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx+1.65, fs=10, total=True)
     for i in range(nn):
-        p1 = pts_a[i]; p2 = pts_a[(i+1)%nn]; L = wls[i]
-        if L < 0.05:
+        p1, p2 = outer[i], outer[(i+1)%nn]
+        length = np.linalg.norm(p2-p1)
+        full_width = np.isclose(abs(p2[0]-p1[0]), xmx-xmn) and np.isclose(p1[1],p2[1])
+        full_height = np.isclose(abs(p2[1]-p1[1]), ymx-ymn) and np.isclose(p1[0],p2[0])
+        if standalone and (full_width or full_height):
             continue
-        full_width = abs(p2[0]-p1[0]) > 1e-6 and np.isclose(abs(p2[0]-p1[0]), xmx-xmn) and np.isclose(p1[1],p2[1])
-        full_height = abs(p2[1]-p1[1]) > 1e-6 and np.isclose(abs(p2[1]-p1[1]), ymx-ymn) and np.isclose(p1[0],p2[0])
-        if full_width or full_height:
-            continue  # Overall clear dimensions are already shown once per axis.
-        total = full_width or full_height
+        if not standalone and i in excluded_walls:
+            continue
         has_door = any(_door_entry(d)[2] == i and _door_entry(d)[1] > 0 for d in dorer)
-        _dim_along_wall(ax, p1, p2, f"{L*1000:.0f} mm", offset=1.65 if has_door else 0.45,
-                        fs=10 if total else 8, winding=polygon_winding(pts_a), total=total)
+        lane = 1.65 if has_door else .45
+        outward = polygon_winding(pts_a)*np.array([(p2-p1)[1],-(p2-p1)[0]])/length
+        if not standalone and any(path.contains_point((p1+p2)/2+outward*lane) for path in dimension_obstacles):
+            continue
+        _dim_along_wall(ax, p1, p2, f"{length*1000:.0f} mm", offset=1.65 if has_door else .45,
+                        fs=10 if full_width or full_height else 8,
+                        winding=polygon_winding(pts_a), total=full_width or full_height)
 
+    if not standalone:
+        return fig
     _tegn_fig_title_block(fig, info)
     ax.text((xmn+xmx)/2, ymn - 2.05,
-            f"PLANTEGNING  –  {info['maal']}",
+            f"PLANTEGNING  –  {info['maal']}  ·  Utvendige mål",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
 
     ax.set_xlim(xmn - 2.0, xmx + 2.1)
@@ -491,7 +451,7 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
     pts_a  = np.array(roof_outline(pts,PANEL_DB[panel_key]["t"]/1000,rom_type), dtype=float)
     nn     = len(pts_a)
     xs, ys = pts_a[:, 0], pts_a[:, 1]
-    wls    = wall_lengths(pts)
+    wls    = wall_lengths(pts_a)
     pw_mm  = round(pw_m * 1000)
     WT     = PANEL_DB[panel_key]["t"] / 1000
 
@@ -719,9 +679,12 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
             handle_y = floor_offset + min(1.0, dh * 0.5)
             ax.plot([handle_x], [handle_y], marker="o", markersize=4,
                     color=RED, zorder=7)
-            # Mål hjørne→dør
-            _dh(ax, 0, cursor, -0.25, f"{round(cursor*1000)} mm", ey=-0.25, col="#555", fs=5.5)
-            _dh(ax, cursor+dw, L, -.25, f"{round((L-cursor-dw)*1000)} mm", ey=-.25, col="#555", fs=5.5)
+            # Dørmål fra begge utvendige hjørner.
+            _, outside_length, outside_offset = exterior_door(pts, wall_thickness, vegg_idx, cursor)
+            outside_start = cursor-outside_offset
+            outside_end = outside_start+outside_length
+            _dh(ax, outside_start, cursor, -.25, f"{round(outside_offset*1000)} mm", ey=-.25, col="#555", fs=5.5)
+            _dh(ax, cursor+dw, outside_end, -.25, f"{round((outside_length-outside_offset-dw)*1000)} mm", ey=-.25, col="#555", fs=5.5)
             # Dørbredde
             _dh(ax, cursor, cursor+dw, -0.45, f"{d['bw']} mm", ey=-0.45, col=RED, fs=5.5)
             # Dørhøyde
@@ -785,7 +748,7 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
         _dh(ax, x, x+w, H, f"{round(w*1000)}", ey=H + 0.20, fs=5.5)
 
     ax.text(L/2, H + 0.55,
-            f"VEGG {vegg_idx+1}  –  {info['maal']}  (innvendig {L_mm} mm)",
+            f"VEGG {vegg_idx+1}  –  {info['maal']}",
             ha="center", va="bottom", fontsize=9, fontweight="bold", color=BLUE)
 
     # Tittelblokken må stå klar av høyde-målet til høyre (ex=L+0.90 + tekst).
@@ -839,7 +802,7 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
     rect(L, UC, WT, H, CPANEL, hatch="////", zo=3)
     inn_y0 = UC + (SPL if IS_FRYS else 0)
     rect(0, inn_y0, L, H-(inn_y0-UC), CWHITE, ec="#aaa", lw=0.4, zo=2)
-    rect(-WT if IS_FRYS else 0, UC+H, L+2*WT if IS_FRYS else L, TAK, CPANEL, hatch="////", zo=3)
+    rect(-WT, UC+H, L+2*WT, TAK, CPANEL, hatch="////", zo=3)
 
     n_vegg_el = math.ceil(H / pw_m)
     for pi in range(1, n_vegg_el):
@@ -880,15 +843,16 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
     lbl(L/2, UC+H+TAK/2,   "Tak", fs=6)
     if IS_FRYS:
         lbl(L/2, BATTEN_HEIGHT+GFL/2,  f"Gulvpanel {round(WT*1000)} mm",             fs=5.5, col="#2d6e2d")
-        lbl(L/2, UC+SPL/2,     "Gulvfiberplate 12 mm", fs=5.5, col="#7a5c20")
+        lbl(L/2, UC+SPL/2,     "Gulvplate 12 mm", fs=5.5, col="#7a5c20")
 
 
 def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
                  vegg_idx=0, seksjon="A-A", apninger=None):
     WT     = PANEL_DB[panel_key]["t"] / 1000
     pts_a  = np.array(pts); nn = len(pts_a)
-    direction = pts_a[(vegg_idx+1)%nn] - pts_a[vegg_idx]
-    L = float(np.linalg.norm(direction))
+    outside = np.asarray(floor_outline(pts, WT))
+    direction = outside[(vegg_idx+1)%nn] - outside[vegg_idx]
+    L = float(np.linalg.norm(direction))-2*WT
     vl_left  = f"V{vegg_idx+1}"
     vl_right = "prinsipp"
 
@@ -936,9 +900,9 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     _dh(ax, L, L+WT, 0, f"{WT_mm} mm",                 ey=-DIM_OFF-0.55)
 
     # ── Vertikal mål ──────────────────────────────────────────────────────────
-    _dv(ax, 0, UC+H+TAK, L,
-        f"{round((UC+H+TAK)*1000)} mm tot.", ex=L+DIM_OFF+0.35, total=True, fs=10)
-    _dv(ax, UC,   UC+H,            L, f"{H_mm} mm",     ex=L+DIM_OFF)
+    _dv(ax, 0, UC+H+TAK, L+WT,
+        f"{round((UC+H+TAK)*1000)} mm utvendig", ex=L+DIM_OFF+0.35, total=True, fs=10)
+    _dv(ax, UC+SPL, UC+H, 0, f"{round((H-SPL)*1000)} mm innvendig", ex=-DIM_OFF-0.38)
     if IS_FRYS:
         _dv(ax, 0, UC, L, f"{round(UC*1000)} mm gulvoppbygging", ex=L+DIM_OFF)
     else:
@@ -946,11 +910,8 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     _dv(ax, UC+H, UC+H+TAK,        L, f"{WT_mm} mm tak",ex=L+DIM_OFF)
 
     if IS_FRYS:
-        ax.text(L/2, -1.05, f"Gulv: 22 mm lekter + {round(WT*1000)} mm panel; vegger på panel, 12 mm gulvfiberplate innenfor",
+        ax.text(L/2, -1.05, f"Gulv: 22 mm lekter + {round(WT*1000)} mm panel; vegger på panel, 12 mm gulvplate innenfor",
                 ha="center", fontsize=8, color="#365c37")
-        inn_brutto = H - SPL
-        _dv(ax, UC+SPL, UC+H,   0,
-            f"{round(inn_brutto*1000)} mm fri h.", ex=-DIM_OFF-0.38)
 
     # ── Skrå hjørner ──────────────────────────────────────────────────────────
     pts_ccw = ensure_ccw(pts); a_ccw = np.array(pts_ccw)
@@ -1031,8 +992,8 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
 
     # ── Panelform ─────────────────────────────────────────────────────────────
     is_kapp = "kapp" in panel.kind.lower() or "start" in panel.kind.lower()
-    fc = "#cce4f7" if not is_kapp else "#fde4c8"
-    ec = BLUE     if not is_kapp else ORANGE
+    fc = "#edf3f5"
+    ec = TOTAL_DIM_COL
 
     ax.add_patch(MplPolygon(local_pts, closed=True, facecolor=fc,
                              edgecolor=ec, linewidth=1.8, zorder=2))
@@ -1078,7 +1039,7 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
             perp = -perp
 
         kind = _edge_kind(local_pts, panel.width_mm, i)
-        dim_col = "#c0392b" if "vinklet" in kind else ("#2980b9" if "fabrikk" in kind else "#2d6e2d")
+        dim_col = TOTAL_DIM_COL
         dim_off = 0.50 if L_m < 0.40 else 0.23
 
         # Forlengelseslinjer
@@ -1103,65 +1064,8 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
                 color=dim_col, fontweight="bold", zorder=8,
                 bbox=dict(fc="white", ec="none", pad=0.3, alpha=0.9))
 
-        # Kant-type label (vist langs kanten inne)
-        kind_lbl = {"fabrikk": "F", "rett kapp": "RK", "vinklet kapp": "VK"}.get(kind, "?")
-        kind_col = {"F": "#2980b9", "RK": "#2d6e2d", "VK": "#c0392b"}.get(kind_lbl, "#555")
-        ax.text(mid[0] - perp[0]*(0.22 if L_m < 0.40 else 0.06), mid[1] - perp[1]*(0.22 if L_m < 0.40 else 0.06),
-                kind_lbl, ha="center", va="center", fontsize=8,
-                color=kind_col, fontweight="bold", zorder=9,
-                bbox=dict(fc="white", ec=kind_col, pad=1.5, linewidth=0.6, alpha=0.85))
-
-    # ── Vinkler ved alle hjørner ───────────────────────────────────────────────
-    corner_notes = []
     for i in range(n):
-        pc = local_pts[i]; pm = local_pts[(i-1)%n]; pn = local_pts[(i+1)%n]
-        v1 = pm - pc; v2 = pn - pc
-        L1 = np.linalg.norm(v1); L2 = np.linalg.norm(v2)
-        if L1 < 0.001 or L2 < 0.001:
-            continue
-        v1n = v1/L1; v2n = v2/L2
-        dot = float(np.clip(np.dot(v1n, v2n), -1, 1))
-        ang = math.degrees(math.acos(dot))
-        turn = (-v1[0])*v2[1] - (-v1[1])*v2[0]
-        if polygon_winding(local_pts)*turn < 0:
-            ang = 360-ang
-        a1  = math.degrees(math.atan2(v1n[1], v1n[0]))
-        a2  = math.degrees(math.atan2(v2n[1], v2n[0]))
-        r   = min(0.14, min(L1, L2) * 0.28)
-
-        theta1, theta2 = sorted([a1, a2])
-        if theta2 - theta1 > 180:
-            theta1, theta2 = theta2, theta1 + 360
-        ax.add_patch(Arc(tuple(pc), r*2, r*2, angle=0,
-                         theta1=theta1, theta2=theta2,
-                         color=RED, lw=0.9, zorder=10))
-        a_mid = math.radians((theta1 + theta2) / 2)
-        close_corner = min(L1, L2) < 0.40
-        if close_corner:
-            # Short notches keep their precise angle in the table, where the
-            # text can be read without covering adjacent dimensions.
-            corner_notes.append((f"Hjørnevinkel H{i+1}", f"{ang:.1f}°"))
-        else:
-            ax.text(pc[0]+(r+0.09)*math.cos(a_mid),
-                    pc[1]+(r+0.09)*math.sin(a_mid),
-                    f"{ang:.1f}°",
-                    ha="center", va="center", fontsize=8.5, color=RED,
-                    fontweight="bold", zorder=11,
-                    bbox=dict(fc="white", ec="none", pad=0.3))
-
-        # Hjørnepunkt-label
-        dir_out = (pc - center); L_out = np.linalg.norm(dir_out)
-        if L_out > 1e-6:
-            dir_out /= L_out
-        label_x, label_y = pc + dir_out*0.11
-        if close_corner:
-            short_neighbor = pm if L1 < L2 else pn
-            away = (pc-short_neighbor) / min(L1,L2)
-            label_x, label_y = pc + away*0.13 - np.array([0.12,0])
-        ax.text(label_x, label_y,
-                f"H{i+1}", ha="center", va="center", fontsize=7,
-                color="#444", zorder=12,
-                bbox=dict(fc="white", ec="none", pad=0.15))
+        _corner_angle(ax, local_pts, i, radius=.12)
 
     # ── Panel-ID i midten ─────────────────────────────────────────────────────
     ax.text(center[0], center[1], panel.name,
@@ -1191,17 +1095,7 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
         ("Tykkelse",         f"{WT_mm} mm"),
         ("Antall hjørner",   str(n)),
         ("Produksjon nr.",   str(panel_number)),
-    ] + corner_notes
-
-    # Legg til snitt-informasjon for alle vinklede kanter
-    vk_edges = [i for i in range(n)
-                if "vinklet" in _edge_kind(local_pts, panel.width_mm, i)]
-    for vi in vk_edges:
-        p1 = local_pts[vi]; p2 = local_pts[(vi+1) % n]
-        dx = p2 - p1; L = np.linalg.norm(dx)
-        ang_abs = abs(math.degrees(math.atan2(dx[1], dx[0])))
-        cut_ang = round(min(ang_abs, 180-ang_abs), 1)
-        rows.append((f"Snittvinkel kant {vi+1}→{(vi+1)%n+1}", f"{cut_ang}° fra rett"))
+    ]
 
     row_h = max(0.20, tbl_w * 0.028)
     for ri, (lbl, val) in enumerate(rows):
@@ -1218,18 +1112,7 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
 
     tbl_bot = tbl_y - len(rows) * row_h
 
-    # Fargeforklaring
-    leg_y = tbl_bot - 0.20
-    legend_x = tbl_x
-    for lbl, col in [("F = Fabrikkant", "#2980b9"),
-                     ("RK = Rett kapp", "#2d6e2d"),
-                     ("VK = Vinklet kapp", "#c0392b")]:
-        ax.add_patch(mpatches.Rectangle(
-            (legend_x, leg_y - 0.09), 0.08, 0.08,
-            facecolor="white", edgecolor=col, lw=1.5, zorder=16))
-        ax.text(legend_x + 0.12, leg_y - 0.045, lbl,
-                ha="left", va="center", fontsize=8, color=col, zorder=16)
-        legend_x += tbl_w / 3
+    leg_y = tbl_bot - 0.15
 
     ax.set_xlim(min(xmn-pad_x,tbl_x-0.15), max(xmx+pad_x+0.35,tbl_x+tbl_w+0.15))
     ax.set_ylim(leg_y - 0.18,      ymx + pad_y + 0.20)
@@ -1367,9 +1250,6 @@ def stramo_produksjonstegninger(
         fig.text(0.40, 0.950,
                  f"Panel: {PANEL_DB[panel_key]['label']}  ·  Side {side_nr} av {total_sider}",
                  ha="center", va="top", fontsize=10, color="#444")
-        fig.text(0.40, 0.930,
-                 "F = Fabrikkant (ingen kapping)   RK = Rett kapp (90°)   VK = Vinklet kapp (se snittvinkel i tabell)",
-                 ha="center", va="top", fontsize=9, color="#666")
 
         axes_flat = np.array(axes).flatten()
         for cell, (cat, p, wi, xs) in enumerate(page):

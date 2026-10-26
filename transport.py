@@ -27,7 +27,7 @@ def packages(rooms, stack_mm=1200):
             match=re.search(r'(\d+)×(\d+)',r.Produkt)
             width,height=map(int,match.groups()) if match else (1000,2100)
             add(r.Produkt,n,height+100,width+100,200*n,note='Foreslått dørkolli: 200 mm per dør; bekreft emballasje og tillatt stabling')
-        elif any(word in r.Produkt.lower() for word in ('finer', 'fiberplate')):
+        elif any(word in r.Produkt.lower() for word in ('finer', 'fiberplate', 'gulvplate')):
             import re
             w,l=map(int,re.search(r'(\d+) × (\d+)',r.Produkt).groups())
             add(r.Produkt,n,l+40,w+40,50+12*n)

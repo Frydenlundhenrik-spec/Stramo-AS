@@ -53,8 +53,8 @@ class FormMal:
         return dict(besk=self.besk, func=self.func)
 
 PANELER = {
-    "PIR 80 mm":  Panel("PIR 80 mm", 80, 0.29, 1250, 8.5),
-    "PIR 100 mm": Panel("PIR 100 mm", 100, 0.22, 1480, 10.2),
+    "PIR 80 mm":  Panel("PIR 80 mm", 80, 0.29, 900, 8.5),
+    "PIR 100 mm": Panel("PIR 100 mm", 100, 0.22, 1000, 10.2),
     "PIR 120 mm": Panel("PIR 120 mm", 120, 0.19, 1720, 12.1),
     "PIR 150 mm": Panel("PIR 150 mm", 150, 0.15, 2050, 14.8),
     "PUR 100 mm": Panel("PUR 100 mm", 100, 0.23, 1350, 11.0),
@@ -63,8 +63,8 @@ PANELER = {
 
 GULV_KJOL = FloorType(450, 12.0, "Avrettet betong (kjølerom – panel direkte på gulv)",
                       "80 mm PIR-panel monteres direkte på avrettet betong. Ingen gulvisolasjon.")
-GULV_FRYS = FloorType(980, 28.0, "Gulvpanel som vegg/tak + 12 mm gulvfiberplate (fryserom)",
-                      "22 mm lekter under gulvpanel. Vegger står på panelet; 12 mm gulvfiberplate legges innenfor veggene.")
+GULV_FRYS = FloorType(980, 28.0, "Gulvpanel som vegg/tak + 12 mm gulvplate (fryserom)",
+                      "22 mm lekter under gulvpanel. Vegger står på panelet; 12 mm gulvplate legges innenfor veggene.")
 
 BESLAG = {
     "Hengsel – tung kjøledør (rustfritt)": Beslag(850, 3, "Hengsel rustfritt"),

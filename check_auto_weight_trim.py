@@ -9,7 +9,7 @@ from project_file import decode_project,world_input
 from purchase_summary import panel_summary,grouped_panels,grouped_cuts,estimated_panel_weight
 from cutlist_pdf import project_materials,cutting_pdf
 from kalkulasjon import beregn_prosjekt
-from finishing import trim_order,plywood_cuts
+from finishing import trim_order,plywood_cuts,board_count
 from geometry import wall_lengths
 from construction import wall_span
 from database import PANEL_DB
@@ -38,10 +38,10 @@ for room in rooms:
     if inp.rom_type=='Fryserom':
         f=room['form'];width,length=f.get('plywood_width_mm',1500),f.get('plywood_length_mm',3000)
         assert (width,length)==(1500,3000)
-        qty=len(plywood_cuts(inp.pts,width,length))
-        assert qty==9
-        assert mat[mat.Produkt.str.startswith('Gulvfiberplate')].Stk.sum()==qty
-        assert mat[mat.Produkt.str.startswith('Gulvfiberplate')].Areal_m2.sum()==40.5
+        qty=board_count(plywood_cuts(inp.pts,width,length))
+        assert qty==7
+        assert mat[mat.Produkt.str.startswith('Gulvplate')].Stk.sum()==qty
+        assert mat[mat.Produkt.str.startswith('Gulvplate')].Areal_m2.sum()==31.5
         assert not mat.Produkt.str.startswith('U-kanal').any()
     else:
         spans=[wall_span(inp.pts,i,PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls) for i in range(len(inp.pts)) if i not in inp.excluded_walls]

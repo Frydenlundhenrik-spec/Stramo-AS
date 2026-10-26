@@ -13,7 +13,7 @@ a.multiselect(key='ed_drawing_walls').set_value([0]).run()
 assert not a.exception,[e.message for e in a.exception]
 assert a.session_state['last_valid_editor']['excluded_walls']==[0]
 assert all(not s.value.startswith('Vegg 1 ') for s in a.selectbox if s.label in ('Velg snitt-vegg','Velg vegg'))
-a.radio(key='ed_module').set_value('Kapplister').run()
+a.radio(key='ed_module').set_value('Elementer').run()
 assert not a.exception,[e.message for e in a.exception]
 assert a.session_state['last_valid_editor']['excluded_walls']==[0]
 faulthandler.cancel_dump_traceback_later()

@@ -10,7 +10,7 @@ from database import PANEL_DB, DOR_DB
 from construction import floor_depth, door_keys
 from geometry import poly_area, poly_perim, wall_lengths, beslag_beregning, validate_wall_openings, validate_polygon
 from materialer import materialliste
-from kappliste import lag_kappliste, kappliste_sammendrag
+from kappliste import lag_kappliste, kappliste_sammendrag, panel_order_rows
 
 
 @dataclass(frozen=True)
@@ -85,7 +85,8 @@ def beregn_prosjekt(
     )
     sam    = kappliste_sammendrag(df_kapp)
     beslag = beslag_beregning(inp.pts, inp.hoyde_m, inp.excluded_walls, panel["t"]/1000, clear_height, floor_angles=inp.rom_type=="Fryserom")
-    ant_veggpanel = int(df_mat.loc[df_mat.Post.str.startswith("Vegg "), "Mengde"].sum())
+    ordered = panel_order_rows(df_kapp, round(inp.hoyde_m*1000), round(inp.panelbredde_m*1000))
+    ant_veggpanel = int(ordered.Vegg.str.startswith("Vegg ").sum())
     missing_prices = df_mat.loc[df_mat.Type.str.contains("PRIS MANGLER", regex=False), "Post"].tolist()
 
     return {

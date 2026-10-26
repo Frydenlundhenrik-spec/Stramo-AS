@@ -13,7 +13,7 @@ _NS: dict[str, str] = {
     "tak":     "NS3420-H / Panel tak",
     "gulv_pir":"NS3420-H / PIR gulv",
     "gulv_bet":"NS3420-54 / Gulv avrettet",
-    "gulv_spon":"NS3420-54 / Gulvfiberplate",
+    "gulv_spon":"NS3420-54 / Gulvplate",
     "dor":     "NS3420-H40 / Dør kjøl",
     "beslag":  "NS3420-H / Dørbeslag",
     "ukan":    "NS3420-H / U-kanal",
@@ -58,11 +58,12 @@ def materialliste(
         if i in excluded_walls:
             continue
         np_ = len(ordered[ordered.Vegg == f"Vegg {i+1}"])
-        unit_p = ep(f"vegg_{i}", pan["pris"] * pw_m * H)
+        area = float(ordered.loc[ordered.Vegg == f"Vegg {i+1}", "Bestill_m2"].sum())
+        unit_p = ep(f"vegg_{i}", pan["pris"])
         rows.append(dict(
-            Post=f"Vegg {i+1}", Type=pan["label"], Enhet="stk",
-            Mengde=np_, **_kr(unit_p, np_), NS3420=_NS["vegg"],
-            CO2_k=pan["co2"] * pw_m * H,
+            Post=f"Vegg {i+1}", Type=pan["label"], Enhet="m²",
+            Mengde=area, **_kr(unit_p, area), NS3420=_NS["vegg"],
+            CO2_k=pan["co2"],
         ))
 
     # ── Tak ─────────────────────────────────────────────────────────────────
@@ -87,7 +88,7 @@ def materialliste(
         ))
         unit_spon = ep("gulv_finer", 0)
         rows.append(dict(
-            Post="Gulv – gulvfiberplate 12 mm", Type="Gulvfiberplate 12 mm" + (" – PRIS MANGLER" if unit_spon == 0 else ""),
+            Post="Gulv – gulvplate 12 mm", Type="Gulvplate 12 mm" + (" – PRIS MANGLER" if unit_spon == 0 else ""),
             Enhet="m²", Mengde=ov["A"], **_kr(unit_spon, ov["A"]),
             NS3420=_NS["gulv_spon"], CO2_k=8.5,
         ))

@@ -22,8 +22,8 @@ def check_quantities(room):
     materials = result['df_mat']
     walls = materials[materials.Post.str.startswith('Vegg ')]
     wall_orders = ordered[ordered.Del.str.startswith('Vegg ')]
-    assert result['ant_veggpanel'] == walls.Mengde.sum() == wall_orders.Bestill_hele_elementer.sum()
-    assert np.isclose(walls.Mengde.sum() * inp.panelbredde_m * inp.hoyde_m, wall_orders.Bestill_m2.sum())
+    assert result['ant_veggpanel'] == wall_orders.Bestill_hele_elementer.sum()
+    assert np.isclose(walls.Mengde.sum(), wall_orders.Bestill_m2.sum())
     for zone, mask in [('Tak', materials.Post.eq('Tak (panel)')),
                        ('Gulv', materials.Post.str.startswith('Gulv – PIR'))]:
         assert np.isclose(materials.loc[mask, 'Mengde'].sum(), ordered.loc[ordered.Del.eq(zone), 'Bestill_m2'].sum())
@@ -38,12 +38,12 @@ def check_quantities(room):
 
 
 rooms = decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
-assert [check_quantities(room)['ant_veggpanel'] for room in rooms] == [29,25]
+assert [check_quantities(room)['ant_veggpanel'] for room in rooms] == [28,24]
 grouped = grouped_panels(rooms)
-assert grouped.Bestill_hele_elementer.sum() == 77
-assert np.isclose(grouped.Bestill_m2.sum(),282.953)
-assert np.isclose(grouped.Bestill_vekt_kg.sum(),3442.2806)
-assert sum(beregn_prosjekt(world_input(r))['df_mat'].query("Post=='Skruer'").Mengde.sum() for r in rooms)==452
+assert grouped.Bestill_hele_elementer.sum() == 75
+assert np.isclose(grouped.Bestill_m2.sum(),274.593)
+assert np.isclose(grouped.Bestill_vekt_kg.sum(),3339.0566)
+assert sum(beregn_prosjekt(world_input(r))['df_mat'].query("Post=='Skruer'").Mengde.sum() for r in rooms)==444
 freight=packages(rooms)
 for _, order in grouped.iterrows():
     name=f'{order.Panel} · {order.Leveringslengde_mm:g} × {order.Bredde_mm:g}'
@@ -52,18 +52,18 @@ for _, order in grouped.iterrows():
     assert np.isclose(loads.Vekt_kg.sum(),order.Bestill_vekt_kg)
     assert (loads.Lengde_mm==order.Leveringslengde_mm+40).all()
     assert (loads.Bredde_mm==order.Bredde_mm+40).all()
-fiber=freight[freight.Innhold.str.contains('Gulvfiberplate')]
-assert len(fiber)==1 and fiber.iloc[0].Antall==9
+fiber=freight[freight.Innhold.str.contains('Gulvplate')]
+assert len(fiber)==1 and fiber.iloc[0].Antall==7
 assert '1500 × 3000 mm' in fiber.iloc[0].Innhold
-assert (fiber.iloc[0].Lengde_mm,fiber.iloc[0].Bredde_mm,fiber.iloc[0].Høyde_mm)==(3040,1540,158)
+assert (fiber.iloc[0].Lengde_mm,fiber.iloc[0].Bredde_mm,fiber.iloc[0].Høyde_mm)==(3040,1540,134)
 
 # A wall opening changes cut sub-pieces, never the number of purchased full blanks.
 inp = world_input(rooms[1])
 no_opening = beregn_prosjekt(replace(inp,dorer=[],apninger=[]))
 opening = beregn_prosjekt(replace(inp,dorer=[],apninger=[(0,.5,.5,.5,.5,'Teståpning')]))
 for result in (no_opening,opening):
-    assert len(panel_order_rows(result['df_kapp'],2400,1100)) == 39
-    assert result['sam']['tot_panel'] == result['ant_veggpanel'] == 25
+    assert len(panel_order_rows(result['df_kapp'],2400,1100)) == 38
+    assert result['sam']['tot_panel'] == result['ant_veggpanel'] == 24
 
 # Matrix includes sloping and concave boundaries and all three supported test thicknesses.
 shapes = [[(0,0),(5,0),(5,4),(0,4)],
@@ -105,4 +105,4 @@ for room in rooms:
     else:
         assert wall_base(i.rom_type,i.panel_key)==finished_floor(i.rom_type,i.panel_key)==0
 assert CHANNEL_HEIGHT==.05 and CHANNEL_FLANGE==.0006
-print('PASS: 18 cases; price/order parity; Tasty 77 panels, 282.953 m2, 3442.2806 kg; 452 screws; IFC levels and 0.6 mm channels')
+print('PASS: 18 cases; price/order parity; Tasty 75 panels, 274.593 m2, 3339.0566 kg; 444 screws; IFC levels and 0.6 mm channels')

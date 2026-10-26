@@ -22,9 +22,9 @@ def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]]
         rows.append({
             "Bygningsdel": "Gulv",
             "Produkt": GULV_DB_FRYS["label"],
-            "Vedlikehold": "Kontroller gulvfiberplaten, skjøter og gjennomføringer for skade og fukt. Produktspesifikke anvisninger ettersendes.",
+            "Vedlikehold": "Kontroller gulvplaten, skjøter og gjennomføringer for skade og fukt. Produktspesifikke anvisninger ettersendes.",
             "Intervall": "Halvårlig",
-            "Dokumentasjon": "Paneldokumentasjon vedlagt. Dokumentasjon for 12 mm gulvfiberplate ettersendes. Gulvets understøttelse og tillatte belastning dokumenteres særskilt.",
+            "Dokumentasjon": "Paneldokumentasjon vedlagt. Dokumentasjon for 12 mm gulvplate ettersendes. Gulvets understøttelse og tillatte belastning dokumenteres særskilt.",
         })
     else:
         rows.append({
@@ -48,6 +48,8 @@ def lag_fdv_oversikt(panel_key: str, rom_type: str, dorer: list[tuple[str, int]]
         })
 
     for beslag_key in beslag_valg:
+        if rom_type != "Fryserom" and beslag_key in ("Trykkventil / trykkutligningsplugg", "Terskel / rampe rustfritt stål"):
+            continue
         b = BESLAG_DB[beslag_key]
         rows.append({
             "Bygningsdel": "Dørbeslag",
@@ -100,7 +102,7 @@ Kontroller jevnlig dørfunksjon, pakninger, overganger, skjøter, terskler, besl
 Den samlede PDF-en inneholder paneldatablad, ytelseserklæring, hygienesertifikat, EPD, teknisk panelkatalog, monteringsanvisning og beslagskatalog. Leverandørvedleggene er uendret og gjelder BALEX PIR STANDARD.
 
 ## Dokumentasjon som ettersendes
-Egne seksjoner er reservert for 22 mm hvite skruer, fugemasse og 12 mm gulvfiberplater. Gulvfiberplaten beskytter fryseromsgulvet innenfor veggene; gulvpanelene ligger på 22 mm lekter.
+Egne seksjoner er reservert for 22 mm hvite skruer, fugemasse og 12 mm gulvplater. Gulvplaten beskytter fryseromsgulvet innenfor veggene; gulvpanelene ligger på 22 mm lekter.
 
 ## Prosjektvedlegg
 Legg ved aktuelle tegninger, IFC, kapplister og materialliste. Dører, trykkventiler, kjølemaskineri og elektro dokumenteres separat der de inngår. Kontroller produktvalget mot faktisk leveranse; standardpakken er en del av samlet FDV.
