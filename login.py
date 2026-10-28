@@ -147,7 +147,7 @@ def require_login():
         st.error(str(exc))
         st.stop()
     if st.session_state.get('portal_destination') == 'cold':
-        with st.sidebar:
+        with st.sidebar.container(key='portal_account'):
             st.caption('Innlogget som ' + user['name'])
             if st.button('← Mine apper', key='portal_home', use_container_width=True):
                 st.session_state.pop('portal_destination', None)

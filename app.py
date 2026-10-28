@@ -53,6 +53,12 @@ st.markdown("""
 
   /* Sidepanel og meny */
   section[data-testid="stSidebar"]{background:var(--s-bla);}
+  @media(min-width:768px){
+    section[data-testid="stSidebar"][data-collapsed="false"]{width:284px!important;min-width:284px;max-width:284px;}
+  }
+  /* Konto og utlogging kommer etter prosjektmenyen, slik at logoen står øverst. */
+  .st-key-portal_account{order:50;margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,.15);}
+  [data-testid="stLayoutWrapper"]:has(>.st-key-portal_account){order:50;}
   section[data-testid="stSidebar"] hr{border-color:rgba(255,255,255,.15);}
   section[data-testid="stSidebar"] [data-testid="stCaptionContainer"]{color:rgba(255,255,255,.55);}
   .s-logo{background:#fff;border-radius:10px;padding:12px;text-align:center;margin-bottom:6px;}
@@ -64,9 +70,10 @@ st.markdown("""
   section[data-testid="stSidebar"] [role="radiogroup"] label{width:100%;padding:9px 12px;border-radius:8px;margin:0;}
   /* Skjul radioknappens sirkel (alt i etiketten som ikke er selve teksten). */
   section[data-testid="stSidebar"] [role="radiogroup"] label div:not([data-testid="stMarkdownContainer"]):not(:has([data-testid="stMarkdownContainer"])):not([data-testid="stMarkdownContainer"] *){display:none;}
-  .st-key-meny_minimer{align-items:flex-end;}
+  .st-key-meny_minimer{position:absolute;top:18px;left:20px;z-index:2;}
   .st-key-meny_minimer button{color:rgba(255,255,255,.75);min-height:0;padding:2px 6px;}
   .st-key-meny_minimer button:hover{color:#fff;}
+  [data-testid="stSidebarCollapseButton"] [data-testid="stIconMaterial"]{color:rgba(255,255,255,.75);}
   section[data-testid="stSidebar"] [role="radiogroup"] label p{color:rgba(255,255,255,.8);font-size:15px;display:flex;align-items:center;gap:10px;}
   section[data-testid="stSidebar"] [role="radiogroup"] label p::before{font-family:"Material Symbols Rounded";font-size:20px;font-weight:400;line-height:1;}
   section[data-testid="stSidebar"] [role="radiogroup"] label:hover{background:rgba(255,255,255,.07);}
@@ -230,11 +237,11 @@ with st.sidebar:
           section[data-testid="stSidebar"]{width:88px!important;min-width:88px!important;max-width:88px!important;}
           section[data-testid="stSidebar"] > div{width:88px!important;}
           [data-testid="stSidebarUserContent"]{padding-left:10px!important;padding-right:10px!important;}
-          [data-testid="stSidebarResizeHandle"],.st-key-meny_ekstra{display:none!important;}
+          [data-testid="stSidebarResizeHandle"],[data-testid="stSidebarCollapseButton"],.st-key-meny_ekstra,.st-key-portal_account{display:none!important;}
           section[data-testid="stSidebar"] [role="radiogroup"] label{padding:10px 0;justify-content:center;}
           section[data-testid="stSidebar"] [role="radiogroup"] label p{font-size:0!important;justify-content:center;gap:0;}
           section[data-testid="stSidebar"] [role="radiogroup"] label p::before{font-size:24px;}
-          .st-key-meny_minimer button p{display:none;}
+          .st-key-meny_minimer button p{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;}
           section[data-testid="stSidebar"] .stElementContainer:has(.s-logo){display:none!important;}
         </style>""", unsafe_allow_html=True)
     with st.container(key="meny_ekstra"):
