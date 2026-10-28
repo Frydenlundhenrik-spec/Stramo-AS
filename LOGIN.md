@@ -1,53 +1,54 @@
-# Personlig innlogging
+# Personlig innlogging via Stramo-hjemmesiden
 
-Appen krever e-post, passord og en sekssifret kode fra Microsoft Authenticator eller Google Authenticator.
-Hver person har eget passord og egen telefonkobling. Det brukes ingen SMS, og telefonnummer er ikke nødvendig.
-Kontoene gir tilgang til samme Stramo-app; dette oppsettet oppretter ikke private prosjektområder per person.
+Hjemmeside: https://stramo-as-n7zzenre2auarxeuzha8pk.streamlit.app/
 
-## Koble til en konto
+Forsiden viser bare logo og kontaktinformasjon. Appvalgene Timeregistrering og
+Kjøl og frys vises først etter godkjent innlogging. Prosjektkoden kjører først
+etter at serveren har kontrollert økten. Direkteadresser gir ikke tilgang uten innlogging.
 
-Kjør på en betrodd PC med appens Python-miljø og installerte `requirements.txt`:
+## Første gang
 
-```powershell
-python setup_login.py --email "din-epost@firma.no" --name "Ditt navn"
-```
+1. Åpne hjemmesiden og trykk **Logg inn → Første gang? Aktiver kontoen din**.
+2. Bruk e-postadressen og den private aktiveringskoden i din egen invitasjon.
+3. Velg et passord på minst 12 tegn.
+4. Åpne Google Authenticator eller Microsoft Authenticator, trykk + og skann QR-koden på nettsiden.
+5. Skriv den sekssifrede koden fra telefonen på nettsiden og bekreft.
 
-Velg et passord på minst 12 tegn. Skann den lokale QR-koden med din egen telefon, og bekreft en kode i oppsettvinduet.
-Ingen konto lagres før telefonen er bekreftet. Gjenta for neste bruker. Et nytt oppsett for en eksisterende konto
-krever at du skriver BYTT; det bytter begge faktorene og avslutter gyldigheten til tidligere innloggede økter.
-Ved mistet telefon kjører administrator dette oppsettet igjen etter å ha bekreftet hvem brukeren er.
+Hver person har eget passord og egen telefonkobling. Ingen SMS sendes. Kontoen
+blir aktiv først etter at telefonkoden er godkjent. En invitasjon kan ikke brukes
+for å erstatte en aktivert konto. Passord og Authenticator-koder skal ikke sendes
+på e-post eller legges i Git. Ved mistet telefon må administrator verifisere
+personen og hjelpe med gjenoppretting; selvbetjent nullstilling er ikke implementert.
 
-For en annen lokal appkopi brukes `--target "full sti til appmappen" --install`.
-Det legger bare til innlogging før prosjektdata åpnes. Eksisterende appfiler sikkerhetskopieres først;
-prosjekter og databaser endres ikke. Kjør alltid med et Python-miljø som har `pyotp==2.10.0` installert.
+## Vanlig bruk
 
-## Streamlit Cloud
+Logg inn med e-post, passord og kode fra Authenticator. Velg deretter app.
+Timeregistrering åpnes i en ny fane med en engangslenke. Kjøl og frys åpnes i samme
+Streamlit-side. Logg ut avslutter alle økter for denne personen i begge nettappene.
+Den andre brukerens økter påvirkes ikke. En ny nettleserøkt kan kreve ny innlogging.
 
-Oppsettet lagres privat i `.streamlit/stramo_login.toml`, med saltede PBKDF2-passordhasher og TOTP-hemmeligheter.
-Filen er ignorert av Git. Legg hele innholdet i appens **Settings → Secrets**, og behold andre eksisterende
-innstillinger. Gjør dette før grenen med innlogging tas i bruk på `main`. Du kan bruke den samme kontoen på PC
-og i nettappen ved å bruke samme private konfigurasjon. Selve oppsettfilen må ikke deles via GitHub eller chat.
+Begge brukere har tilgang til samme Stramo-testområde i timeappen. Personlig
+innlogging oppretter ikke private arbeidsområder. Kjøleromsprosjekter ligger i
+Streamlit-økten: **last ned prosjektfilen før utlogging eller omstart**.
 
-Uten gyldig konfigurasjon stopper appen på en beskjed om manglende oppsett. Den åpner aldri prosjektvisningen
-som reservevei. Det finnes ingen standardkonto, offentlig registrering eller testkode som omgår innloggingen.
+## Drift
 
-## Økter og kontroller
+Kontotjenesten kjører i Stramo Flyts eksisterende Sites Worker. Kontoer, økter,
+forsøksbegrensning og brukte TOTP-tidssteg lagres varig i D1. Passord er scrypt-hashet,
+telefonhemmeligheter kryptert med AES-256-GCM, og sesjonstokens lagres som hash.
+Runtime-hemmelighetene STRAMO_AUTH_KEY og STRAMO_INVITATIONS_JSON finnes bare i Sites.
+Invitasjonslisten inneholder engangskodenes hasher, aldri selve kodene. Eksisterende
+kontoers e-postadresser beholdes i listen også etter invitasjonens utløpsdato.
 
-- Appen kontrollerer begge faktorene på serveren før prosjektfunksjonene kjører.
-- Økter varer høyst åtte timer og kontrolleres på hver kjøring/handling. En ny nettleserøkt krever ny innlogging.
-- Logg ut tømmer prosjekt- og innloggingsstatus for nettleserøkten. Last ned prosjektfilen først.
-- Fem innloggingsforsøk per konto på 15 minutter. Ukjente e-postadresser deler en separat begrensning.
-- Brukte TOTP-tidssteg avvises med en atomisk databasekontroll, også ved samtidige innloggingsforsøk.
-- `.stramo_auth.sqlite3` inneholder forsøksbegrensning og brukte tidssteg, ikke passord eller telefonhemmeligheter.
-  Dette er for én Streamlit-instans. Databasen må ligge på varig lagring hvis beskyttelsen skal beholdes ved
-  full utskifting av serverdisken. Community Cloud kan miste lokale filer; en slik utskifting nullstiller tellere.
-- Bruk HTTPS for nettappen. Lokal kjøring bør bindes til `127.0.0.1`.
+Streamlit trenger ingen egne Secrets. portal_client.py bruker HTTPS og lagrer
+sesjonstoken kun i brukerens serverøkt. Hver kjøring kontrollerer den mot kontotjenesten.
+Manglende forbindelse eller ugyldig innlogging stopper før appen åpnes. Økten varer
+høyst åtte timer. Den gamle lokale setup_login.py/TOML-metoden brukes ikke av nettappen.
+Skrivebordsoriginalen er beholdt separat og har ikke blitt endret av denne publiseringen.
 
 ## Kontroll
 
-`python -m unittest test_login.py` kontrollerer feil passord/kode, separate kontoer, gjenbruk, samtidighet,
-forsøksbegrensning, sesjonsutløp og at Streamlit stopper før prosjektinnhold ved manglende innlogging.
-Testene bruker isolerte testkontoer og midlertidige databaser. De sender ingen SMS og berører ingen prosjektfiler.
-
-Dokumentasjon: [PyOTP](https://pyauth.github.io/pyotp/),
-[Streamlit Secrets](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/secrets-management).
+python -m unittest test_portal.py kontrollerer offentlig visning, invitasjonsflyt,
+TOTP-bekreftelse, appvalg, utlogging og at utløpt økt fjerner prosjektstatus. Konto-APIet
+har egne integrasjonstester i timeappens tests/portal-api.mjs. Testene bruker syntetiske
+kontoer. Reell førstegangsaktivering gjøres av hver bruker med egen telefon.

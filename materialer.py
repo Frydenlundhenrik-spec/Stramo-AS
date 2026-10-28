@@ -25,7 +25,7 @@ def materialliste(
     ov: dict,
     panel_key: str,
     rom_type: str,
-    dorer: list[tuple[str, int]],
+    dorer: list[tuple],
     beslag_valg: list[str],
     pw_m: float,
     wls: list[float],
@@ -34,6 +34,8 @@ def materialliste(
     breeam_multiplier: float = 1.0,
     excluded_walls=(),
     cut_list: pd.DataFrame | None = None,
+    plywood_width_mm: int = 1500,
+    plywood_length_mm: int = 3000,
 ) -> pd.DataFrame:
     """
     Bygger fullstendig materialliste.
@@ -58,7 +60,7 @@ def materialliste(
         if i in excluded_walls:
             continue
         np_ = len(ordered[ordered.Vegg == f"Vegg {i+1}"])
-        area = float(ordered.loc[ordered.Vegg == f"Vegg {i+1}", "Bestill_m2"].sum())
+        area = sum(allocation.get(f"Vegg {i+1}", 0) for allocation in ordered.Fordeling_m2)
         unit_p = ep(f"vegg_{i}", pan["pris"])
         rows.append(dict(
             Post=f"Vegg {i+1}", Type=pan["label"], Enhet="m²",
@@ -86,25 +88,33 @@ def materialliste(
             Enhet="m²", Mengde=floor_area, **_kr(unit_pir, floor_area),
             NS3420=_NS["gulv_pir"], CO2_k=pan["co2"],
         ))
-        unit_spon = ep("gulv_finer", 0)
+        from finishing import plywood_cuts, board_count
+        board_area = board_count(plywood_cuts(pts_polygon, plywood_width_mm, plywood_length_mm)) * plywood_width_mm * plywood_length_mm / 1e6
+        unit_spon = ep("gulv_finer", 1000)
         rows.append(dict(
             Post="Gulv – gulvplate 12 mm", Type="Gulvplate 12 mm" + (" – PRIS MANGLER" if unit_spon == 0 else ""),
-            Enhet="m²", Mengde=ov["A"], **_kr(unit_spon, ov["A"]),
+            Enhet="m²", Mengde=board_area, **_kr(unit_spon, board_area),
             NS3420=_NS["gulv_spon"], CO2_k=8.5,
         ))
 
     # ── Dører ─────────────────────────────────────────────────────────────────
     nd = 0
-    for dk, ant in dorer:
+    for door in dorer:
+        dk, ant = door[:2]
         if ant > 0:
             d = DOR_DB[dk]
             door_label = ("Fryseromsdør" if rom_type == "Fryserom" else "Kjøleromsdør") + f" {d['bw']}×{d['bh']} mm"
+            hinge = door[4] if len(door) > 4 else "Ikke angitt"
+            door_label += f" · Slagretning: {hinge} (sett innenfra)"
+            if len(door) > 2:
+                door_label += f" · Vegg {int(door[2]) + 1}"
             unit_dor = ep(f"dor_{dk}", d["pris"])
-            rows.append(dict(
-                Post="Dør", Type=door_label + (" – PRIS MANGLER" if unit_dor == 0 else ""), Enhet="stk",
-                Mengde=ant, **_kr(unit_dor, ant),
-                NS3420="NS3420-H40 / Dør frys" if rom_type == "Fryserom" else _NS["dor"], CO2_k=0.0,
-            ))
+            for _ in range(int(ant)):
+                rows.append(dict(
+                    Post="Dør", Type=door_label + (" – PRIS MANGLER" if unit_dor == 0 else ""), Enhet="stk",
+                    Mengde=1, **_kr(unit_dor, 1),
+                    NS3420="NS3420-H40 / Dør frys" if rom_type == "Fryserom" else _NS["dor"], CO2_k=0.0,
+                ))
             nd += ant
 
     # ── Dørbeslag ─────────────────────────────────────────────────────────────
@@ -114,7 +124,7 @@ def materialliste(
         selected.append(valve_key)
     for bk in selected:
         b = BESLAG_DB[bk]
-        if b["label"] in ("Varmekabel pr. m","Låsekasse kjøl","Hengsel rustfritt"):
+        if b["label"] in ("Varmekabel pr. m","Låsekasse kjøl","Hengsel rustfritt","Magnetpakning"):
             continue
         if bk == valve_key and rom_type != "Fryserom":
             continue
@@ -131,7 +141,6 @@ def materialliste(
     # ── U-kanal ───────────────────────────────────────────────────────────────
     if rom_type != "Fryserom":
         UKAN_M  = 2.5
-        unit_uk = ep("ukan", 220)
         from finishing import trim_order
         from construction import wall_span
         spans = [wall_span(pts_polygon,i,pan['t']/1000,excluded_walls)
@@ -140,34 +149,35 @@ def materialliste(
         rows.append(dict(
             Post=f"U-kanal {pan['t']} mm (gulv→vegg)",
             Type=f"U-kanal {pan['t']} mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-            Enhet="stk", Mengde=stk_uk, **_kr(unit_uk, stk_uk),
+            Enhet="stk", Mengde=stk_uk, **_kr(math.nan, stk_uk),
             NS3420=_NS["ukan"], CO2_k=UKAN_M * 0.6,
         ))
 
     # ── Hjørnebeslag ──────────────────────────────────────────────────────────
     bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom")
-    unit_inn = ep("beslag_inn", 185)
-    unit_ut  = ep("beslag_ut",  265)
+    # Beslag føres uten pris, også når eldre prosjektfiler har prisoverstyringer.
     rows.append(dict(
         Post="Innv. hjørnebeslag 50×50 mm",
         Type="Innvendig 50×50 mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-        Enhet="stk", Mengde=bb["stk_inn"], **_kr(unit_inn, bb["stk_inn"]),
+        Enhet="stk", Mengde=bb["stk_inn"], **_kr(math.nan, bb["stk_inn"]),
         NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8,
     ))
     rows.append(dict(
         Post="Utv. hjørnebeslag 50×150 mm",
         Type="Utvendig 50×150 mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-        Enhet="stk", Mengde=bb["stk_ut"], **_kr(unit_ut, bb["stk_ut"]),
+        Enhet="stk", Mengde=bb["stk_ut"], **_kr(math.nan, bb["stk_ut"]),
         NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8,
     ))
 
-    screw_count = fixing_screw_count(pts_polygon, H, rom_type, pan["t"]/1000, excluded_walls)
-    screw_price = ep("skruer", 0)
-    rows.append(dict(Post="Skruer", Type="22 mm hvite skruer", Enhet="stk",
-                     Mengde=screw_count, **_kr(screw_price, screw_count),
-                     NS3420="Festemidler", CO2_k=0.0))
+    from accessories import CATALOG, accessory_needs, order_quantities
+    needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls)
+    for key, count in order_quantities(needs).items():
+        label, unit, default, _ = CATALOG[key]
+        rows.append(dict(Post="Tilbehør beregnet", Type=label, Enhet=unit,
+                         Mengde=count, **_kr(ep(key, default), count),
+                         NS3420="Tilbehør", CO2_k=0.0))
     for row in rows:
-        if row["Mengde"] > 0 and row["EP"] <= 0 and "PRIS MANGLER" not in row["Type"]:
+        if row["Mengde"] > 0 and (not math.isfinite(row["EP"]) or row["EP"] <= 0) and "PRIS MANGLER" not in row["Type"]:
             row["Type"] += " – PRIS MANGLER"
     df = pd.DataFrame(rows)
     df["CO₂ (kg)"] = (df["Mengde"] * df["CO2_k"]).round(1)
@@ -179,3 +189,12 @@ def materialliste(
 
 def _kr(ep: float, mengde: float) -> dict:
     return {"EP": round(ep, 2), "TP": round(ep * mengde, 2)}
+
+
+def materialliste_med_sum(frame: pd.DataFrame) -> pd.DataFrame:
+    """Present material rows and the sum of entered prices, without changing calculation data."""
+    table = frame.drop(columns=["CO₂ (kg)", "NS3420"], errors="ignore").copy()
+    table["Type"] = table["Type"].str.removesuffix(" – PRIS MANGLER")
+    total = {"Post": "SUM", "Type": "", "Enhet": "",
+             "Totalpris (kr)": round(float(table["Totalpris (kr)"].sum()), 2)}
+    return pd.concat([table, pd.DataFrame([total])], ignore_index=True)

@@ -50,7 +50,7 @@ def _dh(ax, x1, x2, y, lbl, ey=None, fs=DIM_FS, col=None, total=False):
     ax.plot([x1, x1], [y, ey], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.plot([x2, x2], [y, ey], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.annotate("", xy=(x2, ey), xytext=(x1, ey),
-                arrowprops=dict(arrowstyle="<->", color=col, lw=1.4 if total else 0.8, mutation_scale=8), zorder=9)
+                arrowprops=dict(arrowstyle="<->", shrinkA=0, shrinkB=0, color=col, lw=1.6 if total else 0.8, mutation_scale=8), zorder=9)
     ax.text((x1+x2)/2, ey + 0.03, lbl, ha="center", va="bottom",
             fontsize=fs, color=col, fontweight="bold" if total else "normal", zorder=10)
 
@@ -62,7 +62,7 @@ def _dv(ax, y1, y2, x, lbl, ex=None, fs=DIM_FS, col=None, total=False):
     ax.plot([x, ex], [y1, y1], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.plot([x, ex], [y2, y2], color=col, lw=0.5, linestyle="--", dashes=(3,2), zorder=8)
     ax.annotate("", xy=(ex, y2), xytext=(ex, y1),
-                arrowprops=dict(arrowstyle="<->", color=col, lw=1.4 if total else 0.8, mutation_scale=8), zorder=9)
+                arrowprops=dict(arrowstyle="<->", shrinkA=0, shrinkB=0, color=col, lw=1.6 if total else 0.8, mutation_scale=8), zorder=9)
     ax.text(ex + 0.03, (y1+y2)/2, lbl, ha="left", va="center",
             fontsize=fs, color=col, fontweight="bold" if total else "normal", rotation=90, zorder=10)
 
@@ -81,7 +81,7 @@ def _dim_along_wall(ax, p1, p2, lbl, offset=0.30, fs=DIM_FS, col=None, winding=1
     ax.plot([p1[0], s[0]], [p1[1], s[1]], color=col, lw=0.4, zorder=8)
     ax.plot([p2[0], e[0]], [p2[1], e[1]], color=col, lw=0.4, zorder=8)
     ax.annotate("", xy=(e[0], e[1]), xytext=(s[0], s[1]),
-                arrowprops=dict(arrowstyle="<->", color=col, lw=1.4 if total else 0.65, mutation_scale=7), zorder=9)
+                arrowprops=dict(arrowstyle="<->", shrinkA=0, shrinkB=0, color=col, lw=1.6 if total else 0.65, mutation_scale=7), zorder=9)
     mid   = (s + e) / 2
     angle = math.degrees(math.atan2(dx[1], dx[0]))
     # Normaliser slik at teksten alltid er lesbar (aldri opp-ned)
@@ -101,9 +101,9 @@ def _polygon_ccw(pts_a) -> bool:
     return float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1))) > 0
 
 
-def _side_label(ax, pts_a, i, nn, fs=5.5, avstand=0.38):
+def _side_label(ax, pts_a, i, nn, fs=9, avstand=0.55):
     """
-    Sideetikett («Side1», «Side2», ...) plassert midt på veggsiden – ikke i
+    Veggetikett («Vegg 1», «Vegg 2», ...) plassert midt på veggsiden – ikke i
     hjørnet, som ellers blir overfylt av vinkelbue og hjørneelement-skille.
     Trukket lenger inn enn V-nummerne slik at den ikke kolliderer med dem.
     """
@@ -114,8 +114,14 @@ def _side_label(ax, pts_a, i, nn, fs=5.5, avstand=0.38):
     d /= L
     perp = polygon_winding(pts_a) * np.array([-d[1], d[0]])
     mid  = (p1 + p2) / 2 + perp * avstand
-    ax.text(mid[0], mid[1], f"Side{i+1}", ha="center", va="center",
-            fontsize=fs, color="#444", zorder=14,
+    # Samme utforming som de fete totalmålene, rotert langs veggen og aldri opp-ned.
+    angle = math.degrees(math.atan2(d[1], d[0]))
+    if angle > 90.5:
+        angle -= 180
+    elif angle <= -89.5:
+        angle += 180
+    ax.text(mid[0], mid[1], f"Vegg {i+1}", ha="center", va="center", rotation=angle,
+            fontsize=fs, color=TOTAL_DIM_COL, fontweight="bold", zorder=14,
             bbox=dict(fc="white", ec="none", pad=0.2))
 
 
@@ -147,7 +153,7 @@ def _door_dim(ax, p1d, dx_n, offset_m, dw, wall_perp, wall_length, lane=0, heigh
         for point, q in ((pa,qa),(pb,qb)):
             ax.plot([point[0],q[0]], [point[1],q[1]], color=color, lw=.4, zorder=11)
         ax.annotate("", xy=qb, xytext=qa,
-                    arrowprops=dict(arrowstyle="<->", color=color, lw=.6), zorder=11)
+                    arrowprops=dict(arrowstyle="<->", shrinkA=0, shrinkB=0, color=color, lw=.6), zorder=11)
         mid = (qa+qb)/2 + wall_perp*.07
         ax.text(*mid, label, rotation=angle, ha="center", va="center", fontsize=6,
                 color=color, zorder=12, bbox=dict(fc="white",ec="none",pad=.4))
@@ -194,15 +200,21 @@ def _tegn_fig_logo(fig, x=0.012, y_topp=0.995, bredde=0.075) -> bool:
     return True
 
 
-def _tegn_fig_title_block(fig, info, x: float = 0.815, y_topp: float = 0.96, width: float = 0.17):
+def _tegn_fig_title_block(fig, info, x: float = 0.815, y_topp: float = 0.96, width: float = 0.17,
+                          y_bunn: float | None = None):
     """
     Samme tittelblokk som _title_block, men som en egen fastplassert boks i
     figurkoordinater – for sider uten én enkelt data-akse å feste boksen
     til (f.eks. produksjonstegninger med flere paneler per side).
+
+    Med y_bunn strekkes boksen fra y_topp ned til y_bunn (f.eks. like høy som
+    rommet), men aldri lavere enn at feltene får plass.
     """
     bw, bh = 3.2, 5.0
     fw, fh = fig.get_size_inches()
     height = (fw * width) * (bh / bw) / fh
+    if y_bunn is not None:
+        height = max(y_topp - y_bunn, 3.6 / fh)
     bax = fig.add_axes([x, y_topp - height, width, height], zorder=30)
     bax.set_xlim(0, bw); bax.set_ylim(0, bh)
     bax.axis("off")
@@ -422,12 +434,10 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
         if not standalone and any(path.contains_point((p1+p2)/2+outward*lane) for path in dimension_obstacles):
             continue
         _dim_along_wall(ax, p1, p2, f"{length*1000:.0f} mm", offset=1.65 if has_door else .45,
-                        fs=10 if full_width or full_height else 8,
-                        winding=polygon_winding(pts_a), total=full_width or full_height)
+                        fs=10, winding=polygon_winding(pts_a), total=True)
 
     if not standalone:
         return fig
-    _tegn_fig_title_block(fig, info)
     ax.text((xmn+xmx)/2, ymn - 2.05,
             f"PLANTEGNING  –  {DRAWING_SCALE}  ·  Utvendige mål",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
@@ -436,6 +446,13 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     ax.set_ylim(ymn - 2.55, ymx + 2.1)
     ax.set_aspect("equal"); ax.axis("off")
     fig.subplots_adjust(left=0.02, right=0.79, top=0.97, bottom=0.03)
+    # Tittelblokken skal være like høy som rommet: les rommets topp og bunn
+    # i figurkoordinater etter at aksen har fått sitt endelige sideforhold.
+    ax.apply_aspect()
+    til_figur = ax.transData + fig.transFigure.inverted()
+    rom_bunn = til_figur.transform((xmx, ymn))[1]
+    rom_topp = til_figur.transform((xmx, ymx))[1]
+    _tegn_fig_title_block(fig, info, y_topp=rom_topp, y_bunn=rom_bunn)
     return fig
 
 
@@ -514,10 +531,18 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
                                      zorder=3.5, alpha=0.3))
 
             # Etikett
-            cx = float(np.mean(poly_w[:, 0])); cy = float(np.mean(poly_w[:, 1]))
-            ax.text(cx, cy, f"{p.name}\n{p.width_mm} mm",
+            from shapely.geometry import Polygon
+            point = Polygon(poly_w).representative_point()
+            cx,cy=point.x,point.y
+            narrow=p.width_mm<350
+            direction,_=main_axis_from_longest_wall(p.polygon)
+            angle=math.degrees(math.atan2(direction[1],direction[0])) if narrow else 0
+            if angle>90:angle-=180
+            if angle<-90:angle+=180
+            label=f"{p.name} · {p.width_mm} mm" if narrow else f"{p.name}\n{p.width_mm} mm"
+            ax.text(cx, cy, label, rotation=angle,
                     ha="center", va="center", fontsize=8,
-                    color=BLUE if not is_kapp else "#8b3e00",
+                    color=TOTAL_DIM_COL,
                     fontweight="bold", zorder=5,
                     bbox=dict(fc="white", ec="none", pad=0.4, alpha=0.85))
 
@@ -532,8 +557,13 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
 
         # Per-vegg mål
         for i in range(nn):
+            p1,p2=pts_a[i],pts_a[(i+1)%nn]
+            full_width=np.isclose(abs(p2[0]-p1[0]),xmx-xmn) and np.isclose(p1[1],p2[1])
+            full_height=np.isclose(abs(p2[1]-p1[1]),ymx-ymn) and np.isclose(p1[0],p2[0])
+            if full_width or full_height:
+                continue  # already shown by the overall exterior dimension
             _dim_along_wall(ax, pts_a[i], pts_a[(i+1)%nn],
-                            f"{wls[i]*1000:.0f} mm", offset=0.35, fs=8.5)
+                            f"{wls[i]*1000:.0f} mm", offset=0.35, fs=10, total=True)
 
         # ── Vinkler ───────────────────────────────────────────────────────────
         # Sideetiketter er droppet her: takflaten er allerede full av
@@ -1005,24 +1035,26 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
                              zorder=2.5, alpha=0.35))
 
     center = local_pts.mean(axis=0)
+    xmn, ymn = local_pts.min(axis=0)
+    xmx, ymx = local_pts.max(axis=0)
 
     # ── Utsparinger (dører og åpninger) ───────────────────────────────────────
-    for (lx, ly, lw, lh, cut_lbl) in (cutouts or []):
+    for lane, (lx, ly, lw, lh, cut_lbl) in enumerate(cutouts or []):
         ax.add_patch(mpatches.Rectangle(
             (lx, ly), lw, lh,
             facecolor="white", edgecolor="#000", linewidth=1.4,
             linestyle="--", zorder=5))
-        ax.text(lx + lw/2, ly + lh/2, cut_lbl,
+        ax.text((xmn+xmx)/2, ymx + .65 + lane*.20, cut_lbl,
                 ha="center", va="center", fontsize=9,
                 color="#000", fontweight="bold", zorder=6)
         # Målpiler for utsparing
         _dv(ax, ly, ly + lh, lx + lw, f"{round(lh*1000)} mm",
-            ex=lx + lw + 0.08, col="#000", fs=9)
-        _dh(ax, lx, lx + lw, ly - 0.08, f"{round(lw*1000)} mm",
-            ey=ly - 0.08, col="#000", fs=9)
+            ex=xmx + .65 + lane*.35, col=DIM_COL, fs=9)
+        _dh(ax, lx, lx + lw, ly, f"{round(lw*1000)} mm",
+            ey=ymn - .55 - lane*.32, col=DIM_COL, fs=9)
         if ly > 0.001:
-            _dv(ax, 0, ly, lx - 0.08, f"{round(ly*1000)} mm",
-                ex=lx - 0.08, col="#000", fs=9)
+            _dv(ax, 0, ly, lx, f"{round(ly*1000)} mm",
+                ex=xmn - .65 - lane*.35, col=DIM_COL, fs=9)
 
     # ── Kantmål og klassifisering ──────────────────────────────────────────────
     for i in range(n):
@@ -1052,8 +1084,8 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
         # Målpil
         s_dim = p1 + perp * dim_off; e_dim = p2 + perp * dim_off
         ax.annotate("", xy=(e_dim[0], e_dim[1]), xytext=(s_dim[0], s_dim[1]),
-                    arrowprops=dict(arrowstyle="<->", color=dim_col,
-                                   lw=0.7, mutation_scale=6), zorder=7)
+                    arrowprops=dict(arrowstyle="<->", shrinkA=0, shrinkB=0, color=dim_col,
+                                   lw=1.6, mutation_scale=8), zorder=7)
         angle = math.degrees(math.atan2(dx[1], dx[0]))
         if angle > 90:
             angle -= 180
@@ -1082,6 +1114,8 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
 
     # Produksjonstabell under panel
     tbl_y  = ymn - pad_y - 0.20
+    if cutouts:
+        tbl_y = min(tbl_y, ymn - .75 - (len(cutouts)-1)*.32)
     tbl_w  = max(5.0, xmx - xmn)
     tbl_x  = (xmn+xmx-tbl_w)/2
     col1_w = tbl_w * 0.38
@@ -1116,8 +1150,9 @@ def _draw_one_panel(ax, local_pts: np.ndarray, panel, panel_key: str,
 
     leg_y = tbl_bot - 0.15
 
-    ax.set_xlim(min(xmn-pad_x,tbl_x-0.15), max(xmx+pad_x+0.35,tbl_x+tbl_w+0.15))
-    ax.set_ylim(leg_y - 0.18,      ymx + pad_y + 0.20)
+    extra = len(cutouts or [])*.35
+    ax.set_xlim(min(xmn-pad_x-extra,tbl_x-0.15), max(xmx+pad_x+0.35+extra,tbl_x+tbl_w+0.15))
+    ax.set_ylim(leg_y - 0.18, ymx + max(pad_y + .20, .65 + len(cutouts)*.20 if cutouts else 0))
     ax.set_aspect("equal"); ax.axis("off")
 
 
@@ -1257,7 +1292,9 @@ def stramo_produksjonstegninger(
         for cell, (cat, p, wi, xs) in enumerate(page):
             num += 1
             ax = axes_flat[cell]
-            local = _panel_to_local(p.polygon)
+            # Wall cut-outs use X across the panel and Y up from its base.
+            # Keep that coordinate frame rather than rotating only the outline.
+            local = np.asarray(p.polygon) if cat == "Vegg" else _panel_to_local(p.polygon)
             cuts = _cutouts_for_panel(cat, wi, xs, p.width_mm, p.span_mm)
             _draw_one_panel(ax, local, p, panel_key, num, category=cat, cutouts=cuts)
             ax.set_title(f"  {cat}: {p.name}  –  {standard_counts.get(p.name,1)} stk  [nr. {num}]",

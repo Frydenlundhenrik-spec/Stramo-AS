@@ -162,7 +162,7 @@ def transport_manifest(cargo, placed):
 
 def transport_ui(rooms):
     import streamlit as st
-    st.header('Transport – lasteforslag')
+    st.subheader('Transport – lasteforslag')
     st.caption('Elementer og beslag. Første rad ligger helt mot frontveggen (0 mm), med pakkene inntil hverandre. To panelpakker i bredden når trailermålene tillater det. Utnytt høyden opp mot trailertaket før neste rad bakover. Last fra fronten og bakover mot bakdørene, i nummerert lasterekkefølge.')
     if not rooms:st.info('Legg til ferdige rom først.');return
     labels={r['id']:r['input']['navn'] for r in rooms}
@@ -206,6 +206,4 @@ def transport_ui(rooms):
     fig=load_figure(placed,length,width,height);st.plotly_chart(fig,use_container_width=True)
     st.caption('Geometrisk lasteforslag. Kontakt mellom pakker er ikke dokumentasjon på tilstrekkelig lastsikring. Frontveggens styrke, vektfordeling/aksellast, tillatt stabling, utfylling og surring må kontrolleres før lasting.')
     st.dataframe(placed,hide_index=True)
-    manifest=transport_manifest(edited,placed)
-    st.download_button('Last ned transportliste CSV',manifest.to_csv(index=False).encode('utf-8-sig'),'transportliste.csv','text/csv')
     st.download_button('Last ned lasteforslag i 3D',fig.to_html(include_plotlyjs=True).encode('utf-8'),'transport-3d.html','text/html')

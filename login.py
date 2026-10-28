@@ -1,81 +1,184 @@
-"""Gate the whole Streamlit app before loading projects or rendering downloads."""
-from pathlib import Path
-import sqlite3
+"""Public Stramo homepage, personal activation and authenticated app chooser."""
+import base64
+import io
 import time
-import tomllib
 
+import pyotp
+import qrcode
 import streamlit as st
 
-from auth_core import AuthStore, authenticate, read_accounts, session_account
-
-ROOT = Path(__file__).resolve().parent
-
-
-def load_accounts():
-    local = ROOT / ".streamlit" / "stramo_login.toml"
-    if local.exists():
-        section = tomllib.loads(local.read_text(encoding="utf-8"))["stramo_login"]
-    else:
-        section = st.secrets["stramo_login"]
-    return read_accounts(section)
+import portal_client
+from branding import LOGO_PATH, logo_finnes
 
 
-def clear_session():
-    # Projects and download state must not leak to the next person on this browser.
+def _logo():
+    if logo_finnes():
+        from pathlib import Path
+        data = base64.b64encode(Path(LOGO_PATH).read_bytes()).decode('ascii')
+        st.markdown(f'<img class="stramo-logo" src="data:image/png;base64,{data}" width="220" alt="Stramo AS" style="display:block;margin:0 auto;max-width:100%">', unsafe_allow_html=True)
+
+
+def _remember(response):
     st.session_state.clear()
+    st.session_state['portal_token'] = response['token']
+    st.session_state['portal_expires'] = response['expires_at']
+    st.rerun()
+
+
+def _logout():
+    try:
+        portal_client.request('logout', {}, st.session_state.get('portal_token'))
+    except portal_client.LoginError:
+        st.error('Kunne ikke logge ut av begge appene. Prøv igjen når forbindelsen er tilbake.')
+        st.stop()
+    st.session_state.clear()
+    st.rerun()
+
+
+def _public():
+    st.markdown('''<style>
+      .block-container{max-width:600px;padding:2rem 1.4rem 1.2rem;}
+      [data-testid="stSidebar"]{display:none;} h1,h2,h3{color:#0d3b54;}
+      [data-testid="stHeader"]{display:none;}
+      h3{text-align:center;}
+      .stApp{background:linear-gradient(135deg,#f8fbfd,#fff 60%,#fcfce9);}
+      .stramo-contact{border:1px solid #e2e8ed;border-radius:14px;padding:20px 24px;background:white;color:#0d3b54;margin:18px 0;}
+      .stramo-contact p{margin:8px 0;} .stramo-contact a{color:#0d3b54;}
+      @media(max-height:620px){.block-container{padding-top:1rem;padding-bottom:.5rem;}.stramo-logo{width:170px;}h3{font-size:1.2rem;}.stramo-contact{padding:12px 18px;margin:10px 0;}}
+      </style>''', unsafe_allow_html=True)
+    _logo()
+    st.subheader('Leverandør av kjøl og fryserom')
+    mode = st.session_state.get('portal_mode', 'home')
+    if mode == 'home':
+        st.markdown('''<div class="stramo-contact"><p><strong>Besøksadresse</strong><br>Kampenveien 4, 1618 Fredrikstad</p>
+          <p><strong>Telefon</strong><br><a href="tel:+4769878777">69 87 87 77</a></p>
+          <p><strong>Åpningstider</strong><br>Mandag–fredag · 10:00–14:00</p>
+          <p><a href="mailto:post@stramo.no">Send oss e-post</a></p></div>''', unsafe_allow_html=True)
+        if st.button('Logg inn', type='primary', use_container_width=True):
+            st.session_state['portal_mode'] = 'login'
+            st.rerun()
+        st.caption('© 2026 Stramo AS · Kampenveien 4, 1618 Fredrikstad')
+        st.stop()
+    if st.button('← Til forsiden', key='public_back'):
+        st.session_state.pop('portal_enrollment', None)
+        st.session_state['portal_mode'] = 'home'
+        st.rerun()
+    if mode == 'activate':
+        _activation()
+    else:
+        st.header('Logg inn')
+        with st.form('portal_login', clear_on_submit=True):
+            email = st.text_input('E-post', key='login_email', max_chars=254)
+            password = st.text_input('Passord', type='password', key='login_password', max_chars=256)
+            code = st.text_input('Kode fra Authenticator', key='login_code', max_chars=7)
+            submit = st.form_submit_button('Logg inn', type='primary', use_container_width=True)
+        if submit:
+            try:
+                _remember(portal_client.request('login', {'email': email, 'password': password, 'code': code}))
+            except portal_client.LoginError as exc:
+                st.error(str(exc))
+        st.caption('Bruk koden fra Google eller Microsoft Authenticator på telefonen.')
+        if st.button('Første gang? Aktiver kontoen din', key='activate_account'):
+            st.session_state['portal_mode'] = 'activate'
+            st.rerun()
+    st.stop()
+
+
+def _activation():
+    st.header('Aktiver kontoen din')
+    pending = st.session_state.get('portal_enrollment')
+    if pending and pending['expires_at'] <= time.time() * 1000:
+        st.session_state.pop('portal_enrollment', None)
+        st.warning('Oppsettet utløp. Start på nytt med aktiveringskoden din.')
+        pending = None
+    if not pending:
+        st.write('Bruk e-postadressen og den private aktiveringskoden du har fått fra Stramo.')
+        with st.form('portal_activation', clear_on_submit=True):
+            email = st.text_input('E-post', key='activation_email', max_chars=254)
+            invite = st.text_input('Aktiveringskode', type='password', key='activation_invite', max_chars=80)
+            password = st.text_input('Velg passord', type='password', key='activation_password', max_chars=256, help='Minst 12 tegn.')
+            repeat = st.text_input('Gjenta passordet', type='password', key='activation_repeat', max_chars=256)
+            submit = st.form_submit_button('Fortsett til telefonen', type='primary', use_container_width=True)
+        if submit:
+            if password != repeat:
+                st.error('Passordene må være like.')
+            elif len(password) < 12:
+                st.error('Velg et passord på minst 12 tegn.')
+            else:
+                try:
+                    st.session_state['portal_enrollment'] = portal_client.request('begin', {'email': email, 'invite': invite, 'password': password})
+                    st.rerun()
+                except portal_client.LoginError as exc:
+                    st.error(str(exc))
+        return
+    st.write('Åpne Google Authenticator eller Microsoft Authenticator. Trykk + og velg å skanne en QR-kode.')
+    uri = pyotp.TOTP(pending['secret']).provisioning_uri(name=pending['email'], issuer_name='Stramo')
+    qr = io.BytesIO()
+    qrcode.make(uri).save(qr, format='PNG')
+    # Inline the image: Streamlit's shared media URLs must not carry enrollment secrets.
+    image_data = base64.b64encode(qr.getvalue()).decode('ascii')
+    st.markdown(f'<img src="data:image/png;base64,{image_data}" width="260" alt="Privat QR-kode for Authenticator">', unsafe_allow_html=True)
+    st.caption('QR-koden er personlig. Skriv deretter de seks sifrene fra telefonen nedenfor.')
+    with st.form('portal_confirm_phone', clear_on_submit=True):
+        code = st.text_input('Sekssifret kode', key='activation_code', max_chars=7)
+        submit = st.form_submit_button('Bekreft og logg inn', type='primary', use_container_width=True)
+    if submit:
+        try:
+            _remember(portal_client.request('activate', {'enrollment_token': pending['enrollment_token'], 'code': code}))
+        except portal_client.LoginError as exc:
+            st.error(str(exc))
+    if st.button('Avbryt oppsett', key='cancel_activation'):
+        st.session_state.pop('portal_enrollment', None)
+        st.session_state['portal_mode'] = 'login'
+        st.rerun()
 
 
 def require_login():
+    token = st.session_state.get('portal_token')
+    if not token:
+        _public()
     try:
-        accounts = load_accounts()
-    except (KeyError, ValueError, TypeError, OSError, st.errors.StreamlitSecretNotFoundError):
-        st.title("Stramo · Kjøl og frys")
-        st.info("Innlogging er ikke aktivert ennå. Administrator må fullføre oppsettet av brukerkontoene.")
-        st.stop()
-
-    account = session_account(st.session_state.get("stramo_login_session"), accounts)
-    if account:
-        with st.sidebar:
-            st.caption(f"Innlogget som {account.name}")
-            if st.button("Logg ut", key="stramo_logout", use_container_width=True):
-                clear_session()
-                st.rerun()
-            st.caption("Last ned prosjektfilen før du logger ut for å ta vare på arbeid i denne økten.")
-        return account
-
-    if "stramo_login_session" in st.session_state:
-        clear_session()
-    st.markdown("""<style>
-        .block-container {max-width:520px;padding-top:3rem;}
-        h1 {color:#0d3b54;} section[data-testid="stSidebar"] {display:none;}
-        .stFormSubmitButton button {background:#0d3b54;color:white;}
-        </style>""", unsafe_allow_html=True)
-    from branding import LOGO_PATH, logo_finnes
-    if logo_finnes():
-        st.image(str(LOGO_PATH), width=210)
-    st.title("Velkommen til Stramo")
-    st.write("Logg inn for å åpne kjøl- og frysappen.")
-    with st.form("stramo_login_form", clear_on_submit=True):
-        email = st.text_input("E-post", key="stramo_login_email", max_chars=254)
-        password = st.text_input("Passord", type="password", key="stramo_login_password", max_chars=1024)
-        code = st.text_input("Kode fra Authenticator", key="stramo_login_code", max_chars=7,
-                             help="Skriv de seks sifrene fra Microsoft eller Google Authenticator.")
-        submitted = st.form_submit_button("Logg inn", use_container_width=True)
-    st.caption("Bruk din personlige konto og koden på telefonen. Ingen SMS er nødvendig.")
-    if submitted:
-        try:
-            status, account = authenticate(accounts, AuthStore(ROOT / ".stramo_auth.sqlite3"), email, password, code)
-        except (sqlite3.Error, OSError):
-            st.error("Innlogging er midlertidig utilgjengelig. Prøv igjen senere.")
-            st.stop()
-        if account:
-            clear_session()
-            st.session_state["stramo_login_session"] = {
-                "email": account.email, "fingerprint": account.fingerprint, "issued_at": time.time(),
-            }
+        user = portal_client.request('session', token=token)
+    except portal_client.LoginError as exc:
+        if exc.status == 401:
+            st.session_state.clear()
+            st.session_state['portal_mode'] = 'login'
             st.rerun()
-        elif status == "limited":
-            st.error("For mange innloggingsforsøk. Vent 15 minutter før du prøver igjen.")
-        else:
-            st.error("Innloggingen lyktes ikke. Kontroller e-post, passord og en ny kode fra telefonen.")
+        st.error(str(exc))
+        st.stop()
+    if st.session_state.get('portal_destination') == 'cold':
+        with st.sidebar:
+            st.caption('Innlogget som ' + user['name'])
+            if st.button('← Mine apper', key='portal_home', use_container_width=True):
+                st.session_state.pop('portal_destination', None)
+                st.rerun()
+            if st.button('Logg ut', key='portal_logout', use_container_width=True):
+                _logout()
+            st.caption('Last ned prosjektfilen før utlogging.')
+        return user
+    st.markdown('<style>.block-container{max-width:850px;padding-top:2.2rem}h1,h2,h3{color:#0d3b54}[data-testid="stSidebar"]{display:none}</style>', unsafe_allow_html=True)
+    _logo()
+    st.title('Velkommen, ' + user['name'].split()[0])
+    st.write('Velg appen du vil åpne.')
+    left, right = st.columns(2)
+    with left:
+        with st.container(border=True):
+            st.subheader('Timeregistrering')
+            st.write('Timer, avvik, bilder og kvalitetssikring.')
+            try:
+                link = portal_client.request('launch', {}, token)
+                st.link_button('Åpne timeregistrering ↗', link['url'], use_container_width=True, type='primary')
+                st.caption('Lenken er gyldig i to minutter. Oppdater siden hvis du venter lenger.')
+            except portal_client.LoginError as exc:
+                st.error(str(exc))
+    with right:
+        with st.container(border=True):
+            st.subheader('Kjøl og frys')
+            st.write('Prosjekter, kalkulasjon, tegninger og dokumentasjon.')
+            if st.button('Åpne kjøl og frys', key='open_cold', use_container_width=True, type='primary'):
+                st.session_state['portal_destination'] = 'cold'
+                st.rerun()
+    st.caption('Begge kontoene har tilgang til samme Stramo-arbeidsområde. Bruk testdata under utprøvingen.')
+    if st.button('Logg ut', key='portal_logout'):
+        _logout()
     st.stop()

@@ -10,7 +10,7 @@ out=Path('output/pdf');out.mkdir(parents=True,exist_ok=True)
 tmp=Path('tmp/pdfs');tmp.mkdir(parents=True,exist_ok=True)
 f=project_materials(rooms)
 assert not f.duplicated(['Produkt','Høyde_mm','Bredde_mm','Tykkelse_mm']).any()
-assert f[f.Gruppe=='Elementer'].Stk.sum()==75
+assert f[f.Gruppe=='Elementer'].Stk.sum()==70
 assert f[f.Produkt.str.contains('50×50')].shape[0]==1
 assert f[f.Produkt.str.contains('1000')].Stk.sum()==4
 f.to_csv(out/'materialliste-prosjekt.csv',index=False,encoding='utf-8-sig')
@@ -30,7 +30,7 @@ for kind in ('alle','elementer','beslag','finer','materialer'):
         elements,accessories=[p.extract_text() for p in reader.pages]
         assert 'Vekt' not in elements and 'BESTILLING /' not in elements
         assert 'SUM' not in accessories and 'Side 2' in accessories
-        assert all(label in accessories for label in ('Materialliste','Beslag','Dører','Tilbehør','22 mm hvite skruer'))
+        assert all(label in accessories for label in ('Bestillingsliste','Beslag','Dører','Tilbehør','22 mm hvite skruer'))
         assert 'Produkt' not in accessories and 'Øvrige materialer' not in accessories
     for page_number,page in enumerate(reader.pages,1):
         assert 'Stramo AS' in page.extract_text() and f'Side {page_number}' in page.extract_text()
@@ -39,5 +39,8 @@ for kind in ('alle','elementer','beslag','finer','materialer'):
         doc[i].render(scale=1).to_pil().save(tmp/f'{kind}-{i+1}.png')
     print(kind,len(reader.pages),'pages')
 assert len(PdfReader(BytesIO(cutting_pdf(rooms[:1],'finer'))).pages)==1
-assert project_materials(rooms+rooms).Stk.sum()==2*f.Stk.sum()
+doubled=project_materials(rooms+rooms)
+assert doubled.query("Gruppe=='Elementer'").Stk.sum()==140
+assert doubled.query("Gruppe=='Beslag'").Stk.sum()==188
+assert doubled.query("Produkt=='Silikon grå'").Stk.sum()==27  # round only the combined need
 print('PASS: PDFs, grouped totals, dimensions, shared-wall exclusions, doors and duplicate-room aggregation')

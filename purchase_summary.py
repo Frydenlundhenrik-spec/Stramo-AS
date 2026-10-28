@@ -54,18 +54,40 @@ def grouped_panels(rooms):
 
 
 def grouped_cuts(rooms):
-    frames=[]
+    rows=[]
     for room in rooms:
         inp=world_input(room)
         f=beregn_prosjekt(inp)["df_kapp"].copy()
         f=f[pd.to_numeric(f.Bredde_mm,errors="coerce").notna()]
-        f["Panel"]=inp.panel_key
-        f["Tykkelse_mm"]=PANEL_DB[inp.panel_key]["t"]
-        f["Antall_stk"]=1
-        f["Vekt_kg"]=f.Areal_m2*estimated_panel_weight(inp.panel_key)
-        frames.append(f)
-    if not frames:return pd.DataFrame()
-    return pd.concat(frames).groupby(["Panel","Høyde_mm","Bredde_mm","Tykkelse_mm"],sort=False,as_index=False)[["Antall_stk","Areal_m2","Vekt_kg"]].sum()
+        for _, p in f.iterrows():
+            role = "V" if p.Vegg.startswith("Vegg") else "T" if p.Vegg == "Tak" else "G"
+            standard = (int(p.Bredde_mm) == round(inp.panelbredde_m*1000)
+                        and abs(p.Areal_m2-p.Bredde_mm*p.Høyde_mm/1e6)<.002
+                        and "Utsparing" not in p.Type)
+            thickness = PANEL_DB[inp.panel_key]["t"]
+            rows.append(dict(Panel=f"STD {role} {thickness} mm" if standard else f"{p.Elementnavn} {thickness} mm",
+                Rom=inp.navn, Referanse=p.Vegg, Høyde_mm=p.Høyde_mm,
+                Bredde_mm=p.Bredde_mm, Tykkelse_mm=thickness, Antall_stk=1,
+                Areal_m2=p.Areal_m2, Vekt_kg=p.Areal_m2*estimated_panel_weight(inp.panel_key),
+                order="VTG".index(role)*2+(not standard)))
+    if not rows:return pd.DataFrame()
+    frame=pd.DataFrame(rows).sort_values("order",kind="stable")
+    keys=["Panel","Høyde_mm","Bredde_mm","Tykkelse_mm"]
+    # References remain visible, including the room when IDs repeat between rooms.
+    frame["Referanse"] = frame.Rom + " · " + frame.Referanse
+    def references(values):
+        by_room={}
+        for value in values:
+            room, zone=value.rsplit(" · ",1)
+            by_room.setdefault(room,[])
+            if zone not in by_room[room]:by_room[room].append(zone)
+        return "; ".join(room+" · "+(
+            "Vegg "+", ".join(z.removeprefix("Vegg ") for z in zones)
+            if all(z.startswith("Vegg ") for z in zones) else ", ".join(zones))
+            for room,zones in by_room.items())
+    return frame.groupby(keys,sort=False,as_index=False).agg(
+        Referanse=("Referanse",references),
+        Antall_stk=("Antall_stk","sum"),Areal_m2=("Areal_m2","sum"),Vekt_kg=("Vekt_kg","sum"))
 
 
 def element_cutlist(rooms):
@@ -112,7 +134,23 @@ def panel_summary_ui(rooms):
         "Leveringslengde_mm":"Høyde / lengde (mm)", "Bredde_mm":"Bredde (mm)", "Tykkelse_mm":"Tykkelse (mm)",
         "Bestill_hele_elementer":"Antall (stk)", "Bestill_m2":"Areal (m²)", "Bestill_vekt_kg":"Vekt (kg)"})
     st.dataframe(total.round(3),hide_index=True)
-    st.caption("Elementer bestilles på beregnet lengde: veggpanelhøyde og spenn for tak/gulv. Lengdene avrundes ikke til standardlengder. Antallet følger beregnet behov uten prosentvis kapptillegg. Én råplate per element; avkapp deles ikke mellom elementer. Kalkulasjonen bruker samme bestillingsmengder og panelarealer.")
+    st.caption("Elementer bestilles på beregnet lengde. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor, uten prosentvis kapptillegg. Kalkulasjon, bestillingsliste og transport bruker samme bestillingsmengder.")
     st.caption("Panelvekt beregnes automatisk som areal × kg/m². Balex PIR STANDARD: 80 mm = 11,8, 100 mm = 12,6 og 120 mm = 13,2 kg/m² (produktdatablad 22.10.2026, side 3). Andre paneltyper merkes ESTIMAT. Tilbehør og emballasje er ikke inkludert.")
-    st.download_button("Last ned elementsummer og bestilling",total.to_csv(index=False).encode("utf-8-sig"),"elementer-summer.csv","text/csv")
+    with st.expander("Kappfordeling på hele elementer"):
+        plan = panel_cutting_plan(rooms)
+        st.dataframe(plan, hide_index=True)
     return total
+
+
+def panel_cutting_plan(rooms):
+    rows=[]
+    for room in rooms:
+        inp=world_input(room)
+        cut=beregn_prosjekt(inp)["df_kapp"]
+        blanks=panel_order_rows(cut,round(inp.hoyde_m*1000),round(inp.panelbredde_m*1000))
+        for number, blank in enumerate(blanks.itertuples(), 1):
+            rows.append(dict(Rom=inp.navn,Råelement=f"R{number}",Panel=inp.panel_key,
+                Leveringslengde_mm=blank.Leveringslengde_mm,Bredde_mm=blank.Bredde_mm,
+                Elementer=blank.Elementnavn,Kappbredder_mm=" + ".join(map(str,blank.Kappbredder_mm)),
+                Sagspor_mm=blank.Sagspor_mm,Restbredde_mm=blank.Restbredde_mm))
+    return pd.DataFrame(rows)

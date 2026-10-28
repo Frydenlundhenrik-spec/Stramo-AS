@@ -1,6 +1,6 @@
 # Stramo kjøleromssystem
 
-Versjon **2026.10.26-r08**. App for kjøle- og fryserom, med flere rom i samme prosjekt.
+Versjon **2026.10.27-r11**. App for kjøle- og fryserom, med flere rom i samme prosjekt.
 
 ## Kjør lokalt
 
@@ -15,9 +15,11 @@ py -3.12 -m venv .venv
 På Linux/macOS brukes `.venv/bin/python` i stedet for `.venv\Scripts\python.exe`.
 Appen trenger ingen API-nøkler. AI-assistenten er fjernet.
 
-Personlig innlogging med passord og Microsoft/Google Authenticator må konfigureres før appen åpnes.
-Se [LOGIN.md](LOGIN.md) for konto-oppsett, lokal installasjon og Streamlit Secrets.
-Innloggingsgrenen må ikke tas i bruk på nett før de private kontoene er satt opp.
+Hjemmeside og innlogging: https://stramo-as-n7zzenre2auarxeuzha8pk.streamlit.app/
+
+Den offentlige forsiden viser kontaktinformasjon og Logg inn. Først etter godkjent
+passord og Authenticator-kode vises Timeregistrering og Kjøl og frys. Nye brukere
+aktiverer kontoen på nettsiden med en privat invitasjon. Se [LOGIN.md](LOGIN.md).
 
 ## Innhold
 
@@ -53,7 +55,7 @@ For å generere Tasty-tegningspakken fra kommandolinjen:
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
-.\.venv\Scripts\python.exe -m unittest test_login.py
+.\.venv\Scripts\python.exe -m unittest test_portal.py
 .\.venv\Scripts\python.exe run_checks.py
 ```
 

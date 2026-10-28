@@ -49,15 +49,14 @@ def check():
         app.button(key="open_project").click().run()
         checked(app, project["draft"])
         modules = app.radio(key="ed_module").options
-        assert modules == ["Kalkulasjon", "FDV", "Montasjetegninger", "Elementer", "Rom og sammenstilling", "Transport"]
+        assert modules == ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Elementer", "FDV", "Transport", "Sammenstilling"]
         assert PANEL_DB["PIR 80 mm"]["pris"] == 900
         assert PANEL_DB["PIR 100 mm"]["pris"] == 1000
         assert not any("NS 3420" in str(column) or "NS3420" in str(column)
                        for frame in app.dataframe for column in frame.value.columns)
-        assert "Kalkulasjon · FDV · Montasje · Elementer" in [caption.value for caption in app.caption]
         assert any("U-verdi" in str(expander.label) for expander in app.expander)
 
-        for module in ["Transport", "Kalkulasjon", "Transport", "Elementer", "Montasjetegninger", "Rom og sammenstilling"]:
+        for module in ["Transport", "Kalkulasjon", "Oversikt", "Rom", "Transport", "Elementer", "Tegninger", "Sammenstilling"]:
             app.radio(key="ed_module").set_value(module).run()
             checked(app, project["draft"])
 
@@ -68,8 +67,7 @@ def check():
         checked(app, project["draft"])
 
         for room in (project["rooms"][1], project["rooms"][0]):
-            app.selectbox(key="recover_room_choice").set_value(room["id"]).run()
-            app.button(key="recover_room").click().run()
+            app.selectbox(key="room_picker").set_value(room["id"]).run()
             checked(app, room)
             app.radio(key="ed_module").set_value("Transport").run()
             checked(app, room)

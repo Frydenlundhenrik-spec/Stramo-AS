@@ -69,7 +69,7 @@ GULV_FRYS = FloorType(980, 28.0, "Gulvpanel som vegg/tak + 12 mm gulvplate (frys
 BESLAG = {
     "Hengsel – tung kjøledør (rustfritt)": Beslag(850, 3, "Hengsel rustfritt"),
     "Lukkemekanisme / låsekasse kjøl": Beslag(2200, 1, "Låsekasse kjøl"),
-    "Trykkventil / trykkutligningsplugg": Beslag(480, 1, "Trykkventil"),
+    "Trykkventil / trykkutligningsplugg": Beslag(2500, 1, "Trykkventil"),
     "Varmekabel dørkarm (m)": Beslag(320, 3, "Varmekabel pr. m"),
     "Terskel / rampe rustfritt stål": Beslag(1400, 1, "Terskel rustfritt"),
     "Dørpumpe / selvlukker": Beslag(1850, 1, "Dørpumpe"),
@@ -80,13 +80,22 @@ BESLAG = {
 DOR_STANDARD_HOYDE_MM = 2100  # alle dører har denne standardhøyden
 
 DORER = {
-    "Enkel kjøledør 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 12500, "Enkel 900×2100"),
-    "Enkel kjøledør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 0, "Enkel 1000×2100"),
-    "Enkel kjøledør 1200×2100 mm": Door(1200, DOR_STANDARD_HOYDE_MM, 15800, "Enkel 1200×2100"),
+    "Enkel kjøledør 700×2100 mm": Door(700, DOR_STANDARD_HOYDE_MM, 12000, "Enkel 700×2100"),
+    "Enkel kjøledør 800×2100 mm": Door(800, DOR_STANDARD_HOYDE_MM, 12500, "Enkel 800×2100"),
+    "Enkel kjøledør 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 13000, "Enkel 900×2100"),
+    "Enkel kjøledør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 14000, "Enkel 1000×2100"),
+    "Enkel kjøledør 1100×2100 mm": Door(1100, DOR_STANDARD_HOYDE_MM, 15000, "Enkel 1100×2100"),
+    "Enkel kjøledør 1200×2100 mm": Door(1200, DOR_STANDARD_HOYDE_MM, 16000, "Enkel 1200×2100"),
+    "Enkel kjøledør 1300×2100 mm": Door(1300, DOR_STANDARD_HOYDE_MM, 17000, "Enkel 1300×2100"),
     "Dobbelddør 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 24500, "Dobbel 1600×2100"),
     "Skyvedør 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 18900, "Skyvedør 1000×2100"),
-    "Fryserom enkel 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 17500, "Fryserom enkel 900×2100"),
-    "Fryserom enkel 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 0, "Fryserom enkel 1000×2100"),
+    "Fryserom enkel 700×2100 mm": Door(700, DOR_STANDARD_HOYDE_MM, 16000, "Fryserom enkel 700×2100"),
+    "Fryserom enkel 800×2100 mm": Door(800, DOR_STANDARD_HOYDE_MM, 17000, "Fryserom enkel 800×2100"),
+    "Fryserom enkel 900×2100 mm": Door(900, DOR_STANDARD_HOYDE_MM, 18000, "Fryserom enkel 900×2100"),
+    "Fryserom enkel 1000×2100 mm": Door(1000, DOR_STANDARD_HOYDE_MM, 19000, "Fryserom enkel 1000×2100"),
+    "Fryserom enkel 1100×2100 mm": Door(1100, DOR_STANDARD_HOYDE_MM, 20000, "Fryserom enkel 1100×2100"),
+    "Fryserom enkel 1200×2100 mm": Door(1200, DOR_STANDARD_HOYDE_MM, 21000, "Fryserom enkel 1200×2100"),
+    "Fryserom enkel 1300×2100 mm": Door(1300, DOR_STANDARD_HOYDE_MM, 22000, "Fryserom enkel 1300×2100"),
     "Fryserom dobbel 1600×2100 mm": Door(1600, DOR_STANDARD_HOYDE_MM, 31000, "Fryserom dobbel 1600×2100"),
 }
 

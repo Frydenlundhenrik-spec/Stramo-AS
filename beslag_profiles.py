@@ -30,29 +30,30 @@ def profile_png(kind, width):
     def line(xs, ys):
         ax.plot(xs, ys, color=ink, linewidth=2)
     def dimension(a, b, label):
-        ax.annotate("", b, a, arrowprops=dict(arrowstyle="<->", color="#667783", lw=.8))
+        ax.annotate("", b, a, arrowprops=dict(arrowstyle="<->", color=ink, lw=1.2, shrinkA=0, shrinkB=0))
         x, y = (a[0]+b[0])/2, (a[1]+b[1])/2
         ax.text(x, y, f"{label} mm", ha="center", va="center", fontsize=12, fontweight="bold",
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
     def hem(x, y):
-        ax.text(x, y, "10 mm", fontsize=9, ha="center", va="top", color=ink)
+        ax.text(x, y, "10 mm", fontsize=10, ha="center", va="center", color=ink,
+                bbox=dict(facecolor="white", edgecolor="none", pad=1))
     if kind == "inner":
         # Inside angle: finish on the concave face; returns fold to the back.
-        line([10, 0, 0, 50, 50, 48.8, 48.8], [48.8, 48.8, 50, 50, 0, 0, 10])
-        dimension((0, 65), (50, 65), 50)
-        dimension((66, 0), (66, 50), 50)
+        line([10, 0, 0, 50, 50, 51.2, 51.2], [51.2, 51.2, 50, 50, 0, 0, 10])
+        dimension((0, 78), (50, 78), 50)
+        dimension((82, 0), (82, 50), 50)
         line([42, 42, 50], [50, 42, 42])
         ax.text(34, 34, "90°", fontsize=9)
-        hem(6, 42)
-        hem(38, 9)
-        ax.plot([0,0],[50,68],color=ink,lw=.5)
-        ax.plot([50,50],[50,68],color=ink,lw=.5)
-        ax.plot([50,69],[0,0],color=ink,lw=.5)
-        ax.plot([50,69],[50,50],color=ink,lw=.5)
+        hem(5, 61)
+        hem(61, -10)
+        ax.plot([0,0],[50,81],color=ink,lw=.5)
+        ax.plot([50,50],[50,81],color=ink,lw=.5)
+        ax.plot([50,85],[0,0],color=ink,lw=.5)
+        ax.plot([50,85],[50,50],color=ink,lw=.5)
         ax.annotate("RAL 9010\nlakkert side", (31, 50), (-33, 18), fontsize=10,
                     ha="center", va="center",
                     arrowprops=dict(arrowstyle="->", color=ink, connectionstyle="angle,angleA=0,angleB=90,rad=3"))
-        ax.set_xlim(-65, 96)
+        ax.set_xlim(-65, 110)
     else:
         if kind == "channel":
             line([2, 2, 0, 0, width, width, width-2, width-2],
@@ -67,19 +68,19 @@ def profile_png(kind, width):
         dimension((width+22, 0), (width+22, 50), 50)
         line([width-8, width-8, width], [0, 8, 8])
         ax.text(width-27, 14, "90°", fontsize=9)
-        hem(width-12, 39)
-        hem(12, 39 if kind == "channel" else 14)
+        hem(width-10, 61)
+        hem(10, 61 if kind == "channel" else 17)
         ax.plot([0,0],[0,-19],color=ink,lw=.5)
         ax.plot([width,width],[0,-19],color=ink,lw=.5)
         ax.plot([width,width+26],[0,0],color=ink,lw=.5)
         ax.plot([width,width+26],[50,50],color=ink,lw=.5)
-        ax.text(width*.5, 66, "RAL 9010 - lakkert side", fontsize=10,
+        ax.text(width+52, 76, "RAL 9010\nlakkert side", fontsize=10,
                 ha="center", va="center")
-        ax.annotate("", (width, 25), (width*.65, 60),
+        ax.annotate("", (width, 32), (width+52, 65),
                     arrowprops=dict(arrowstyle="->", color=ink,
                                     connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
-        ax.set_xlim(-36, width+40)
-    ax.set_ylim(-49, 86)
+        ax.set_xlim(-36, width+88)
+    ax.set_ylim(-35, 94)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.subplots_adjust(left=.01, right=.99, top=.98, bottom=.02)

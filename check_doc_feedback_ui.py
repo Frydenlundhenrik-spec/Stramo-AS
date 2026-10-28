@@ -7,7 +7,7 @@ assert not a.exception,[e.message for e in a.exception]
 assert DOR_DB[a.selectbox(key='dt_Kjølerom_0').value]['bw']==1000
 # No doors while testing removal of their host wall.
 a.number_input(key='ed_doors').set_value(0).run()
-a.radio(key='ed_module').set_value('Montasjetegninger').run()
+a.radio(key='ed_module').set_value('Tegninger').run()
 assert not a.exception,[e.message for e in a.exception]
 a.multiselect(key='ed_drawing_walls').set_value([0]).run()
 assert not a.exception,[e.message for e in a.exception]

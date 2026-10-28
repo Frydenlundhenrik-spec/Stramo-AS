@@ -12,6 +12,9 @@ from drawing_3d import _polygon_triangles, tegn_3d_med_panelbredde
 from geometry import l_polygon, wall_lengths
 from panel_engine import generate_roof_floor_panels
 from project_file import decode_project, world_input
+from montasje import tegn_produksjonsfigurer
+from kalkulasjon import beregn_prosjekt
+from matplotlib.patches import Rectangle, Polygon as PlotPolygon
 
 
 def check_triangles(points):
@@ -72,4 +75,20 @@ for room in rooms:
         assert not any(label in ('F','RK','VK') for label in labels)
         assert not any('Snittvinkel' in label for label in labels)
         plt.close(detail)
+    openings_checked = 0
+    for detail in tegn_produksjonsfigurer(inp, beregn_prosjekt(inp)):
+        for ax in detail.axes:
+            outlines = [p for p in ax.patches if isinstance(p, PlotPolygon)]
+            for patch in ax.patches:
+                if not isinstance(patch, Rectangle) or patch.get_linestyle() != '--':
+                    continue
+                # Door/opening coordinates must share the wall panel's frame.
+                outline = Polygon(outlines[0].get_xy()).buffer(1e-8)
+                x, y = patch.get_xy()
+                w, h = patch.get_width(), patch.get_height()
+                assert outline.covers(Polygon([(x,y),(x+w,y),(x+w,y+h),(x,y+h)]))
+                assert abs(h-2.1) < 1e-8
+                openings_checked += 1
+        plt.close(detail)
+    assert openings_checked >= 2
 print('PASS: concave roof coverage, nonoverlapping triangles, clipped gray hatch, square wall ends, omitted neighbors and T3 cut/angle labels')

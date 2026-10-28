@@ -32,7 +32,10 @@ def check():
     app.session_state["pending_editor"] = copy.deepcopy(project["rooms"][0])
     app.run()
     checked()
-    assert app.radio(key="ed_module").value == "Kalkulasjon"
+    # Et åpnet rom vises i romredigeringen; varmetapet ligger under Kalkulasjon.
+    assert app.radio(key="ed_module").value == "Rom"
+    app.radio(key="ed_module").set_value("Kalkulasjon").run()
+    checked()
     assert "U-verdi og varmetap" not in app.radio(key="ed_module").options
     assert any(e.label == "U-verdi og varmetap" for e in app.expander)
     assert any(b.label == "Last ned U-verdi og varmetap PDF" for b in app.get("download_button"))

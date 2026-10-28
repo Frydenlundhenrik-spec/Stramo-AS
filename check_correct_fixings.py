@@ -9,7 +9,7 @@ rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
 f=project_materials(rooms)
 assert not f.Produkt.str.contains('Varmekabel|Låsekasse|Hengsel|U-kanal 100').any()
 assert f.Produkt.str.contains('Kjøleromsdør').any() and f.Produkt.str.contains('Fryseromsdør').any()
-assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==444
+assert f.query("Gruppe=='Tilbehør' and Produkt=='22 mm hvite skruer'").Stk.sum()==3
 assert f.loc[f.Produkt.eq('Trykkventil'),'Gruppe'].tolist()==['Tilbehør']
 for r in rooms:
  inp=world_input(r);result=beregn_prosjekt(inp)
@@ -26,5 +26,5 @@ for kind in ('materialer','alle','beslag'):
   doc=pdfium.PdfDocument(data)
   for i in range(len(doc)):doc[i].render(scale=1).to_pil().save(f'tmp/pdfs/fixings-{i+1}.png')
 f.to_csv('output/pdf/materialliste-prosjekt.csv',index=False,encoding='utf-8-sig')
-print('PASS: removed hardware, distinct doors, no freezer U-channel, floor angles, 452 white 22 mm screws')
+print('PASS: removed hardware, distinct doors, no freezer U-channel, floor angles, 1328 white 22 mm screws ordered in 3 boxes')
 

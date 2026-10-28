@@ -125,13 +125,10 @@ def lag_kappliste(
 
 
 def kappliste_sammendrag(df_kapp: pd.DataFrame) -> dict:
-    VEGG_TYPER = ["Hel", "Kapp (videreføres)", "Rest fra forrige"]
-    TAK_TYPER = ["Tak – hel", "Tak – startkapp", "Tak – sluttkapp"]
-    GULV_TYPER = ["Gulv PIR – hel", "Gulv PIR – startkapp", "Gulv PIR – sluttkapp"]
-
     vegg_df = df_kapp[df_kapp["Vegg"].str.startswith("Vegg ")]
-    tak_df = df_kapp[df_kapp["Type"].isin(TAK_TYPER)]
-    gulv_df = df_kapp[df_kapp["Type"].isin(GULV_TYPER)]
+    panel = pd.to_numeric(df_kapp.Bredde_mm, errors="coerce").notna()
+    tak_df = df_kapp[df_kapp.Vegg.eq("Tak") & panel]
+    gulv_df = df_kapp[df_kapp.Vegg.eq("Gulv") & panel]
     spon_df = df_kapp[df_kapp["Type"].isin(("Gulvplate 12 mm", "Beskyttelsesfiner 12 mm"))]
 
     return dict(
@@ -146,18 +143,45 @@ def kappliste_sammendrag(df_kapp: pd.DataFrame) -> dict:
 
 
 def panel_order_rows(cut: pd.DataFrame, wall_height_mm: int, panel_width_mm: int):
-    """One full-width blank per named panel, shared by prices and purchase lists.
+    """Pack strips of equal length/use into full-width blanks, with 3 mm saw cuts.
 
-    Opening sub-pieces keep the same name and therefore never buy another blank.
-    Net cutting dimensions are kept separately from the ordered blank area.
+    A named wall panel keeps its full height even when openings split it into
+    pieces. Roof/floor polygons reserve their bounding strip; irregular offcuts
+    are not assumed reusable. The part-to-blank mapping remains inspectable.
     """
     panels = cut[pd.to_numeric(cut.Bredde_mm, errors="coerce").notna()]
-    rows = []
+    groups = {}
     for (zone, name), parts in panels.groupby(["Vegg", "Elementnavn"], sort=False):
         length = wall_height_mm if str(zone).startswith("Vegg") else int(parts.Høyde_mm.sum())
-        rows.append(dict(Vegg=zone, Elementnavn=name, Leveringslengde_mm=length,
-                         Bredde_mm=panel_width_mm, Deler_stk=len(parts),
-                         Løpemeter=float(parts.Høyde_mm.sum()) / 1000,
-                         Areal_m2=float(parts.Areal_m2.sum()),
-                         Bestill_m2=panel_width_mm * length / 1_000_000))
+        width = int(pd.to_numeric(parts.Bredde_mm).max())
+        if width <= 0 or width > panel_width_mm:
+            raise ValueError("Elementbredden må være innenfor råelementets bredde.")
+        role = "Vegg" if str(zone).startswith("Vegg") else zone
+        groups.setdefault((role, length), []).append(dict(zone=zone, name=name,
+            width=width, count=len(parts), lm=float(parts.Høyde_mm.sum())/1000,
+            area=float(parts.Areal_m2.sum())))
+    rows = []
+    for (role, length), parts in groups.items():
+        bins = []
+        for part in sorted(parts, key=lambda p: -p["width"]):
+            target = next((b for b in bins if b["used"]+3+part["width"] <= panel_width_mm), None)
+            if target is None:
+                target = dict(used=0, parts=[])
+                bins.append(target)
+            target["used"] += part["width"] + (3 if target["parts"] else 0)
+            target["parts"].append(part)
+        for blank in bins:
+            allocation = {}
+            total_width = sum(p["width"] for p in blank["parts"])
+            raw_area = panel_width_mm * length / 1_000_000
+            for p in blank["parts"]:
+                allocation[p["zone"]] = allocation.get(p["zone"], 0) + raw_area*p["width"]/total_width
+            rows.append(dict(Vegg=blank["parts"][0]["zone"],
+                Elementnavn=", ".join(p["name"] for p in blank["parts"]),
+                Leveringslengde_mm=length, Bredde_mm=panel_width_mm,
+                Deler_stk=sum(p["count"] for p in blank["parts"]),
+                Løpemeter=sum(p["lm"] for p in blank["parts"]),
+                Areal_m2=sum(p["area"] for p in blank["parts"]), Bestill_m2=raw_area,
+                Fordeling_m2=allocation, Kappbredder_mm=[p["width"] for p in blank["parts"]],
+                Sagspor_mm=3, Restbredde_mm=panel_width_mm-blank["used"]))
     return pd.DataFrame(rows)

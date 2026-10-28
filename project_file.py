@@ -221,6 +221,8 @@ def world_input(room):
     x,y = room["position_mm"]
     data["pts"] = [(a+x/1000,b+y/1000) for a,b in data["pts"]]
     data["excluded_walls"] = tuple(room["excluded_walls"])
+    for field, default in (("plywood_width_mm", 1500), ("plywood_length_mm", 3000)):
+        data[field] = room["form"].get(field, default)
     return ProjectInput(**data)
 
 

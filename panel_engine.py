@@ -165,9 +165,12 @@ def generate_roof_floor_panels(
         world = local_to_world(clipped_local, origin, x_axis, y_axis)
         span_mm = int(round((clipped_local[:, 1].max() - clipped_local[:, 1].min()) * 1000))
         area_m2 = round(polygon_area(clipped_local), 3)
-        if width_mm == panel_width_mm:
+        if width_mm == panel_width_mm and abs(area_m2-width_mm*span_mm/1e6)<.002:
             typ = f'{label} – hel'
             note_cut = ''
+        elif width_mm == panel_width_mm:
+            typ = f'{label} – formkapp'
+            note_cut = 'formkapp'
         elif idx == 1 and cut_position == 'start':
             typ = f'{label} – startkapp'
             note_cut = f'startkapp {width_mm} mm'
