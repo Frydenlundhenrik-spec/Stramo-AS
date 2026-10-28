@@ -19,7 +19,8 @@ def request(action, payload=None, token=None):
     parsed = urlparse(origin)
     if parsed.scheme != "https" and not (parsed.scheme == "http" and parsed.hostname in ("127.0.0.1", "localhost")):
         raise LoginError("Innloggingstjenesten er ikke riktig konfigurert.")
-    headers = {"Content-Type": "application/json", "Accept": "application/json"}
+    # Identify this server client explicitly; the hosting edge rejects generic urllib.
+    headers = {"Content-Type": "application/json", "Accept": "application/json", "User-Agent": "StramoPortal/1.0"}
     if token:
         headers["Authorization"] = "Bearer " + token
     data = json.dumps(payload).encode() if payload is not None else None
