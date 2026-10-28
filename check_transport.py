@@ -7,7 +7,7 @@ import pandas as pd
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 f=packages(rooms);p,m=pack_floor(f,13600,2450,2700)
 assert len(p)+len(m)==len(f)
-assert f[f.Innhold.str.startswith('PIR')].Antall.sum()==75
+assert f[f.Innhold.str.startswith('PIR')].Antall.sum()==70
 for thickness, per_package in ((80,14),(100,11)):
  panel = f[f.Innhold.str.startswith(f'PIR {thickness} mm')]
  assert panel.Antall.between(1,per_package).all()

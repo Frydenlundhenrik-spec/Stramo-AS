@@ -7,7 +7,7 @@ a=AppTest.from_file('app.py',default_timeout=30).run()
 assert not any(n.key in ('ed_panel_weight','ed_waste_pct') for n in a.number_input)
 assert any('Automatisk panelvekt:' in c.value for c in a.caption)
 a.session_state['project_rooms']=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
-a.radio(key='ed_module').set_value('Rom og sammenstilling').run()
+a.radio(key='ed_module').set_value('Sammenstilling').run()
 assert not a.exception,[e.message for e in a.exception]
 labels=[b.label for b in a.get('download_button')]
 assert 'Materialliste hele prosjektet – PDF' in labels,labels

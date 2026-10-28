@@ -147,17 +147,26 @@ def roof_outline(pts, thickness, room_type):
 
 
 def fixing_screw_count(pts, height, room_type, thickness, excluded_walls=()):
-    """Two rows, max 400 mm spacing, with a fixing at each end of each trim."""
-    import math
-    from geometry import beslag_beregning, wall_lengths
+    """Count both rows on every installed trim piece, including roof and U-channel."""
+    import re
+    from geometry import beslag_beregning
+    from finishing import trim_cuts
     clear = height - floor_depth(room_type)
     bb = beslag_beregning(pts, height, excluded_walls, thickness, clear,
                          floor_angles=room_type == "Fryserom")
-    count = 2 * (bb["n_inn"] * (math.ceil(clear/.4 - 1e-10) + 1)
-                 + bb["n_ut"] * (math.ceil(height/.4 - 1e-10) + 1))
-    if room_type == "Fryserom":
-        for outline in (pts, floor_outline(pts, thickness)):
-            count += 2 * sum(math.ceil(length/.4 - 1e-10) + 1
-                             for i, length in enumerate(wall_lengths(outline))
-                             if i not in excluded_walls)
-    return count
+    pieces = bb["kapp_inn"] + bb["kapp_ut"]
+    if room_type != "Fryserom":
+        runs = []
+        for i in range(len(pts)):
+            if i not in excluded_walls:
+                lo, hi = wall_span(pts, i, thickness, excluded_walls)
+                runs.append((f"Vegg {i+1} U-kanal", hi-lo))
+        pieces += trim_cuts(runs)
+    return sum(screws_per_trim_piece(int(mm)) for row in pieces
+               for mm in re.findall(r"(\d+) mm \(", row["Kapp"]))
+
+
+def screws_per_trim_piece(length_mm):
+    """Two screws at zero, every 400 mm, and at the end (counted once)."""
+    import math
+    return 2 * (math.ceil(length_mm / 400 - 1e-10) + 1) if length_mm > 0 else 0

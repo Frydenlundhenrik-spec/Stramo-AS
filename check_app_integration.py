@@ -62,18 +62,18 @@ def check():
     assert len(prices) == 1, [w.key for w in prices]
     prices[0].set_value(20000.0).run()
     checked(app)
-    app.number_input(key="ed_screw_price").set_value(2.5).run()
+    app.number_input(key="ed_price_skruer_eske").set_value(2.5).run()
     checked(app)
     room = copy.deepcopy(app.session_state["last_valid_editor"])
     door_key = room["input"]["dorer"][0][0]
     assert room["prices"][f"dor_{door_key}"] == 20000
-    assert room["prices"]["skruer"] == 2.5
+    assert room["prices"]["skruer_eske"] == 2.5
     material = beregn_prosjekt(world_input(room), room["prices"])["df_mat"]
     assert material.loc[material.Post == "Dør", "Totalpris (kr)"].sum() == 40000
     app.text_input(key="ed_pnr").set_value("138").run()
     app.button(key="new_cool_room").click().run()
     checked(app)
-    assert app.number_input(key="ed_screw_price").value == 2.5
+    assert app.number_input(key="ed_price_skruer_eske").value == 2.5
     assert app.text_input(key="ed_pnr").value == "138"
     assert app.session_state["pris_override"][f"dor_{door_key}"] == 20000
     app.number_input(key="ed_doors").set_value(1).run()

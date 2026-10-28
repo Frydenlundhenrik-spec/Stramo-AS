@@ -10,23 +10,25 @@ from branding import LOGO_PATH, logo_finnes, logo_sideforhold
 from export_pdf import _registrer_font, draw_pdf_footer
 from project_file import world_input
 from kalkulasjon import beregn_prosjekt
+from materialer import materialliste_med_sum
 from database import PANEL_DB
 from construction import fixing_screw_count
 from finishing import plywood_cuts, trim_order, board_count
-from purchase_summary import with_totals, grouped_panels, grouped_cuts
+from purchase_summary import with_totals, grouped_panels, grouped_cuts, panel_cutting_plan
 
 
 MATERIAL_COLUMNS = {
     "Elementer": ["Produkt","Høyde_mm","Bredde_mm","Tykkelse_mm","Stk","Areal_m2"],
-    "Beslag": ["Produkt","Stk"],
-    "Dører": ["Produkt","Stk"],
-    "Tilbehør": ["Produkt","Stk"],
+    "Beslag": ["Produkt","Stk","Enhet"],
+    "Dører": ["Produkt","Stk","Enhet"],
+    "Tilbehør": ["Produkt","Stk","Enhet"],
 }
 
 
 def project_materials(rooms):
-    """Purchase quantities, grouped by product and actual delivery dimensions."""
+    """Group purchase quantities, keeping a separate line for each physical door."""
     rows=[]
+    door_rows=[]
     for _,p in grouped_panels(rooms).iterrows():
         rows.append(dict(Gruppe="Elementer",Produkt=p.Panel,Høyde_mm=p.Leveringslengde_mm,
             Bredde_mm=p.Bredde_mm,Tykkelse_mm=p.Tykkelse_mm,Stk=p.Bestill_hele_elementer,
@@ -35,14 +37,15 @@ def project_materials(rooms):
         inp=world_input(room);form=room["form"]
         result=beregn_prosjekt(inp,pris_override=room.get("prices",{}))
         for _,r in result["df_mat"].iterrows():
-            if r.Post.startswith(("Vegg ","Tak (panel)","Gulv", "Skruer", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
+            if r.Post.startswith(("Vegg ","Tak (panel)","Gulv", "Tilbehør beregnet", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
             group="Beslag" if r.Post.startswith("U-kanal") else ("Dører" if r.Post=="Dør" else "Tilbehør")
             product=r.Type.removesuffix(" – PRIS MANGLER")
+            if group == "Dører":
+                door_rows.append(dict(Gruppe=group, Produkt=product+"\n"+inp.navn, Stk=r.Mengde, Enhet="stk"))
+                continue
             rows.append(dict(Gruppe=group,Produkt=product,Stk=None if product=="Varmekabel pr. m" else r.Mengde,
                 Løpemeter=r.Mengde*2.5 if r.Post.startswith("U-kanal") else (r.Mengde if r.Type=="Varmekabel pr. m" else None)))
         bb=result["beslag"]
-        screws=fixing_screw_count(inp.pts,inp.hoyde_m,inp.rom_type,PANEL_DB[inp.panel_key]["t"]/1000,inp.excluded_walls)
-        rows.append(dict(Gruppe="Tilbehør",Produkt="22 mm hvite skruer",Stk=screws))
         for label,key in (("Innvendig 50×50 mm","kapp_inn"),("Utvendig 50×150 mm","kapp_ut")):
             net=sum(2500-r["Rest_mm"] for r in bb[key])/1000
             qty=trim_order(net)
@@ -51,15 +54,21 @@ def project_materials(rooms):
             w,l=form.get("plywood_width_mm",1500),form.get("plywood_length_mm",3000)
             qty=board_count(plywood_cuts(inp.pts,w,l))
             rows.append(dict(Gruppe="Tilbehør",Produkt=f"Gulvplate 12 mm – {w} × {l} mm",Stk=qty,Areal_m2=qty*w*l/1e6))
-        quantities=form.get("accessory_quantities",{})
-        for key,label,column in (("fugemasse","Fugemasse","Stk"),("skum","Skum","Stk"),
-                                 ("pakninger","Pakninger","Løpemeter"),("alarm","Alarm","Stk")):
-            rows.append(dict(Gruppe="Tilbehør",Produkt=label,**{column:quantities.get(key)}))
+    from accessories import CATALOG, project_accessories
+    units = {}
+    for key, count in project_accessories(rooms).items():
+        label, unit, _, _ = CATALOG[key]
+        rows.append(dict(Gruppe="Tilbehør", Produkt=label, Stk=count))
+        units[label] = unit
     columns=["Gruppe","Produkt","Høyde_mm","Bredde_mm","Tykkelse_mm","Stk","Areal_m2","Vekt_kg","Løpemeter"]
     frame=pd.DataFrame(rows).reindex(columns=columns)
     # A missing manual quantity in any room must not become a seemingly complete project total.
-    return frame.groupby(columns[:5],dropna=False,sort=False,as_index=False)[columns[5:]].agg(
+    grouped = frame.groupby(columns[:5],dropna=False,sort=False,as_index=False)[columns[5:]].agg(
         lambda values:values.sum(min_count=len(values)))
+    grouped["Enhet"] = grouped.Produkt.map(units).fillna("stk")
+    if door_rows:
+        grouped = pd.concat([grouped, pd.DataFrame(door_rows)], ignore_index=True)
+    return grouped
 
 
 def material_tables(frame):
@@ -96,26 +105,28 @@ def cutting_pdf(rooms, kind="alle"):
     def table(frame,category=None):
         if frame.empty:
             story.append(para("Ingen poster.",note));return
-        def value(v):
+        def value(v, column):
             if pd.isna(v):return "–"
+            if column in ("Enhetspris (kr)", "Totalpris (kr)"):
+                return f"{v:,.2f}".replace(",", " ").replace(".", ",")
             if isinstance(v,(float,int)):
                 return f"{v:,.3f}".rstrip("0").rstrip(".").replace(","," ").replace(".",",")
             return str(v)
         labels={"Produkt":"Produkt" if category=="Elementer" else category or "Produkt", "Panel":"Panel", "Høyde_mm":"Høyde / lengde\nmm",
             "Leveringslengde_mm":"Leveringslengde\nmm", "Bredde_mm":"Bredde\nmm", "Tykkelse_mm":"Tykkelse\nmm",
-            "Stk":"Antall (stk)", "Antall_stk":"Antall (stk)", "Deler_stk":"Deler\nstk",
+            "Stk":"Antall" if category in ("Beslag","Dører","Tilbehør") else "Antall (stk)", "Antall_stk":"Antall (stk)", "Deler_stk":"Deler\nstk",
             "Areal_m2":"Areal\nm²", "Vekt_kg":"Vekt\nkg", "Løpemeter":"Lengde\n"+("m" if category=="Tilbehør" else "LM"),
             "Bestill_hele_elementer":"Bestilling\nstk", "Bestill_hele_plater":"Hele plater\nstk",
             "Bestill_lm":"Bestilling\nlm", "Bestill_m2":"Bestilling\nm²", "Bestill_vekt_kg":"Bestilling\nkg",
             "Vektgrunnlag":"Vektgrunnlag", "Antall_stenger":"Antall stenger\nstk", "Kapp_pr_stang":"Kapp per 2500 mm stang",
             "Rest_pr_stang_mm":"Rest per stang\nmm", "Netto_lm":"Netto\nlm", "Kapp_prosent":"Kapp\n%",
             "Lm_med_kapp":"Inkl. kapp\nlm", "Bestill_stk":"Bestilling\nstk", "Netto_m2":"Netto\nm²"}
-        text_weights={"Produkt":2.7 if category=="Elementer" else 4.8,"Panel":1.6,"Rom":2.4,"Profil":2.2,"Vektgrunnlag":1.9,"Kapp_pr_stang":3.8,"Merknad":2.2}
-        text_columns=set(text_weights)|{"Plate","ID","Del"}
+        text_weights={"Produkt":2.7 if category=="Elementer" else 4.8,"Panel":1.6,"Rom":2.4,"Profil":2.2,"Vektgrunnlag":1.9,"Kapp_pr_stang":3.8,"Merknad":2.2,"Referanse":3,"Elementer":1.7,"Kappbredder_mm":1.7,"Post":2,"Type":4.4}
+        text_columns=set(text_weights)|{"Plate","ID","Del","Enhet","Referanse"}
         weights=[text_weights.get(c,1) for c in frame.columns]
         widths=[(page_w-56)*w/sum(weights) for w in weights]
         if category in ("Beslag", "Dører", "Tilbehør"):
-            widths=[(page_w-56)*.85, (page_w-56)*.15]
+            widths=[(page_w-56)*.73, (page_w-56)*.12, (page_w-56)*.15]
         header_style=ParagraphStyle("table_header",parent=normal,fontName=bold,textColor=colors.white,fontSize=7,leading=10)
         total_style=ParagraphStyle("table_total",parent=normal,fontName=bold,textColor=colors.white)
         def cell(text,col,style):
@@ -126,7 +137,7 @@ def cutting_pdf(rooms, kind="alle"):
         for i,row in enumerate(frame.itertuples(index=False,name=None),1):
             is_total=any(str(v).startswith("SUM") for v in row)
             if is_total:totals.append(i)
-            cells.append([cell(value(v),c,total_style if is_total else normal) for c,v in zip(frame.columns,row)])
+            cells.append([cell("" if is_total and pd.isna(v) else value(v,c),c,total_style if is_total else normal) for c,v in zip(frame.columns,row)])
         t = LongTable(cells,colWidths=widths,repeatRows=1,hAlign="LEFT")
         commands = [("BACKGROUND",(0,0),(-1,0),ink),("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                     ("ROWBACKGROUNDS",(0,1),(-1,-1),[colors.white,pale]),
@@ -152,22 +163,31 @@ def cutting_pdf(rooms, kind="alle"):
             story.append(para(title,head))
         story.append(para(room_label,metadata))
 
+    if kind == "kalkulasjon":
+        for room in rooms:
+            result = beregn_prosjekt(world_input(room), pris_override=room.get("prices", {}))
+            section("Materialliste" if len(rooms) == 1 else "Materialliste – " + room["input"]["navn"])
+            table(materialliste_med_sum(result["df_mat"]))
     if kind=="materialer":
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
             if title=="Elementer":
-                section("Elementer")
+                section("Bestillingsliste elementer")
             elif not accessory_page:
-                section("Materialliste")
+                section("Bestillingsliste – beslag, dører og tilbehør")
                 accessory_page=True
             table(frame,title)
     if kind in ("alle","elementer") and rooms:
         section("Elementliste")
         story.append(para("Ferdige deler med samme høyde, bredde og tykkelse summeres på én linje. Paneltyper holdes adskilt. Vekt er estimert når leverandørvekt ikke er oppgitt.",note))
         table(with_totals(grouped_cuts(rooms),["Antall_stk","Areal_m2","Vekt_kg"],"Panel"))
-        section("Elementbestilling")
-        story.append(para("Lengder leveres på mål. Antallet følger beregnet behov uten prosentvis kapptillegg. Én råplate per element; avkapp deles ikke mellom elementer. Vekt merket ESTIMAT gjelder bare paneler, uten dører, beslag, gulvplater og emballasje.",note))
+        section("Bestillingsliste elementer")
+        story.append(para("Lengder leveres på mål. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor. Ingen prosentvis kapptillegg. Vekt merket ESTIMAT gjelder bare paneler.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))
+    if kind == "kappfordeling":
+        section("Kappfordeling – elementer")
+        story.append(para("Råelementene er hele bestillingselementer. Elementnumrene viser delene på tegningene. 3 mm sagspor mellom delene; rom, bruksområde og leveringslengde holdes adskilt.",note))
+        table(panel_cutting_plan(rooms))
     if kind in ("alle","beslag","beslagprofiler"):
         from beslag_profiles import profile_rows, profile_cards
         section("Beslagsliste")
@@ -227,7 +247,7 @@ def pdf_downloads(rooms):
             right.markdown(f'**{r["name"]}**\n\n**{r["qty"]} stk × 2500 mm = {r["lm"]:g} LM**\n\n0,6 mm stål · RAL 9010')
         st.markdown(f'**TOTAL BESTILLING: {sum(r["qty"] for r in profiles)} stk · {sum(r["lm"] for r in profiles):g} LM**')
         st.download_button("Detaljert beslagsliste – PDF",cutting_pdf(rooms,"beslagprofiler"),"beslagsliste-profiler.pdf","application/pdf",key="cutpdf_profiles")
-    for kind,label in (("alle","Alle kapplister samlet"),("elementer","Elementkapplister"),("finer","Gulvplatekapplister")):
+    for kind,label in (("alle","Alle kapplister samlet"),("elementer","Elementkapplister"),("kappfordeling","Kappfordeling elementer"),("finer","Gulvplatekapplister")):
         if kind=="finer" and not any(r["input"]["rom_type"]=="Fryserom" for r in rooms):continue
         st.download_button(label+" – PDF",cutting_pdf(rooms,kind),f"kapplister-{kind}.pdf","application/pdf",key=f"cutpdf_{kind}")
 
@@ -236,12 +256,12 @@ def material_downloads(rooms, all_rooms=True):
     import streamlit as st
     if not rooms:return
     scope = "hele prosjektet" if all_rooms else "valgt rom"
-    st.subheader("Elementliste")
+    st.subheader("Bestillingsliste elementer")
     frame=project_materials(rooms)
     for title,part in material_tables(frame):
-        display=part.rename(columns={"Produkt":"Produkt" if title=="Elementer" else title,"Stk":"Antall (stk)","Høyde_mm":"Høyde / lengde (mm)",
+        if title=="Beslag":st.subheader("Bestillingsliste – beslag, dører og tilbehør")
+        display=part.rename(columns={"Produkt":"Produkt" if title=="Elementer" else title,"Stk":"Antall (stk)" if title=="Elementer" else "Antall","Høyde_mm":"Høyde / lengde (mm)",
             "Bredde_mm":"Bredde (mm)","Tykkelse_mm":"Tykkelse (mm)","Areal_m2":"Areal (m²)",
             "Løpemeter":"Lengde (m)" if title=="Tilbehør" else "Lengde (LM)"})
-        st.dataframe(display,hide_index=True)
+        st.dataframe(display,hide_index=True,row_height=64 if title=="Dører" else None)
     st.download_button("Materialliste " + scope + " – PDF",cutting_pdf(rooms,"materialer"),"materialliste-prosjekt.pdf","application/pdf",key="project_material_pdf")
-    st.download_button("Materialliste " + scope + " – CSV",frame.to_csv(index=False).encode("utf-8-sig"),"materialliste-prosjekt.csv","text/csv",key="project_material_csv")

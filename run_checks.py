@@ -13,6 +13,11 @@ with TemporaryDirectory(prefix='stramo-tests-') as temporary:
         for path in source.glob(pattern):
             shutil.copy2(path,target/path.name)
     shutil.copytree(source/'assets',target/'assets')
+    # Existing calculation/UI regressions exercise the protected app, after the
+    # dedicated test_portal.py suite has verified the gate. Only this disposable
+    # test copy substitutes the gate; production has no bypass setting.
+    if (source/'login.py').exists():
+        (target/'login.py').write_text('def require_login():\n    return None\n',encoding='utf-8')
     for name in ('output/pdf','qa','tmp/pdfs'):
         (target/name).mkdir(parents=True,exist_ok=True)
     env = dict(os.environ, MPLBACKEND='Agg', MPLCONFIGDIR=str(target/'mpl-cache'), PYTHONIOENCODING='utf-8')

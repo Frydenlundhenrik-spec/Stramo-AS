@@ -32,7 +32,7 @@ def restore_editor(room):
             del st.session_state[key]
     # Explicitly synchronize the existing radio widget with the calculation
     # page; deleting its key alone leaves the browser's old selection visible.
-    st.session_state["ed_module"] = "Kalkulasjon"
+    st.session_state["ed_module"] = "Rom"
     st.session_state["background_revision"] = st.session_state.get("background_revision",0)+1
     st.session_state["editor_background"] = None
     if room is None:
@@ -101,6 +101,8 @@ def restore_editor(room):
 
 
 def prepare_project():
+    if "pending_project" in st.session_state:
+        _apply_project(st.session_state.pop("pending_project"))
     if "pending_editor" in st.session_state:
         pending = st.session_state.pop("pending_editor")
         restore_editor(pending)
@@ -109,7 +111,11 @@ def prepare_project():
         rid,position = st.session_state.pop("pending_position")
         st.session_state[f"pos_{rid}_x"],st.session_state[f"pos_{rid}_y"] = position
     for rid in st.session_state.pop("pending_wall_controls",[]):
-        st.session_state.pop(f"omit_{rid}",None)
+        room = next((room for room in st.session_state.get("project_rooms", []) if room["id"] == rid), None)
+        if room is not None:
+            # Set the widget value explicitly: deleting its key can restore the
+            # browser's previous selection on the following rerun.
+            st.session_state[f"omit_{rid}"] = list(room["excluded_walls"])
     st.session_state.setdefault("project_rooms",[])
 
 
@@ -122,14 +128,23 @@ def upload_project():
             except (ValueError,RecursionError) as exc:
                 st.error(f"Kunne ikke åpne prosjektet: {exc}")
             else:
-                # Decode and validate everything before replacing live state.
-                restore_editor(project["draft"])
-                st.session_state["project_rooms"] = project["rooms"]
-                st.session_state["active_room_id"] = project.get("active_id")
-                for key in list(st.session_state):
-                    if str(key).startswith(("pos_","omit_","snap_")) or key == "saved_room_choice":
-                        del st.session_state[key]
-                st.success("Prosjektet er åpnet. Du kan fortsette å redigere og laste ned en ny prosjektfil.")
+                # The menu is already drawn above this button, so the project is
+                # applied at the start of the next run instead of mid-script.
+                st.session_state["pending_project"] = project
+                st.rerun()
+        if st.session_state.pop("project_opened", False):
+            st.success("Prosjektet er åpnet. Du kan fortsette å redigere og laste ned en ny prosjektfil.")
+
+
+def _apply_project(project):
+    # Decode and validate everything before replacing live state.
+    restore_editor(project["draft"])
+    st.session_state["project_rooms"] = project["rooms"]
+    st.session_state["active_room_id"] = project.get("active_id")
+    for key in list(st.session_state):
+        if str(key).startswith(("pos_","omit_","snap_")) or key in ("saved_room_choice", "room_picker"):
+            del st.session_state[key]
+    st.session_state["project_opened"] = True
 
 
 def capture_room(inp, form, uploaded_background):
@@ -190,67 +205,89 @@ def start_new_room(kind):
                             ed_panel="PIR 80 mm" if kind == "Kjølerom" else "PIR 100 mm")
 
 
-def new_room_controls():
-    rooms = st.session_state["project_rooms"]
-    st.caption(f"{len(rooms)} rom lagt til i prosjektet.")
-    if rooms:
-        with st.expander("Hent frem et rom som er lagt til"):
-            labels = {r["id"]:f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(rooms)}
-            selected = st.selectbox("Lagrede rom",list(labels),format_func=labels.get,key="recover_room_choice")
-            if st.button("Hent frem rom",key="recover_room"):
-                st.session_state["pending_editor"] = copy.deepcopy(next(r for r in rooms if r["id"]==selected))
-                st.rerun()
-    st.caption("Start et nytt rom her. Tidligere rom beholdes med sist gyldige mål. Nye rom starter uten dører og åpninger.")
-    left,right = st.columns(2)
-    full = len(st.session_state["project_rooms"]) >= 30
-    left.button("Nytt kjølerom", key="new_cool_room", on_click=start_new_room,args=("Kjølerom",),disabled=full)
-    right.button("Nytt fryserom", key="new_freezer_room", on_click=start_new_room,args=("Fryserom",),disabled=full)
+DRAFT_CHOICE = "__utkast__"
 
 
-def room_controls(current):
+def open_room(choice):
+    """Åpne et lagret rom i redigeringen. Et utkast som ikke er lagt til, lagres først."""
     rooms = st.session_state["project_rooms"]
-    with st.sidebar:
-        st.divider()
-        st.subheader("Rom i prosjektet")
-        active = st.session_state.get("active_room_id")
-        if active:
-            st.caption("Dette rommet er lagt til. Endringer oppdaterer rommet i prosjektet automatisk.")
-        elif st.button("Legg til ferdig rom",key="add_finished_room",disabled=len(rooms)>=30):
-            try:
-                validate_room(current)
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                if rooms:
-                    right = max(max(p[0] for p in world_input(r).pts) for r in rooms)
-                    current["position_mm"] = [round((right+1)*1000),0]
-                rooms.append(copy.deepcopy(current))
-                st.session_state["active_room_id"] = current["id"]
-                st.rerun()
-        if active:
-            st.button("Tegn nytt rom",key="new_project_room",on_click=start_new_room,args=("Kjølerom",),disabled=len(rooms)>=30)
-        if rooms:
-            labels = {r["id"]:f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(rooms)}
-            selected = st.selectbox("Rediger lagret rom",list(labels),format_func=labels.get,key="saved_room_choice")
-            if st.button("Åpne rom for redigering",key="edit_project_room"):
-                st.session_state["pending_editor"] = copy.deepcopy(next(r for r in rooms if r["id"]==selected))
-                st.rerun()
-            st.caption("Når rommene er tegnet: velg «Rom og sammenstilling» for plassering og veggvalg.")
+    if choice in (None, DRAFT_CHOICE) or choice == st.session_state.get("active_room_id"):
+        return
+    current = st.session_state.get("last_valid_editor")
+    if current and not st.session_state.get("active_room_id") and len(rooms) < 30:
+        current = copy.deepcopy(current)
+        try:
+            validate_room(current)
+        except ValueError:
+            pass
+        else:
+            right = max(max(p[0] for p in world_input(r).pts) for r in rooms)
+            current["position_mm"] = [round((right+1)*1000),0]
+            rooms.append(current)
+    st.session_state["pending_editor"] = copy.deepcopy(next(r for r in rooms if r["id"] == choice))
+
+
+def _switch_room():
+    open_room(st.session_state.get("room_picker"))
+
+
+def room_bar():
+    """Romvelger øverst i inndatapanelet: bytt rom og start nytt rom.
+
+    Tegnes før beregningen, slik at man kan bytte rom også når målene er ugyldige."""
+    rooms = st.session_state["project_rooms"]
+    active = st.session_state.get("active_room_id")
+    labels = {r["id"]:f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(rooms)}
+    options = list(labels)
+    if not active:
+        name = (st.session_state.get("ed_name") or "").strip() or st.session_state.get("ed_room_type") or "Nytt rom"
+        labels[DRAFT_CHOICE] = f"{name} (ikke lagt til)"
+        options.append(DRAFT_CHOICE)
+    st.session_state["room_picker"] = active if active in labels else DRAFT_CHOICE
+    st.selectbox("Rom", options, format_func=labels.get, key="room_picker", on_change=_switch_room,
+                 help="Bytt mellom rommene i prosjektet. Endringer lagres automatisk i rommet.")
+    full = len(rooms) >= 30
+    left, right = st.columns(2)
+    left.button("Kjølerom", key="new_cool_room", icon=":material/add:", on_click=start_new_room,
+                args=("Kjølerom",), disabled=full, use_container_width=True,
+                help="Start et nytt kjølerom. Rommet du står i beholdes i prosjektet.")
+    right.button("Fryserom", key="new_freezer_room", icon=":material/add:", on_click=start_new_room,
+                 args=("Fryserom",), disabled=full, use_container_width=True,
+                 help="Start et nytt fryserom. Rommet du står i beholdes i prosjektet.")
+
+
+def add_room_button(current):
+    """Legg utkastet til i prosjektet, eller vis at rommet allerede er lagt til."""
+    rooms = st.session_state["project_rooms"]
+    full = len(rooms) >= 30
+    if st.session_state.get("active_room_id"):
+        st.caption(":material/check_circle: Rommet er lagt til. Endringer lagres automatisk.")
+    elif st.button("Legg til rommet i prosjektet", key="add_finished_room", type="primary",
+                   icon=":material/playlist_add:", disabled=full, use_container_width=True):
+        try:
+            validate_room(current)
+        except ValueError as exc:
+            st.error(str(exc))
+        else:
+            if rooms:
+                right = max(max(p[0] for p in world_input(r).pts) for r in rooms)
+                current["position_mm"] = [round((right+1)*1000),0]
+            rooms.append(copy.deepcopy(current))
+            st.session_state["active_room_id"] = current["id"]
+            st.rerun()
 
 
 def project_download(current):
     rooms = st.session_state["project_rooms"]
     current = next((r for r in rooms if r["id"] == st.session_state.get("active_room_id")), current)
-    with st.sidebar:
-        st.divider()
-        try:
-            data = encode_project(rooms, current, st.session_state.get("active_room_id"))
-        except ValueError as exc:
-            st.error(f"Prosjektet kan ikke lagres før feilen er rettet: {exc}")
-            return
-        st.download_button("Last ned prosjektfil",data,"stramo-prosjekt.json","application/json",
-                            key="download_project",on_click="ignore")
-        st.caption("Lagrer rom, mål, rotasjon, dører, priser, bakgrunnsbilde og veggvalg. Inkluderer også rommet du redigerer.")
+    try:
+        data = encode_project(rooms, current, st.session_state.get("active_room_id"))
+    except ValueError as exc:
+        st.error(f"Prosjektet kan ikke lagres før feilen er rettet: {exc}")
+        return
+    st.download_button("Last ned prosjektfil",data,"stramo-prosjekt.json","application/json",
+                        key="download_project",on_click="ignore",icon=":material/save:",use_container_width=True,
+                        help="Lagrer rom, mål, rotasjon, dører, priser, bakgrunnsbilde og veggvalg. Inkluderer også rommet du redigerer.")
 
 
 def finishing_ui(rooms):
@@ -295,7 +332,7 @@ def finishing_ui(rooms):
                                f'{name}-gulvplateplan.pdf','application/pdf',key=f'floor_plan_{room["id"]}')
             plt.close(fig)
     st.caption("Beslag: vegghjørner og takkant på begge sider; utelatte vegger tas ut. Kappforslag uten skjøteoverlapp/kuttap. Gulvplater: avkapp over 200 mm i begge retninger vurderes for gjenbruk, med 3 mm sagspor. Ingen prosentvis kapptillegg. Kontroller skjøter og monteringskrav før bestilling.")
-    for title,rows,filename in (("Gulvplater",board_rows,"gulvplater-kapp.csv"),):
+    for title,rows in (("Gulvplater",board_rows),):
         if rows:
             frame = pd.DataFrame(grouped_trim_bars(rows) if title=="Beslag" else rows)
             from purchase_summary import with_totals
@@ -304,8 +341,6 @@ def finishing_ui(rooms):
             summaries = with_totals(summaries,cols,"Rom","SUM ALLE")
             st.dataframe(frame,hide_index=True)
             st.dataframe(summaries.round(3),hide_index=True)
-            export = pd.concat([frame,summaries],ignore_index=True)
-            st.download_button(f"Last ned {title.lower()}-kappliste",export.to_csv(index=False).encode("utf-8-sig"),filename,"text/csv")
 
 
 def assembly_plan(rooms):
@@ -341,8 +376,12 @@ def assembly_plan(rooms):
         ax.text(*at,textwrap.fill(inp.navn,24),ha='center',va='center',fontsize=10,color='#07384c',
                 bbox=dict(fc='white',ec='none',alpha=.9))
     if rooms:
+        from shapely.geometry import Polygon
+        from shapely.ops import unary_union
+        footprint = unary_union([Polygon(floor_outline(world_input(r).pts,
+            PANEL_DB[world_input(r).panel_key]['t']/1000)) for r in rooms])
         info.update(navn="Tasty Fredrikstad" if all('Tasty' in r['input']['navn'] for r in rooms) else ' / '.join(r['input']['navn'] for r in rooms),
-                    tnr='SAM-01', A=sum(beregn_prosjekt(world_input(r))['ov']['A'] for r in rooms), P=sum(beregn_prosjekt(world_input(r))["ov"]["P"] for r in rooms))
+                    tnr='SAM-01', A=round(footprint.area,2), P=round(footprint.length,2))
         _tegn_fig_title_block(fig,info)
         pts=np.asarray(bounds);low,high=pts.min(axis=0),pts.max(axis=0)
         ax.set_xlim(low[0]-2.1,high[0]+2.1);ax.set_ylim(low[1]-2.1,high[1]+2.1)
@@ -353,7 +392,7 @@ def assembly_plan(rooms):
 
 
 def assembly_ui():
-    st.header("Rom og sammenstilling")
+    st.subheader("Rom og sammenstilling")
     rooms = st.session_state["project_rooms"]
     if not rooms:
         st.info("Tegn et rom og trykk «Legg til ferdig rom». Gjenta for neste rom, og sett dem sammen her til slutt.")
@@ -441,7 +480,6 @@ def assembly_ui():
     cut = element_cutlist(rooms)
     st.dataframe(cut,hide_index=True)
     panel_summary_ui(rooms)
-    st.download_button("Last ned samlet kappliste",cut.to_csv(index=False).encode("utf-8-sig"),"kappliste.csv","text/csv")
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle,"w",compression=zipfile.ZIP_DEFLATED) as archive:
         for i,room in enumerate(rooms):

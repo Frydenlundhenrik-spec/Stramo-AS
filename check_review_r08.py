@@ -88,15 +88,15 @@ for width,expected in ((297,2),(296,1)):
     assert board_count(pack_boards(sample,500,500))==expected
 
 group=grouped_panels(rooms)
-assert group.Bestill_hele_elementer.sum()==75
-assert np.isclose(group.Bestill_m2.sum(),274.593)
+assert group.Bestill_hele_elementer.sum()==70
+assert np.isclose(group.Bestill_m2.sum(),261.393)
 materials=project_materials(rooms)
 assert materials.loc[materials.Produkt.str.startswith('Gulvplate'),'Stk'].sum()==7
-assert MATERIAL_COLUMNS['Beslag']==['Produkt','Stk']
-assert MATERIAL_COLUMNS['Dører']==MATERIAL_COLUMNS['Tilbehør']==['Produkt','Stk']
+assert MATERIAL_COLUMNS['Beslag']==['Produkt','Stk','Enhet']
+assert MATERIAL_COLUMNS['Dører']==MATERIAL_COLUMNS['Tilbehør']==['Produkt','Stk','Enhet']
 pdf=PdfReader(io.BytesIO(cutting_pdf(rooms,'materialer')))
 assert len(pdf.pages)==2
-assert 'Elementer' in pdf.pages[0].extract_text()
+assert 'Bestillingsliste elementer' in pdf.pages[0].extract_text()
 text=pdf.pages[1].extract_text()
 assert 'Lengde\nLM' not in text and 'Areal' not in text
 floor_pdf=PdfReader(io.BytesIO(cutting_pdf(rooms,'finer')))

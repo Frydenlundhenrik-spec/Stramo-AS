@@ -16,7 +16,8 @@ project=Path('Tasty-Rom4-og-fryserom-med-dorer.json')
 rooms=decode_project(project.read_bytes())['rooms']
 kinds={'materialer':'01-Materialliste.pdf','alle':'02-Alle-kapplister.pdf',
        'elementer':'03-Elementkapplister.pdf',
-       'beslagprofiler':'05-Beslagsliste-med-profiler.pdf','finer':'06-Gulvplatekappliste.pdf'}
+       'beslagprofiler':'05-Beslagsliste-med-profiler.pdf','finer':'06-Gulvplatekappliste.pdf',
+       'kappfordeling':'07-Kappfordeling-elementer.pdf'}
 scopes=[('01-Kjolerom',rooms[:1]),('02-Fryserom',rooms[1:]),('03-Hele-prosjektet',rooms)]
 manifest=[]
 review=Path('tmp/pdfs/tasty-updated-lists');review.mkdir(parents=True,exist_ok=True)
@@ -42,29 +43,31 @@ for folder,selected in scopes:
                 thumbs.append((f'{folder} {kind} p{i+1}',im))
     print(folder,'panels',int(grouped_panels(selected).Bestill_hele_elementer.sum()),
           'panel kg',round(float(grouped_panels(selected).Bestill_vekt_kg.sum()),3),flush=True)
-assert len(manifest)==14
+assert len(manifest)==17
 mat=project_materials(rooms)
 assert mat[mat.Produkt.str.startswith('U-kanal')].Stk.sum()==13
 assert mat[mat.Produkt.str.startswith('Gulvplate')].Stk.sum()==7
-assert mat[mat.Gruppe=='Elementer'].Stk.sum()==75
-assert abs(mat[mat.Gruppe=='Elementer'].Areal_m2.sum()-274.593)<1e-6
+assert mat[mat.Gruppe=='Elementer'].Stk.sum()==70
+assert abs(mat[mat.Gruppe=='Elementer'].Areal_m2.sum()-261.393)<1e-6
 (root/'Filkontroll.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
 mat.to_csv(root/'Materialgrunnlag.csv',index=False,encoding='utf-8-sig')
 panels=mat[mat.Gruppe=='Elementer']
 (root/'LES-MEG.txt').write_text(
-    'TASTY FREDRIKSTAD – revisjon 09, 26.10.2026\n'
+    'TASTY FREDRIKSTAD – revisjon 10, 27.10.2026\n'
     'Kjølerom, fryserom og hele prosjektet har egne mapper.\n'
     f'Elementer: {int(panels.Stk.sum())} stk; {panels.Areal_m2.sum():.3f} m²; {panels.Vekt_kg.sum():.3f} kg panelvekt.\n'
     'Beslag: 13 U-kanaler, 40 innvendige og 41 utvendige vinkler. 2500 mm per lengde.\n'
     'Kun beslag får 10 % svinn før avrunding opp til hele lengder.\n'
     'Gulvplater: 7 råplater 1500 × 3000 × 12 mm til 9 deler. Råplatenummer i kapplisten viser gjenbruk.\n'
     'Avkapp brukes bare når begge restmål er over 200 mm og delen passer. Sagspor 3 mm.\n'
-    'Paneler bestilles i hele elementbredder på oppgitt lengde, uten prosentvis kapp.\n'
-    'Manglende manuelle tilbehørsmengder vises med strek og må fylles ut før komplett bestilling.\n',encoding='utf-8')
+    'Paneler bestilles i hele elementbredder på oppgitt lengde, uten prosentvis kapp. Kompatible kapp deler råelement; se kappfordelingen.\n'
+    'Tilbehør beregnes automatisk. Forbruk summeres for valgte rom og avrundes først til slutt.\n'
+    'Hele prosjektet: hvite skruer 3 esker à 500 (1328 beregnet), grå gulvskruer 270 stk, hvit silikon 32 tuber, grå silikon 14 tuber, skum 2 flasker, alarm 1 stk, PVC gardin 2 stk.\n'
+    'Skruer, silikon og skum mangler enhetspriser. Dette er mengdegrunnlag; kalkulasjonen merker manglende priser.\n',encoding='utf-8')
 for start in range(0,len(thumbs),9):
     sheet=Image.new('RGB',(1260,3*325),'#d9dfe3');draw=ImageDraw.Draw(sheet)
     for j,(label,im) in enumerate(thumbs[start:start+9]):
         x=(j%3)*420;y=(j//3)*325
         sheet.paste(im,(x,y+22));draw.text((x+6,y+4),label,fill='black')
     sheet.save(review/f'contact-{start//9+1}.png')
-print('PASS: 14 PDF files;',len(thumbs),'unique pages rendered; quantities verified')
+print('PASS: 17 PDF files;',len(thumbs),'unique pages rendered; quantities verified')

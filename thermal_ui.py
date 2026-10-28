@@ -61,7 +61,7 @@ def surface_table(result):
 
 
 def thermal_ui(current_room, project_rooms):
-    st.header("U-verdi og varmetap")
+    st.subheader("U-verdi og varmetap")
     st.write("Beregningen bruker rommets tegnede flater, paneltype og temperatur på hver side. Positiv verdi er varme inn i rommet; negativ verdi er varme fra rommet til en kaldere nabo.")
     rooms = project_rooms if any(r["id"] == current_room["id"] for r in project_rooms) else [current_room]
     choices = [r["id"] for r in rooms]

@@ -33,5 +33,5 @@ text='\n'.join(p.extract_text() for p in pdf.pages)
 assert len(pdf.pages)==1
 assert 'like lengder samlet' not in text and 'Antall stenger' not in text
 assert 'TOTAL BESTILLING' in text and '94 stk' in text and '235 LM' in text
-assert project_materials(rooms).query("Gruppe == 'Elementer'").Stk.sum()==75
+assert project_materials(rooms).query("Gruppe == 'Elementer'").Stk.sum()==70
 print('PASS: internal trim cuts conserved; detailed cut pages removed; one profile page retains 94 bars and 235 LM')

@@ -86,7 +86,7 @@ def check_ui():
     app = AppTest.from_file("app.py", default_timeout=30).run()
     assert not app.exception and not app.error
     app.text_input(key="ed_pnr").set_value("138").run()
-    app.number_input(key="ed_screw_price").set_value(2.5).run()
+    app.number_input(key="ed_price_skruer_eske").set_value(2.5).run()
     before = copy.deepcopy(app.session_state["last_valid_editor"])
     app.number_input(key="n_apninger").set_value(1).run()
     app.number_input(key="ap_off0").set_value(10000).run()
@@ -95,7 +95,7 @@ def check_ui():
     app.button(key="new_cool_room").click().run()
     assert not app.exception and not app.error
     assert app.text_input(key="ed_pnr").value == "138"
-    assert app.number_input(key="ed_screw_price").value == 2.5
+    assert app.number_input(key="ed_price_skruer_eske").value == 2.5
     assert app.number_input(key="n_apninger").value == 0
     assert app.session_state["project_rooms"] == [before]
     decode_project(encode_project(app.session_state["project_rooms"], app.session_state["last_valid_editor"]))

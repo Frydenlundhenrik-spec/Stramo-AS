@@ -30,6 +30,8 @@ class ProjectInput:
     beslag_valg:   list[str]
     apninger:      list[tuple] = None
     excluded_walls: tuple[int, ...] = ()
+    plywood_width_mm: int = 1500
+    plywood_length_mm: int = 3000
 
 
 def beregn_prosjekt(
@@ -62,8 +64,8 @@ def beregn_prosjekt(
     }
     panel = PANEL_DB[inp.panel_key]
 
-    # Normalize dorer til (dk, ant) for materialliste
-    dorer_mat = [(d[0], d[1]) for d in inp.dorer
+    # Keep wall and hinge information for each door in the material/order lists.
+    dorer_mat = [d for d in inp.dorer
                  if (d[2] if len(d)>2 else 0) not in inp.excluded_walls]
 
     df_kapp = lag_kappliste(
@@ -82,15 +84,21 @@ def beregn_prosjekt(
         breeam_multiplier=breeam_multiplier,
         excluded_walls=inp.excluded_walls,
         cut_list=df_kapp,
+        plywood_width_mm=inp.plywood_width_mm,
+        plywood_length_mm=inp.plywood_length_mm,
     )
     sam    = kappliste_sammendrag(df_kapp)
     beslag = beslag_beregning(inp.pts, inp.hoyde_m, inp.excluded_walls, panel["t"]/1000, clear_height, floor_angles=inp.rom_type=="Fryserom")
     ordered = panel_order_rows(df_kapp, round(inp.hoyde_m*1000), round(inp.panelbredde_m*1000))
     ant_veggpanel = int(ordered.Vegg.str.startswith("Vegg ").sum())
-    missing_prices = df_mat.loc[df_mat.Type.str.contains("PRIS MANGLER", regex=False), "Post"].tolist()
+    missing_prices = df_mat.loc[df_mat.Type.str.contains("PRIS MANGLER", regex=False), "Type"].str.replace(" – PRIS MANGLER", "", regex=False).tolist()
+    from accessories import accessory_needs
+    needs = accessory_needs(inp.pts, inp.hoyde_m, inp.rom_type, panel["t"]/1000,
+                            dorer_mat, df_kapp, inp.excluded_walls)
 
     return {
         "ov":           ov,
+        "accessory_needs": needs,
         "panel":        panel,
         "wls":          wls,
         "df_mat":       df_mat,

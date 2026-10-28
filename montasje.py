@@ -56,7 +56,9 @@ def tegn_3d_modell(inp: Any, azimuth: int = -55, elevation: int = 28, apninger=N
 
 
 def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
-    ov = result["ov"]
+    from construction import floor_outline
+    from geometry import poly_area, poly_perim
+    footprint = floor_outline(inp.pts, PANEL_DB[inp.panel_key]["t"] / 1000)
     return {
         "navn": inp.navn.strip() or "–",
         "pnr":  inp.pnr,
@@ -64,8 +66,8 @@ def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
         "dato": inp.dato,
         "maal": DRAWING_SCALE,
         "ttype": ttype,
-        "A": ov["A"],
-        "P": ov["P"],
+        "A": round(poly_area(footprint), 2),
+        "P": round(poly_perim(footprint), 2),
     }
 
 

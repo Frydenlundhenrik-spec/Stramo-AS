@@ -2,6 +2,7 @@ import faulthandler
 from pathlib import Path
 from streamlit.testing.v1 import AppTest
 from project_file import decode_project
+from transport import packages
 faulthandler.dump_traceback_later(50,exit=True)
 a=AppTest.from_file('app.py',default_timeout=30).run()
 a.session_state['project_rooms']=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
@@ -16,8 +17,9 @@ assert any('Stable panelpakker opp mot trailertaket' in c.label for c in a.check
 assert not any('Klaring mellom kolli' in n.label for n in a.number_input)
 assert any('inntil hverandre' in c.value for c in a.caption)
 assert any('250 mm' in notice.value and 'frontveggen' in notice.value for notice in a.info)
-assert next(m.value for m in a.metric if m.label=='Plasserte kolli')=='12 / 12'
-assert any('12 av 12' in notice.value and 'Kontakt mot frontveggen' in notice.value for notice in a.info)
+count=len(packages(a.session_state['project_rooms']))
+assert next(m.value for m in a.metric if m.label=='Plasserte kolli')==f'{count} / {count}'
+assert any(f'{count} av {count}' in notice.value and 'Kontakt mot frontveggen' in notice.value for notice in a.info)
 # Tight trailer: packages without a supported location must remain visibly unplaced.
 for control in a.number_input:
  if control.label=='Innvendig lengde (mm)':control.set_value(2400)

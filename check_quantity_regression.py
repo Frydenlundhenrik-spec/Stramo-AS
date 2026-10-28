@@ -2,6 +2,7 @@
 from dataclasses import replace
 from pathlib import Path
 import numpy as np
+import math
 import ifcopenshell
 import ifcopenshell.geom
 import ifcopenshell.util.shape
@@ -27,23 +28,25 @@ def check_quantities(room):
     for zone, mask in [('Tak', materials.Post.eq('Tak (panel)')),
                        ('Gulv', materials.Post.str.startswith('Gulv – PIR'))]:
         assert np.isclose(materials.loc[mask, 'Mengde'].sum(), ordered.loc[ordered.Del.eq(zone), 'Bestill_m2'].sum())
-    screw_row = materials.loc[materials.Post.eq('Skruer')].iloc[0]
-    assert screw_row.Mengde == fixing_screw_count(inp.pts,inp.hoyde_m,inp.rom_type,
-                                                PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls)
-    assert 'Skruer' in result['missing_prices'] and not result['pricing_complete']
-    priced = beregn_prosjekt(inp, {'skruer':.5})
-    assert 'Skruer' not in priced['missing_prices']
-    assert priced['df_mat'].loc[priced['df_mat'].Post.eq('Skruer'),'Totalpris (kr)'].iloc[0] == screw_row.Mengde*.5
+    screw_row = materials.loc[materials.Type.str.startswith('22 mm hvite skruer')].iloc[0]
+    raw_screws = fixing_screw_count(inp.pts,inp.hoyde_m,inp.rom_type,
+                                  PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls)
+    assert screw_row.Mengde == math.ceil(raw_screws/500)
+    assert screw_row.Enhet == 'eske à 500'
+    assert '22 mm hvite skruer' in result['missing_prices'] and not result['pricing_complete']
+    priced = beregn_prosjekt(inp, {'skruer_eske':250})
+    assert '22 mm hvite skruer' not in priced['missing_prices']
+    assert priced['df_mat'].loc[priced['df_mat'].Type.str.startswith('22 mm hvite skruer'),'Totalpris (kr)'].iloc[0] == screw_row.Mengde*250
     return result
 
 
 rooms = decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
-assert [check_quantities(room)['ant_veggpanel'] for room in rooms] == [28,24]
+assert [check_quantities(room)['ant_veggpanel'] for room in rooms] == [26,21]
 grouped = grouped_panels(rooms)
-assert grouped.Bestill_hele_elementer.sum() == 75
-assert np.isclose(grouped.Bestill_m2.sum(),274.593)
-assert np.isclose(grouped.Bestill_vekt_kg.sum(),3339.0566)
-assert sum(beregn_prosjekt(world_input(r))['df_mat'].query("Post=='Skruer'").Mengde.sum() for r in rooms)==444
+assert grouped.Bestill_hele_elementer.sum() == 70
+assert np.isclose(grouped.Bestill_m2.sum(),261.393)
+assert np.isclose(grouped.Bestill_vekt_kg.sum(),3176.9606)
+assert sum(beregn_prosjekt(world_input(r))['accessory_needs']['skruer_eske'] for r in rooms)==1328
 freight=packages(rooms)
 for _, order in grouped.iterrows():
     name=f'{order.Panel} · {order.Leveringslengde_mm:g} × {order.Bredde_mm:g}'
@@ -61,8 +64,9 @@ inp = world_input(rooms[1])
 no_opening = beregn_prosjekt(replace(inp,dorer=[],apninger=[]))
 opening = beregn_prosjekt(replace(inp,dorer=[],apninger=[(0,.5,.5,.5,.5,'Teståpning')]))
 for result in (no_opening,opening):
-    assert len(panel_order_rows(result['df_kapp'],2400,1100)) == 38
-    assert result['sam']['tot_panel'] == result['ant_veggpanel'] == 24
+    assert len(panel_order_rows(result['df_kapp'],2400,1100)) == 35
+    assert result['sam']['tot_panel'] == 24
+    assert result['ant_veggpanel'] == 21
 
 # Matrix includes sloping and concave boundaries and all three supported test thicknesses.
 shapes = [[(0,0),(5,0),(5,4),(0,4)],
@@ -104,4 +108,4 @@ for room in rooms:
     else:
         assert wall_base(i.rom_type,i.panel_key)==finished_floor(i.rom_type,i.panel_key)==0
 assert CHANNEL_HEIGHT==.05 and CHANNEL_FLANGE==.0006
-print('PASS: 18 cases; price/order parity; Tasty 75 panels, 274.593 m2, 3339.0566 kg; 444 screws; IFC levels and 0.6 mm channels')
+print('PASS: 18 cases; price/order parity; Tasty 70 panels, 261.393 m2, 3176.9606 kg; 1328 screws; IFC levels and 0.6 mm channels')

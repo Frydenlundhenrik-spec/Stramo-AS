@@ -19,13 +19,13 @@ checked()
 app.button(key='add_finished_room').click().run()
 checked()
 assert len(app.session_state['project_rooms']) == 1
-app.button(key='new_project_room').click().run()
+app.button(key='new_cool_room').click().run()
 checked()
 app.text_input(key='ed_name').set_value('Kjøl test').run()
 app.button(key='add_finished_room').click().run()
 checked()
 assert len(app.session_state['project_rooms']) == 2
-app.radio(key='ed_module').set_value('Rom og sammenstilling').run()
+app.radio(key='ed_module').set_value('Sammenstilling').run()
 checked()
 rooms = app.session_state['project_rooms']
 first, second = [r['id'] for r in rooms]
@@ -35,8 +35,7 @@ assert app.session_state['project_rooms'][1]['excluded_walls'] == [3]
 app.number_input(key=f'pos_{second}_x').set_value(7000.).run()
 checked()
 assert app.session_state['project_rooms'][1]['position_mm'][0] == 7000
-app.selectbox(key='saved_room_choice').set_value(first).run()
-app.button(key='edit_project_room').click().run()
+app.selectbox(key='room_picker').set_value(first).run()
 checked()
 assert app.text_input(key='ed_name').value == 'Frys test'
 assert app.radio(key='ed_room_type').value == 'Fryserom'
@@ -48,7 +47,7 @@ app.session_state['pending_editor'] = project['rooms'][1]
 app.run()
 checked()
 assert app.text_input(key='ed_name').value == 'Kjøl test'
-app.radio(key='ed_module').set_value('Rom og sammenstilling').run()
+app.radio(key='ed_module').set_value('Sammenstilling').run()
 checked()
 assert app.multiselect(key=f'omit_{second}').value == [3]
 assert app.number_input(key=f'pos_{second}_x').value == 7000.
