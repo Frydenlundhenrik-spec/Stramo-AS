@@ -6,6 +6,8 @@ venv/
 .env.*
 !.env.example
 .streamlit/secrets.toml
+.streamlit/stramo_login.toml
+.stramo-enrollment*
 *.db
 *.sqlite*
 *.log

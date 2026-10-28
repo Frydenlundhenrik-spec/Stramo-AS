@@ -35,6 +35,9 @@ st.set_page_config(
     layout="wide",
 )
 
+from login import require_login
+require_login()
+
 prepare_project()
 
 st.markdown("""
