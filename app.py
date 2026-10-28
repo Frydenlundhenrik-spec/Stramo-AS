@@ -15,7 +15,6 @@ from database import BESLAG_DB, DOR_DB, FORM_MALER, PANELER, load_databases
 from geometry import wall_lengths, validate_polygon, l_polygon, door_dimensions, transform_polygon
 from kalkulasjon import ProjectInput, beregn_prosjekt, kalkulasjon_sammendrag
 from fdv import lag_fdv_oversikt, lag_fdv_tekst
-from build_standard_fdv import lag_standard_fdv_pdf
 from montasje import (
     tegn_plantegning, tegn_snitt, tegn_3d_modell,
     tegn_taktegning, tegn_veggoppstaltt, tegn_produksjonsfigurer,
@@ -23,8 +22,7 @@ from montasje import (
 )
 from ifc_export import gen_ifc
 from kappliste import panel_order_rows
-from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
-from project_ui import (prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui, finishing_ui)
+from project_ui import (prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui)
 from oversikt import oversikt_ui, kpi, kpi_rad, tall
 from html import escape as html_escape
 from branding import LOGO_PATH, logo_finnes, logo_data_uri
@@ -190,19 +188,19 @@ def _beregn_cached(
 
 
 # ── Navigasjon og sideoppsett ─────────────────────────────────────────────────
-MODULER = ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Elementer",
-           "FDV", "Transport", "Sammenstilling"]
+MODULER = ["Oversikt", "Rom", "Sammenstilling", "Kalkulasjon", "Tilbud", "Produksjon",
+           "Tegninger", "FDV", "Transport"]
 # Menyikoner (Material Symbols) i samme rekkefølge som MODULER; tegnes med CSS.
-MODUL_IKON = ["dashboard", "edit_square", "architecture", "calculate", "view_column",
-              "description", "local_shipping", "join_inner"]
+MODUL_IKON = ["dashboard", "edit_square", "join_inner", "calculate", "request_quote", "precision_manufacturing",
+              "architecture", "description", "local_shipping"]
 # Sidene der inndatapanelet vises ved siden av innholdet.
 INNDATA_MODULER = {"Rom", "Tegninger"}
 # Sidene som gjelder hele prosjektet, ikke rommet som er åpent.
-PROSJEKT_MODULER = {"Oversikt", "Transport", "Sammenstilling"}
+PROSJEKT_MODULER = {"Oversikt", "Transport", "Sammenstilling", "Tilbud", "Produksjon"}
 
 # Keep an open session on the calculation page after removing the old menu item.
 _GAMLE_MODULER = {"U-verdi og varmetap": "Kalkulasjon", "Montasjetegninger": "Tegninger",
-                  "Rom og sammenstilling": "Sammenstilling"}
+                  "Rom og sammenstilling": "Sammenstilling", "Elementer": "Produksjon"}
 if st.session_state.get("ed_module") in _GAMLE_MODULER:
     st.session_state["ed_module"] = _GAMLE_MODULER[st.session_state["ed_module"]]
 
@@ -241,7 +239,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.27-r11")
+        st.caption("Stramo · 28.10.2026")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -304,19 +302,16 @@ with inndata_kol:
         pan_info = PANELER[panel_key]
         from purchase_summary import estimated_panel_weight, BALEX_WEIGHTS
         st.caption(
-            f"U-verdi {pan_info.u_verdi} W/m²K · CO₂ {pan_info.co2_kg_m2} kg/m² · {pan_info.pris_nok_m2} kr/m²  \n"
+            f"Panelpris: {pan_info.pris_nok_m2} kr/m²  \n"
             f"Automatisk panelvekt: {estimated_panel_weight(panel_key):g} kg/m² · "
             + ("Balex produktdatablad" if panel_key in BALEX_WEIGHTS else "ESTIMAT")
         )
-        st.caption("Beslag: 10 % svinn/kapp, avrundet opp til hele 2500 mm lengder. Ingen prosentvis kapptillegg på paneler eller gulvplater. "
-                   "Tilbehør beregnes fra elementflater, gulvplater, vegghjørner og dører.")
         if panel_key not in _documented_panels:
-            st.caption("U-verdien over er en eldre katalogverdi uten tilhørende produktdokumentasjon. Oppgi dokumentert U-verdi i varmeberegningen før den brukes der.")
+            st.caption("Oppgi dokumentert U-verdi under Temperatur og U-verdi for denne paneltypen.")
     thermal_data = thermal_inputs(rom_type)
     with st.expander(':material/square_foot: Romform og mål', expanded=True):
         st.caption("Rommål er utvendige mål. Døravstander måles fra utvendig hjørne til dørkant.")
         form_valg = st.selectbox("Form", list(FORM_MALER.keys()), key="ed_shape")
-        st.caption(FORM_MALER[form_valg]["besk"])
         hk, bk = st.columns(2)
         H_mm = hk.number_input("Veggpanelhøyde (mm)", min_value=1800, max_value=8000, value=2500, step=50, key="ed_height")
         H = H_mm / 1000.0
@@ -634,7 +629,7 @@ with topp:
     if modul in PROSJEKT_MODULER:
         _antall = len(st.session_state["project_rooms"])
         _tittel = f"Prosjekt {html_escape(pnr)}"
-        _under = f"{_antall} rom i prosjektet · åpent rom: {_rom_navn}"
+        _under = f"{_antall} rom i prosjektet"
     else:
         _tittel = _rom_navn
         _under = (f"Prosjekt {html_escape(pnr)} · {rom_type} · {result['panel']['label']} · "
@@ -645,14 +640,16 @@ with topp:
         unsafe_allow_html=True,
     )
     if modul not in PROSJEKT_MODULER:
+        from construction import floor_outline
+        from geometry import poly_area
         _areal = float(pd.to_numeric(result["df_kapp"].Areal_m2, errors="coerce").sum())
         _sam = result["sam"]
         kpi_rad([
-            kpi("Gulvareal", tall(result["ov"]["A"], 1), "m²"),
+            kpi("Romareal (yttermål)", tall(poly_area(floor_outline(inp.pts, result['panel']['t']/1000)), 1), "m²"),
             kpi("Panelareal", tall(_areal, 1), "m²"),
             kpi("Elementer", tall(_sam["tot_panel"] + _sam["tak"] + _sam["gulv"]), "stk"),
             kpi("Panelvekt ca.", tall(_areal * estimated_panel_weight(panel_key)), "kg"),
-            kpi("Totalpris eks. mva",
+            kpi("Kalkulert sum eks. mva",
                 tall(result["tot_pris"]), "kr", "gul"),
         ])
 
@@ -672,6 +669,10 @@ with innhold:
 
     elif modul == "Sammenstilling":
         assembly_ui()
+
+    elif modul in ("Tilbud", "Produksjon"):
+        from document_package import document_package_ui
+        document_package_ui(modul, st.session_state["project_rooms"], current_room)
 
     elif modul == "Kalkulasjon":
         st.subheader("Kalkulasjon")
@@ -703,13 +704,7 @@ with innhold:
             subset=pd.IndexSlice[[material_view.index[-1]], :],
             **{"background-color": "#07384c", "color": "white", "font-weight": "bold"}),
             use_container_width=True, hide_index=True)
-        from cutlist_pdf import cutting_pdf
-        st.download_button(
-            "Last ned materialliste PDF",
-            cutting_pdf([current_room], "kalkulasjon"),
-            f"{navn or 'prosjekt'}_materialliste.pdf", "application/pdf",
-            key="calculation_material_pdf",
-        )
+        st.caption("Kundens tilbud og vedlegg settes sammen under Tilbud. Bestillings- og kapplister finner du under Produksjon.")
         with st.expander("U-verdi og varmetap"):
             thermal_ui(current_room, st.session_state["project_rooms"])
 
@@ -718,20 +713,7 @@ with innhold:
         st.markdown(lag_fdv_tekst(navn, panel_key, rom_type))
         st.subheader("FDV-oversikt")
         st.dataframe(fdv_df, use_container_width=True, hide_index=True)
-        try:
-            fdv_scope = st.radio("FDV for", ["Dette rommet", "Hele prosjektet"], horizontal=True)
-            selected_fdv = st.session_state["project_rooms"] if fdv_scope == "Hele prosjektet" else [current_room]
-            selected_fdv = [r for r in selected_fdv if r["id"] != current_room["id"]] + [current_room]
-            if any(not r["input"]["panel_key"].startswith("PIR") for r in selected_fdv):
-                raise ValueError("Standardpakken dokumenterer BALEX PIR STANDARD. Velg riktig leverandørdokumentasjon for andre paneltyper.")
-            pdf = lag_standard_fdv_pdf(navn or "Prosjekt", pnr,
-                                      tuple(r["input"]["navn"] for r in selected_fdv))
-            st.download_button(
-                "Last ned standard FDV PDF", pdf,
-                f"{navn or 'prosjekt'}_fdv.pdf", "application/pdf",
-            )
-        except Exception as exc:
-            st.info(str(exc))
+        st.caption("Velg FDV-pakke som vedlegg under Tilbud eller Produksjon for å få den med i samlet PDF.")
 
     elif modul == "Tegninger":
         retained_walls = [i for i in range(len(inp.pts)) if i not in inp.excluded_walls]
@@ -870,36 +852,6 @@ with innhold:
         from transport import transport_ui
         transport_ui(st.session_state["project_rooms"] or [current_room])
 
-    elif modul == "Elementer":
-        st.subheader("Elementer")
-        sam = result["sam"]
-        c1, c2, c3 = st.columns(3)
-        with c1: st.info(f"Veggelementer: {sam['tot_panel']} stk")
-        with c2: st.info(f"Takelementer: {sam['tak']} stk")
-        with c3: st.info(f"Gulvelementer: {sam['gulv']} stk" if "Fryserom" in rom_type else "Kjølerom: ingen gulvpanel")
-        from purchase_summary import element_cutlist, panel_summary_ui
-        cut_export = element_cutlist([current_room])
-        st.dataframe(cut_export.round(3), use_container_width=True, hide_index=True)
-
-        panel_summary_ui([current_room])
-
-    if modul in ("Kalkulasjon", "Elementer", "Sammenstilling"):
-        finishing_ui(st.session_state["project_rooms"] if modul == "Sammenstilling" else [current_room])
-    from cutlist_pdf import pdf_downloads, material_downloads
-    if modul in ("Elementer", "Sammenstilling"):
-        export_rooms = st.session_state["project_rooms"] if modul == "Sammenstilling" else [current_room]
-        if modul == "Sammenstilling" and export_rooms:
-            export_options = ["Alle rom"] + [r["id"] for r in export_rooms]
-            export_labels = {r["id"]: f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(export_rooms)}
-            if st.session_state.get("export_room_choice") not in export_options:
-                st.session_state["export_room_choice"] = "Alle rom"
-            export_choice = st.selectbox("Last ned for rom", export_options,
-                format_func=lambda value: export_labels.get(value,value), key="export_room_choice")
-            if export_choice != "Alle rom":
-                export_rooms = [r for r in export_rooms if r["id"] == export_choice]
-            st.caption("Valget gjelder PDF-kapplister og materiallisten nedenfor. Utelatte fellesvegger beholdes utelatt også ved nedlasting av ett rom.")
-            material_downloads(export_rooms, all_rooms=export_choice == "Alle rom")
-        pdf_downloads(export_rooms)
 with lagre_plass:
     project_download(current_room)
 

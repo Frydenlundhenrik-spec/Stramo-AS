@@ -49,14 +49,15 @@ def check():
         app.button(key="open_project").click().run()
         checked(app, project["draft"])
         modules = app.radio(key="ed_module").options
-        assert modules == ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Elementer", "FDV", "Transport", "Sammenstilling"]
+        assert modules == ["Oversikt", "Rom", "Sammenstilling", "Kalkulasjon", "Tilbud", "Produksjon", "Tegninger", "FDV", "Transport"]
         assert PANEL_DB["PIR 80 mm"]["pris"] == 900
         assert PANEL_DB["PIR 100 mm"]["pris"] == 1000
         assert not any("NS 3420" in str(column) or "NS3420" in str(column)
                        for frame in app.dataframe for column in frame.value.columns)
+        app.radio(key="ed_module").set_value("Kalkulasjon").run()
         assert any("U-verdi" in str(expander.label) for expander in app.expander)
 
-        for module in ["Transport", "Kalkulasjon", "Oversikt", "Rom", "Transport", "Elementer", "Tegninger", "Sammenstilling"]:
+        for module in ["Transport", "Kalkulasjon", "Oversikt", "Rom", "Tilbud", "Produksjon", "FDV", "Tegninger", "Sammenstilling"]:
             app.radio(key="ed_module").set_value(module).run()
             checked(app, project["draft"])
 

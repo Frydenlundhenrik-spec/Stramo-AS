@@ -11,10 +11,11 @@ a.run()
 assert not a.exception,[e.message for e in a.exception]
 assert a.number_input(key='ed_finer_width').value==1220
 a.number_input(key='ed_finer_width').set_value(1250).run()
-a.radio(key='ed_module').set_value('Kalkulasjon').run()
-a.button(key='calculate_finishing').click().run()
+a.radio(key='ed_module').set_value('Produksjon').run()
+a.selectbox(key='doc_production_preview').set_value('Bestillingslister').run()
 assert not a.exception,[e.message for e in a.exception]
-assert any('gulvplater' in m.value for m in a.markdown)
+assert a.checkbox(key='doc_production_floor_cuts').value
+assert any('1250' in str(d.value) and 'Gulvplate' in str(d.value) for d in a.dataframe)
 a.radio(key='ed_module').set_value('Sammenstilling').run()
 assert not a.exception,[e.message for e in a.exception]
 assert a.session_state['project_rooms'][1]['form']['plywood_width_mm']==1250

@@ -145,6 +145,8 @@ def cutting_pdf(rooms, kind="alle"):
                     ("LEFTPADDING",(0,0),(-1,-1),8),("RIGHTPADDING",(0,0),(-1,-1),8),
                     ("TOPPADDING",(0,0),(-1,-1),4),("BOTTOMPADDING",(0,0),(-1,-1),4),
                     ("TOPPADDING",(0,0),(-1,0),6),("BOTTOMPADDING",(0,0),(-1,0),6)]
+        if kind in ("elementkapp", "tilbud_elementer"):
+            commands += [("TOPPADDING",(0,1),(-1,-1),3),("BOTTOMPADDING",(0,1),(-1,-1),3)]
         for i in totals:
             commands.extend([("BACKGROUND",(0,i),(-1,i),ink),("LINEBEFORE",(0,i),(0,i),3,lime),
                 ("NOSPLIT",(0,max(1,i-1)),(-1,i))])
@@ -168,19 +170,22 @@ def cutting_pdf(rooms, kind="alle"):
             result = beregn_prosjekt(world_input(room), pris_override=room.get("prices", {}))
             section("Materialliste" if len(rooms) == 1 else "Materialliste – " + room["input"]["navn"])
             table(materialliste_med_sum(result["df_mat"]))
-    if kind=="materialer":
+    if kind in ("materialer", "bestilling_elementer", "bestilling_tilbehor"):
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
+            if kind == "bestilling_elementer" and title != "Elementer":continue
+            if kind == "bestilling_tilbehor" and title == "Elementer":continue
             if title=="Elementer":
                 section("Bestillingsliste elementer")
             elif not accessory_page:
                 section("Bestillingsliste – beslag, dører og tilbehør")
                 accessory_page=True
             table(frame,title)
-    if kind in ("alle","elementer") and rooms:
-        section("Elementliste")
-        story.append(para("Ferdige deler med samme høyde, bredde og tykkelse summeres på én linje. Paneltyper holdes adskilt. Vekt er estimert når leverandørvekt ikke er oppgitt.",note))
-        table(with_totals(grouped_cuts(rooms),["Antall_stk","Areal_m2","Vekt_kg"],"Panel"))
+    if kind in ("alle","elementer", "elementkapp", "tilbud_elementer") and rooms:
+        section("Elementoversikt" if kind == "tilbud_elementer" else "Elementliste")
+        cuts = grouped_cuts(rooms).drop(columns="Vekt_kg")
+        table(with_totals(cuts,["Antall_stk","Areal_m2"],"Panel"))
+    if kind in ("alle", "elementer") and rooms:
         section("Bestillingsliste elementer")
         story.append(para("Lengder leveres på mål. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor. Ingen prosentvis kapptillegg. Vekt merket ESTIMAT gjelder bare paneler.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))
