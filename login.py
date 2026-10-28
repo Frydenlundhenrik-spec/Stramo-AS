@@ -156,29 +156,38 @@ def require_login():
                 _logout()
             st.caption('Last ned prosjektfilen før utlogging.')
         return user
-    st.markdown('<style>.block-container{max-width:850px;padding-top:2.2rem}h1,h2,h3{color:#0d3b54}[data-testid="stSidebar"]{display:none}</style>', unsafe_allow_html=True)
-    _logo()
-    st.title('Velkommen, ' + user['name'].split()[0])
-    st.write('Velg appen du vil åpne.')
-    left, right = st.columns(2)
-    with left:
-        with st.container(border=True):
-            st.subheader('Timeregistrering')
-            st.write('Timer, avvik, bilder og kvalitetssikring.')
+    st.markdown('''<style>
+      .block-container{max-width:500px;padding:2rem 1.25rem;}
+      [data-testid="stSidebar"],[data-testid="stHeader"]{display:none;}
+      .st-key-portal_chooser [data-testid="stMarkdownContainer"],
+      .st-key-portal_chooser [data-testid="stCaptionContainer"]{text-align:center;}
+      .st-key-portal_chooser h1,.st-key-portal_chooser h3{color:#0d3b54;}
+      .st-key-portal_chooser h1{font-size:2rem;line-height:1.25;padding-bottom:.5rem;}
+      .st-key-portal_chooser h3{font-size:1.4rem;padding-top:0;}
+      .st-key-portal_cold_card,.st-key-portal_time_card{padding:1.25rem;border-radius:14px;}
+      .st-key-portal_logout{margin-inline:auto;}
+      @media(max-width:480px){
+        .block-container{padding:1.25rem 1rem;}
+        .st-key-portal_chooser h1{font-size:1.65rem;}
+      }
+      </style>''', unsafe_allow_html=True)
+    with st.container(key='portal_chooser'):
+        _logo()
+        st.title('Velkommen, ' + user['name'].split()[0], anchor=False)
+        with st.container(border=True, key='portal_cold_card'):
+            st.subheader('Kalkulasjon', anchor=False)
+            if st.button('Åpne kalkulasjon', key='open_cold', use_container_width=True, type='primary'):
+                st.session_state['portal_destination'] = 'cold'
+                st.rerun()
+        with st.container(border=True, key='portal_time_card'):
+            st.subheader('Timeregistrering', anchor=False)
             try:
                 link = portal_client.request('launch', {}, token)
-                st.link_button('Åpne timeregistrering ↗', link['url'], use_container_width=True, type='primary')
+                st.link_button('Åpne timeregistrering', link['url'], use_container_width=True, type='primary')
                 st.caption('Lenken er gyldig i to minutter. Oppdater siden hvis du venter lenger.')
             except portal_client.LoginError as exc:
                 st.error(str(exc))
-    with right:
-        with st.container(border=True):
-            st.subheader('Kjøl og frys')
-            st.write('Prosjekter, kalkulasjon, tegninger og dokumentasjon.')
-            if st.button('Åpne kjøl og frys', key='open_cold', use_container_width=True, type='primary'):
-                st.session_state['portal_destination'] = 'cold'
-                st.rerun()
-    st.caption('Begge kontoene har tilgang til samme Stramo-arbeidsområde. Bruk testdata under utprøvingen.')
-    if st.button('Logg ut', key='portal_logout'):
-        _logout()
+        st.caption('Begge kontoene har tilgang til samme Stramo-arbeidsområde. Bruk testdata under utprøvingen.')
+        if st.button('Logg ut', key='portal_logout'):
+            _logout()
     st.stop()

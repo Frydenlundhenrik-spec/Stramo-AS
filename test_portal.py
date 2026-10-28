@@ -66,7 +66,7 @@ class PortalTests(unittest.TestCase):
             app.button[1].click().run()
             self.assertFalse(app.exception,[e.message for e in app.exception])
             self.assertIn('Timeregistrering',self.text(app))
-            self.assertIn('Kjøl og frys',self.text(app))
+            self.assertIn('Kalkulasjon',self.text(app))
             self.assertNotIn('portal_enrollment',app.session_state)
             app.button(key='open_cold').click().run()
             self.assertIn('PROTECTED ROOM APP',self.text(app))
