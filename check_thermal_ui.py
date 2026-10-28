@@ -64,7 +64,7 @@ def check():
     checked()
     assert app.number_input(key="ed_thermal_inside_c").value == 4
     assert app.number_input(key="ed_thermal_door_u").value == .8
-    app.radio(key="ed_module").set_value("Produksjon").run()
+    app.radio(key="ed_module").set_value("Elementer").run()
     app.radio(key="ed_module").set_value("Kalkulasjon").run()
     checked()
     rooms = copy.deepcopy(app.session_state["project_rooms"])

@@ -141,9 +141,8 @@ def _apply_project(project):
     restore_editor(project["draft"])
     st.session_state["project_rooms"] = project["rooms"]
     st.session_state["active_room_id"] = project.get("active_id")
-    st.session_state["document_settings"] = copy.deepcopy(project.get("documents", {}))
     for key in list(st.session_state):
-        if str(key).startswith(("pos_","omit_","snap_", "doc_offer_", "doc_production_")) or key in ("saved_room_choice", "room_picker"):
+        if str(key).startswith(("pos_","omit_","snap_")) or key in ("saved_room_choice", "room_picker"):
             del st.session_state[key]
     st.session_state["project_opened"] = True
 
@@ -282,14 +281,13 @@ def project_download(current):
     rooms = st.session_state["project_rooms"]
     current = next((r for r in rooms if r["id"] == st.session_state.get("active_room_id")), current)
     try:
-        data = encode_project(rooms, current, st.session_state.get("active_room_id"),
-                              documents=st.session_state.get("document_settings", {}))
+        data = encode_project(rooms, current, st.session_state.get("active_room_id"))
     except ValueError as exc:
         st.error(f"Prosjektet kan ikke lagres før feilen er rettet: {exc}")
         return
     st.download_button("Last ned prosjektfil",data,"stramo-prosjekt.json","application/json",
                         key="download_project",on_click="ignore",icon=":material/save:",use_container_width=True,
-                        help="Lagrer rom, mål, dører, priser og dokumentvalg, inkludert tilbudstekst og tilbudssum.")
+                        help="Lagrer rom, mål, rotasjon, dører, priser, bakgrunnsbilde og veggvalg. Inkluderer også rommet du redigerer.")
 
 
 def finishing_ui(rooms):
@@ -477,7 +475,11 @@ def assembly_ui():
         margin=dict(l=0,r=0,t=15,b=110),
         uirevision=st.session_state.get("assembly_camera_revision",0),height=760)
     st.plotly_chart(combined,use_container_width=True,config=dict(modeBarButtonsToRemove=["orbitRotation"]))
-    st.caption("Bestillings- og kapplister for valgte rom finner du under Produksjon.")
+    mat, cut = pd.concat(materials,ignore_index=True),pd.concat(cuts,ignore_index=True)
+    from purchase_summary import element_cutlist, panel_summary_ui
+    cut = element_cutlist(rooms)
+    st.dataframe(cut,hide_index=True)
+    panel_summary_ui(rooms)
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle,"w",compression=zipfile.ZIP_DEFLATED) as archive:
         for i,room in enumerate(rooms):

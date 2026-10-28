@@ -11,8 +11,12 @@ from kalkulasjon import beregn_prosjekt
 from project_file import world_input
 
 DOKUMENTER = [
-    ("Tilbud", ":material/request_quote:", "Tilbud til kunden med valgte vedlegg i én PDF"),
-    ("Produksjon", ":material/precision_manufacturing:", "Bestilling, kapplister og montasje i én PDF"),
+    ("Tegninger", ":material/architecture:", "Plan, snitt, tak, vegger, produksjon og 3D"),
+    ("Kalkulasjon", ":material/calculate:", "Materialliste og priser"),
+    ("Elementer", ":material/view_column:", "Elementlister og kapplister"),
+    ("FDV", ":material/description:", "FDV-dokumentasjon"),
+    ("Transport", ":material/local_shipping:", "Pakking og transport"),
+    ("Sammenstilling", ":material/join_inner:", "Plassering, fellesvegger og IFC"),
 ]
 
 
@@ -53,12 +57,13 @@ def rom_svg(pts, bredde: int = 230, hoyde: int = 120) -> str:
 
 def _rom_info(room: dict) -> str:
     data, form = room["input"], room["form"]
-    from construction import floor_outline
-    from database import PANEL_DB
-    outer = floor_outline(data["pts"], PANEL_DB[data["panel_key"]]["t"] / 1000)
-    xs, ys = [p[0] for p in outer], [p[1] for p in outer]
-    mal = f"{tall((max(xs) - min(xs)) * 1000)} × {tall((max(ys) - min(ys)) * 1000)} mm"
-    return f"{form.get('kind', 'Rom')} · yttermål {mal} · veggpanel {tall(data['hoyde_m'] * 1000)} mm · {data['panel_key']}"
+    xs = [p[0] for p in data["pts"]]
+    ys = [p[1] for p in data["pts"]]
+    if "length_mm" in form:
+        mal = f"{tall(form['length_mm'])} × {tall(form['width_mm'])}"
+    else:
+        mal = f"ca. {tall((max(xs) - min(xs)) * 1000)} × {tall((max(ys) - min(ys)) * 1000)}"
+    return f"{form.get('kind', 'Rom')} · {mal} · H {tall(data['hoyde_m'] * 1000)} · {data['panel_key']}"
 
 
 def _gaa_til(modul: str) -> None:
@@ -124,7 +129,7 @@ def oversikt_ui() -> bool:
         kpi("Rom", str(len(rooms)), f"+ 1 utkast"),
         kpi("Panelareal totalt", tall(sum(s["panelareal"] for s in stats), 1), "m²"),
         kpi("Elementer", tall(sum(s["elementer"] for s in stats)), "stk"),
-        kpi("Kalkulert sum eks. mva",
+        kpi("Totalpris eks. mva",
             tall(sum(s["pris"] for s in stats)), "kr", "gul"),
     ])
 
@@ -150,7 +155,7 @@ def oversikt_ui() -> bool:
                     f'<div class="s-romkort-bilde">{rom_svg(room["input"]["pts"])}</div>'
                     f'<div class="s-romkort-tittel"><b>{nr}{navn}</b>{merke}</div>'
                     f'<div class="s-romkort-info">{html.escape(room["input"]["rom_type"])} · {html.escape(_rom_info(room))}</div>'
-                    f'<div class="s-romkort-tall"><span><b>{tall(s["panelareal"], 1)}</b> m² panel</span>'
+                    f'<div class="s-romkort-tall"><span><b>{tall(s["panelareal"], 1)}</b> m²</span>'
                     f'<span><b>{s["elementer"]}</b> elementer</span>'
                     f'<span><b>{tall(s["pris"])}</b> kr</span></div>',
                     unsafe_allow_html=True,
@@ -176,5 +181,4 @@ def oversikt_ui() -> bool:
         with kolonne:
             st.button(modul, key=f"ov_doc_{modul}",
                       icon=ikon, help=tekst, on_click=_gaa_til, args=(modul,), use_container_width=True)
-            st.caption(tekst)
     return vis_utkast

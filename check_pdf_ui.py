@@ -1,28 +1,31 @@
-"""Ordering previews and selected-room export now live under Produksjon."""
+import faulthandler
 from pathlib import Path
 from streamlit.testing.v1 import AppTest
 from project_file import decode_project
-
-p=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
-a=AppTest.from_file('app.py',default_timeout=90)
-a.session_state['pending_project']=p
-a.run()
-a.radio(key='ed_module').set_value('Produksjon').run()
+faulthandler.dump_traceback_later(55,exit=True)
+a=AppTest.from_file('app.py',default_timeout=30).run()
+assert not any(n.key in ('ed_panel_weight','ed_waste_pct') for n in a.number_input)
+assert any('Automatisk panelvekt:' in c.value for c in a.caption)
+a.session_state['project_rooms']=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
+a.radio(key='ed_module').set_value('Sammenstilling').run()
 assert not a.exception,[e.message for e in a.exception]
-a.selectbox(key='doc_production_preview').set_value('Bestillingslister').run()
-assert a.checkbox(key='doc_production_profiles').value
-assert a.checkbox(key='doc_production_floor_cuts').value
-assert a.checkbox(key='doc_production_panel_order').value
-assert a.checkbox(key='doc_production_accessory_order').value
-room_id=p['rooms'][1]['id']
-a.multiselect(key='doc_production_rooms').set_value([room_id]).run()
+labels=[b.label for b in a.get('download_button')]
+assert 'Materialliste hele prosjektet – PDF' in labels,labels
+assert 'Alle kapplister samlet – PDF' in labels,labels
+assert 'Gulvplatekapplister – PDF' in labels,labels
+assert 'Detaljert beslagsliste – PDF' in labels,labels
+assert any('Produkt' in d.value.columns for d in a.dataframe)
+room_id=a.session_state['project_rooms'][1]['id']
+a.selectbox(key='export_room_choice').set_value(room_id).run()
 assert not a.exception,[e.message for e in a.exception]
+labels=[b.label for b in a.get('download_button')]
+assert 'Materialliste valgt rom – PDF' in labels
 frames=[d.value for d in a.dataframe if 'Tykkelse (mm)' in d.value.columns and 'Produkt' in d.value.columns]
 assert len(frames)==1
 assert not frames[0].Produkt.str.contains('PIR 80').any()
 assert frames[0].Produkt.str.contains('PIR 100').any()
-a.multiselect(key='doc_production_rooms').set_value([r['id'] for r in p['rooms']]).run()
+a.selectbox(key='export_room_choice').set_value('Alle rom').run()
 assert not a.exception,[e.message for e in a.exception]
 assert any(d.value.Produkt.str.contains('PIR 80').any() for d in a.dataframe if 'Produkt' in d.value.columns)
-assert not any('CSV' in b.label or 'Excel' in b.label for b in a.get('download_button'))
-print('PASS: grouped order previews for one/all rooms and selectable combined PDF under Produksjon')
+faulthandler.cancel_dump_traceback_later()
+print('PASS: assembly material PDF/CSV and all four cutting PDF downloads')

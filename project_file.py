@@ -174,10 +174,8 @@ def validate_room(room):
     return room
 
 
-def encode_project(rooms, draft, active_id=None, *, documents=None):
+def encode_project(rooms, draft, active_id=None):
     project = dict(format=FORMAT,version=VERSION,rooms=rooms,draft=draft,active_id=active_id)
-    if documents is not None:
-        project["documents"] = copy.deepcopy(documents)
     validate_project(project)
     raw = json.dumps(project, ensure_ascii=False,allow_nan=False,indent=2).encode("utf-8")
     if len(raw) > 25*1024*1024:
@@ -189,8 +187,6 @@ def validate_project(project):
     """Use identical checks for save and load so every saved file can reopen."""
     if project["format"] != FORMAT or project["version"] != VERSION:
         raise ValueError("Ukjent prosjektformat eller versjon.")
-    from document_package import validate_document_settings
-    validate_document_settings(project.get("documents", {}))
     if not isinstance(project["rooms"],list) or len(project["rooms"])>30:
         raise ValueError("Prosjektet kan ha maksimalt 30 rom.")
     for room in project["rooms"]:

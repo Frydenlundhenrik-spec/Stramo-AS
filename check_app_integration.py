@@ -37,15 +37,12 @@ def check():
         for module in app.radio(key="ed_module").options:
             app.radio(key="ed_module").set_value(module).run()
             checked(app)
-            if module == "Produksjon":
-                for checkbox in app.checkbox:
-                    if checkbox.key.startswith("doc_production_"):
-                        checkbox.set_value(checkbox.key == "doc_production_fdv")
-                app.run()
-                app.button(key="doc_production_build").click().run()
-                checked(app)
+            if module == "FDV":
                 labels = [button.label for button in app.get("download_button")]
-                assert "Last ned produksjon PDF" in labels, labels
+                assert "Last ned standard FDV PDF" in labels, labels
+                scope = next(radio for radio in app.radio if radio.label == "FDV for")
+                scope.set_value("Hele prosjektet").run()
+                checked(app)
                 args, data = generated[-1]
                 assert set(args[2]) == {r["input"]["navn"] for r in project["rooms"]}
                 reader = PdfReader(io.BytesIO(data))
