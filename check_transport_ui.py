@@ -10,7 +10,8 @@ a.radio(key='ed_module').set_value('Transport').run()
 assert not a.exception,[e.message for e in a.exception]
 assert len(a.get('plotly_chart'))==1
 assert any('Registrert vekt'==m.label for m in a.metric)
-assert any('transportliste' in d.label.lower() for d in a.get('download_button'))
+# r11 exports the interactive loading proposal; the old CSV button was removed.
+assert any('lasteforslag i 3d' in d.label.lower() for d in a.get('download_button'))
 assert any('Elementer og beslag' in c.value and 'fronten' in c.value for c in a.caption)
 assert any('trailertaket' in c.value for c in a.caption)
 assert any('Stable panelpakker opp mot trailertaket' in c.label for c in a.checkbox)
