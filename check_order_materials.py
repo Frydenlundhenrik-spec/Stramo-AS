@@ -63,6 +63,19 @@ text = '\n'.join(p.extract_text() for p in PdfReader(BytesIO(order_pdf)).pages)
 assert 'Bestillingsliste elementer' in text and 'PIR 80 mm' in text and 'PIR 100 mm' in text
 assert 'Elementliste\n' not in text
 
+# The separate order PDF contains all non-panel products and no element pages.
+for selection in (rooms, rooms[:1], rooms[1:]):
+    accessory_pdf = PdfReader(BytesIO(cutting_pdf(selection, 'bestilling_tilbehor')))
+    assert len(accessory_pdf.pages) == 1
+    text = '\n'.join(p.extract_text() for p in accessory_pdf.pages)
+    assert 'Bestillingsliste – beslag, dører og tilbehør' in text
+    assert all(label in text for label in ('Beslag', 'Dører', 'Tilbehør', '22 mm hvite skruer'))
+    assert 'PIR 80 mm' not in text and 'PIR 100 mm' not in text
+    assert 'Bestillingsliste elementer' not in text and 'Leveringslengde' not in text
+    assert ('Fryseromsdør' in text) == any(r['input']['rom_type'] == 'Fryserom' for r in selection)
+    assert ('Kjøleromsdør' in text) == any(r['input']['rom_type'] == 'Kjølerom' for r in selection)
+    assert 'Slagretning' in text
+
 # run_checks.py supplies an isolated copy with a test-only login stub.
 app = AppTest.from_file('app.py', default_timeout=90).run()
 app.session_state['project_rooms'] = deepcopy(rooms)
@@ -71,6 +84,12 @@ app.run()
 app.radio(key='ed_module').set_value('Bestilling').run()
 assert not app.exception, [e.message for e in app.exception]
 assert any(b.key == 'panel_order_pdf' for b in app.get('download_button'))
+assert any(b.key == 'accessory_order_pdf' for b in app.get('download_button'))
+assert any('Beslag' in d.value.columns for d in app.dataframe)
+doors = next(d.value for d in app.dataframe if 'Dører' in d.value.columns)
+assert len(doors) == 4 and doors.Antall.sum() == 4
+accessories = next(d.value for d in app.dataframe if 'Tilbehør' in d.value.columns)
+assert accessories.loc[accessories['Tilbehør'].eq('Alarm'), 'Antall'].iloc[0] == 1
 frame = next(d.value for d in app.dataframe if 'Bestilling (stk)' in d.value.columns)
 assert frame.iloc[-1]['Bestilling (stk)'] == 70
 app.selectbox(key='order_room_choice').set_value(rooms[1]['id']).run()
@@ -78,6 +97,12 @@ assert not app.exception, [e.message for e in app.exception]
 frame = next(d.value for d in app.dataframe if 'Bestilling (stk)' in d.value.columns)
 assert frame.iloc[-1]['Bestilling (stk)'] == 35
 assert 'PIR 80 mm' not in frame.Panel.values and 'PIR 100 mm' in frame.Panel.values
+doors = next(d.value for d in app.dataframe if 'Dører' in d.value.columns)
+assert len(doors) == 2 and doors['Dører'].str.startswith('Fryseromsdør').all()
+app.selectbox(key='order_room_choice').set_value(rooms[0]['id']).run()
+assert not app.exception, [e.message for e in app.exception]
+accessories = next(d.value for d in app.dataframe if 'Tilbehør' in d.value.columns)
+assert 'Alarm' not in accessories['Tilbehør'].values
 app.radio(key='ed_module').set_value('Kalkulasjon').run()
 assert not app.exception, [e.message for e in app.exception]
 assert any('Leveringslengde (mm)' in d.value.columns for d in app.dataframe)

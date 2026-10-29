@@ -174,10 +174,11 @@ def cutting_pdf(rooms, kind="alle"):
             result = beregn_prosjekt(world_input(room), pris_override=room.get("prices", {}))
             section("Materialliste" if len(rooms) == 1 else "Materialliste – " + room["input"]["navn"])
             table(materialliste_med_sum(result["df_mat"]))
-    if kind=="materialer":
+    if kind in ("materialer", "bestilling_tilbehor"):
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
             if title=="Elementer":
+                if kind == "bestilling_tilbehor":continue
                 section("Bestillingsliste elementer")
             elif not accessory_page:
                 section("Bestillingsliste – beslag, dører og tilbehør")
@@ -259,16 +260,25 @@ def pdf_downloads(rooms):
         st.download_button(label+" – PDF",cutting_pdf(rooms,kind),f"kapplister-{kind}.pdf","application/pdf",key=f"cutpdf_{kind}")
 
 
-def material_downloads(rooms, all_rooms=True):
+def material_downloads(rooms, all_rooms=True, include_elements=True):
     import streamlit as st
     if not rooms:return
     scope = "hele prosjektet" if all_rooms else "valgt rom"
-    st.subheader("Bestillingsliste elementer")
+    if include_elements:st.subheader("Bestillingsliste elementer")
     frame=project_materials(rooms)
+    accessory_heading=False
     for title,part in material_tables(frame):
-        if title=="Beslag":st.subheader("Bestillingsliste – beslag, dører og tilbehør")
+        if title=="Elementer" and not include_elements:continue
+        if title!="Elementer" and not accessory_heading:
+            st.subheader("Bestillingsliste – beslag, dører og tilbehør")
+            accessory_heading=True
         display=part.rename(columns={"Produkt":"Produkt" if title=="Elementer" else title,"Stk":"Antall (stk)" if title=="Elementer" else "Antall","Høyde_mm":"Høyde / lengde (mm)",
             "Bredde_mm":"Bredde (mm)","Tykkelse_mm":"Tykkelse (mm)","Areal_m2":"Areal (m²)",
             "Løpemeter":"Lengde (m)" if title=="Tilbehør" else "Lengde (LM)"})
         st.dataframe(display,hide_index=True,row_height=64 if title=="Dører" else None)
-    st.download_button("Materialliste " + scope + " – PDF",cutting_pdf(rooms,"materialer"),"materialliste-prosjekt.pdf","application/pdf",key="project_material_pdf")
+    if include_elements:
+        st.download_button("Materialliste " + scope + " – PDF",cutting_pdf(rooms,"materialer"),"materialliste-prosjekt.pdf","application/pdf",key="project_material_pdf")
+    else:
+        st.download_button("Last ned bestillingsliste beslag, dører og tilbehør PDF",
+            cutting_pdf(rooms,"bestilling_tilbehor"),"bestillingsliste-beslag-dorer-tilbehor.pdf",
+            "application/pdf",key="accessory_order_pdf")
