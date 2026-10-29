@@ -96,7 +96,7 @@ def materialliste(
             d = DOR_DB[dk]
             door_label = ("Fryseromsdør" if rom_type == "Fryserom" else "Kjøleromsdør") + f" {d['bw']}×{d['bh']} mm"
             hinge = door[4] if len(door) > 4 else "Ikke angitt"
-            door_label += f" · Slagretning: {hinge} (sett innenfra)"
+            door_label += f" · Slagretning: {hinge}"
             if len(door) > 2:
                 door_label += f" · Vegg {int(door[2]) + 1}"
             unit_dor = ep(f"dor_{dk}", d["pris"])
@@ -138,7 +138,7 @@ def materialliste(
                  for i in range(len(wls)) if i not in excluded_walls]
         stk_uk = trim_order(sum(hi-lo for lo,hi in spans))
         rows.append(dict(
-            Post=f"U-kanal {pan['t']} mm (gulv→vegg)",
+            Post=f"U-kanal {pan['t']} mm",
             Type=f"U-kanal {pan['t']} mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
             Enhet="stk", Mengde=stk_uk, **_kr(math.nan, stk_uk),
             NS3420=_NS["ukan"], CO2_k=UKAN_M * 0.6,
@@ -191,6 +191,8 @@ def materialliste_med_sum(frame: pd.DataFrame) -> pd.DataFrame:
     table = table.rename(columns=dimensions)
     table = table.reindex(columns=["Post", "Type", *dimensions.values(), "Enhet", "Mengde",
                                    "Enhetspris (kr)", "Totalpris (kr)"])
+    for column in ("Enhetspris (kr)", "Totalpris (kr)"):
+        table[column] = table[column].fillna(0.0)
     total = {"Post": "SUM", "Type": "", "Enhet": "",
              "Totalpris (kr)": round(float(table["Totalpris (kr)"].sum()), 2)}
     return pd.concat([table, pd.DataFrame([total])], ignore_index=True)

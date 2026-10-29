@@ -33,10 +33,19 @@ for room in rooms:
     assert not shown.Post.str.startswith(('Vegg ', 'Tak (panel)', 'Gulv – PIR')).any()
     assert not shown.Type.str.contains('PRIS MANGLER').any()
     assert len(shown[shown.Post.eq('Dør')]) == 2
+    assert not shown.Type.str.contains('sett innenfra').any()
+    assert not shown.Post.str.contains('gulv→vegg').any()
+    missing_price = result['df_mat']['Enhetspris (kr)'].isna()
+    assert missing_price.any()
+    assert shown.loc[missing_price[missing_price].index, 'Enhetspris (kr)'].eq(0).all()
+    assert shown.loc[missing_price[missing_price].index, 'Totalpris (kr)'].eq(0).all()
+    assert result['df_mat'].loc[missing_price, 'Enhetspris (kr)'].isna().all()
+    assert math.isnan(shown.iloc[-1]['Enhetspris (kr)'])
     pdf = cutting_pdf([room], 'kalkulasjon')
     text = '\n'.join(page.extract_text() for page in PdfReader(BytesIO(pdf)).pages)
     assert 'Leveringslengde' in text and 'Antall (stk)' in ' '.join(text.split()) and 'SUM' in text
-    assert 'Vegg 1\n' not in text
+    assert 'Slagretning:' in text and 'Vegg 1' in text
+    assert 'sett innenfra' not in text and 'gulv→vegg' not in text and '0,00' in text
 
     # Historical per-wall/roof/floor prices must still apply to their allocated material.
     overrides = {'vegg_0': 700, 'vegg_1': 1200, 'tak': 850, 'gulv_pir': 1100}
@@ -75,6 +84,7 @@ for selection in (rooms, rooms[:1], rooms[1:]):
     assert ('Fryseromsdør' in text) == any(r['input']['rom_type'] == 'Fryserom' for r in selection)
     assert ('Kjøleromsdør' in text) == any(r['input']['rom_type'] == 'Kjølerom' for r in selection)
     assert 'Slagretning' in text
+    assert 'sett innenfra' not in text
 
 # run_checks.py supplies an isolated copy with a test-only login stub.
 app = AppTest.from_file('app.py', default_timeout=90).run()

@@ -248,7 +248,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r13")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r14")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -460,7 +460,7 @@ with inndata_kol:
             with h2:
                 hengsel = st.selectbox(
                     "Hengslingsside", ["Venstre", "Høyre"], key=f"dh{i}",
-                    help="Siden hengslet sitter på (sett innenfra rommet)"
+                    help="Siden hengslet sitter på (sett utenfra rommet)"
                 )
             if dk not in priced_door_keys:
                 priced_door_keys.add(dk)
