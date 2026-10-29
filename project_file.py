@@ -217,7 +217,9 @@ def decode_project(raw):
 
 
 def world_input(room):
+    from branding import project_name
     data = copy.deepcopy(room["input"])
+    data["navn"] = project_name(data["navn"])
     x,y = room["position_mm"]
     data["pts"] = [(a+x/1000,b+y/1000) for a,b in data["pts"]]
     data["excluded_walls"] = tuple(room["excluded_walls"])

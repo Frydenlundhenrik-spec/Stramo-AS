@@ -6,7 +6,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.platypus import SimpleDocTemplate, Paragraph, LongTable, Table, TableStyle, PageBreak, Image
-from branding import LOGO_PATH, logo_finnes, logo_sideforhold
+from branding import LOGO_PATH, logo_finnes, logo_sideforhold, project_name
 from export_pdf import _registrer_font, draw_pdf_footer
 from project_file import world_input
 from kalkulasjon import beregn_prosjekt
@@ -96,7 +96,7 @@ def cutting_pdf(rooms, kind="alle"):
     head = ParagraphStyle("heading",fontName=bold,fontSize=14,leading=19,spaceAfter=8,keepWithNext=True,textColor=ink)
     note = ParagraphStyle("note",fontName=font,fontSize=8,leading=12,spaceAfter=10,textColor=muted)
     metadata = ParagraphStyle("metadata",parent=note,leading=11,spaceAfter=6)
-    room_label="PROSJEKT "+", ".join(dict.fromkeys(r["input"].get("pnr", "") for r in rooms))+"  |  "+", ".join(r["input"]["navn"] for r in rooms)
+    room_label="PROSJEKT "+", ".join(dict.fromkeys(r["input"].get("pnr", "") for r in rooms))+"  |  "+", ".join(project_name(r["input"]["navn"]) for r in rooms)
     story = []
 
     def para(text,style=normal):
@@ -172,7 +172,7 @@ def cutting_pdf(rooms, kind="alle"):
     if kind == "kalkulasjon":
         for room in rooms:
             result = beregn_prosjekt(world_input(room), pris_override=room.get("prices", {}))
-            section("Materialliste" if len(rooms) == 1 else "Materialliste – " + room["input"]["navn"])
+            section("Materialliste" if len(rooms) == 1 else "Materialliste – " + project_name(room["input"]["navn"]))
             table(materialliste_med_sum(result["df_mat"]))
     if kind in ("materialer", "bestilling_tilbehor"):
         accessory_page=False
@@ -248,7 +248,7 @@ def pdf_downloads(rooms):
     with st.expander("Detaljert beslagsliste med profiltegninger"):
         profiles=profile_rows(project_materials(rooms))
         if logo_finnes():st.image(str(LOGO_PATH),width=110)
-        st.caption("Valgte rom: "+", ".join(r["input"]["navn"] for r in rooms))
+        st.caption("Valgte rom: "+", ".join(project_name(r["input"]["navn"]) for r in rooms))
         for r in profiles:
             left,right=st.columns([1,1])
             left.image(profile_png(r["kind"],r["width"]))
@@ -275,7 +275,14 @@ def material_downloads(rooms, all_rooms=True, include_elements=True):
         display=part.rename(columns={"Produkt":"Produkt" if title=="Elementer" else title,"Stk":"Antall (stk)" if title=="Elementer" else "Antall","Høyde_mm":"Høyde / lengde (mm)",
             "Bredde_mm":"Bredde (mm)","Tykkelse_mm":"Tykkelse (mm)","Areal_m2":"Areal (m²)",
             "Løpemeter":"Lengde (m)" if title=="Tilbehør" else "Lengde (LM)"})
-        st.dataframe(display,hide_index=True,row_height=64 if title=="Dører" else None)
+        # Same widths for equivalent order tables, with two lines for door/room text.
+        columns = None if title == "Elementer" else {
+            title: st.column_config.TextColumn(width=700),
+            "Antall": st.column_config.NumberColumn(width=120),
+            "Enhet": st.column_config.TextColumn(width=150),
+        }
+        st.dataframe(display, hide_index=True, width="stretch", height="content",
+                     column_config=columns, row_height=64 if title=="Dører" else None)
     if include_elements:
         st.download_button("Materialliste " + scope + " – PDF",cutting_pdf(rooms,"materialer"),"materialliste-prosjekt.pdf","application/pdf",key="project_material_pdf")
     else:

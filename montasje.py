@@ -1,6 +1,7 @@
 from __future__ import annotations
 from typing import Any
 from database import PANEL_DB
+from branding import project_name
 
 from drawing_2d import DRAWING_SCALE, stramo_plan, stramo_snitt, stramo_tak, tegn_veggoppstalt, stramo_produksjonstegninger, fig2png
 from drawing_3d import tegn_3d_med_panelbredde
@@ -21,7 +22,7 @@ def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", 
 
 
 def tegn_veggoppstaltt(inp: Any, result: dict, vegg_idx: int = 0, apninger=None):
-    info = lag_tegningsinfo(inp, result, f"Veggoppstalt V{vegg_idx+1}")
+    info = lag_tegningsinfo(inp, result, f"Veggoppstalt – Vegg {vegg_idx+1}")
     return tegn_veggoppstalt(inp.pts, inp.hoyde_m, inp.panelbredde_m,
                               inp.dorer, info, vegg_idx, apninger=apninger, rom_type=inp.rom_type, excluded_walls=getattr(inp,"excluded_walls",()), wall_thickness=PANEL_DB[inp.panel_key]["t"]/1000)
 
@@ -60,7 +61,7 @@ def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:
     from geometry import poly_area, poly_perim
     footprint = floor_outline(inp.pts, PANEL_DB[inp.panel_key]["t"] / 1000)
     return {
-        "navn": inp.navn.strip() or "–",
+        "navn": project_name(inp.navn) or "–",
         "pnr":  inp.pnr,
         "tnr":  inp.tnr,
         "dato": inp.dato,

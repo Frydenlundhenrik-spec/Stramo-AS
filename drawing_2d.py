@@ -12,7 +12,7 @@ from matplotlib.path import Path
 import matplotlib.patheffects as pe
 from database import PANEL_DB, DOR_DB
 from geometry import wall_lengths, ensure_ccw, Point, door_dimensions, polygon_winding
-from dimensions import exterior_door
+from dimensions import exterior_door, exterior_wall
 from panel_engine import generate_roof_floor_panels, main_axis_from_longest_wall
 from branding import logo_bilde, logo_sideforhold
 
@@ -365,7 +365,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
 
             # Mål-piler: hjørne→dør og dørbredde
             from dimensions import exterior_door
-            outer_start, outer_length, outer_offset = exterior_door(pts, WT, wall_idx, cursor)
+            outer_start, outer_length, outer_offset = exterior_door(pts, WT, wall_idx, cursor, excluded_walls)
             # Door dimensions stay outside their room, also beside a shared wall.
             _door_dim(ax, outer_start, dx_n, outer_offset, dw, -perp, outer_length, idx_d,
                       height_mm=DOR_DB[dk]["bh"])
@@ -420,7 +420,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
         _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn-1.65, fs=10, total=True)
         _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx+1.65, fs=10, total=True)
     for i in range(nn):
-        p1, p2 = outer[i], outer[(i+1)%nn]
+        p1, p2 = exterior_wall(pts, WT, i, excluded_walls) if i not in excluded_walls else (outer[i], outer[(i+1)%nn])
         length = np.linalg.norm(p2-p1)
         full_width = np.isclose(abs(p2[0]-p1[0]), xmx-xmn) and np.isclose(p1[1],p2[1])
         full_height = np.isclose(abs(p2[1]-p1[1]), ymx-ymn) and np.isclose(p1[0],p2[0])
@@ -712,7 +712,7 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
             ax.plot([handle_x], [handle_y], marker="o", markersize=4,
                     color=RED, zorder=7)
             # Dørmål fra begge utvendige hjørner.
-            _, outside_length, outside_offset = exterior_door(pts, wall_thickness, vegg_idx, cursor)
+            _, outside_length, outside_offset = exterior_door(pts, wall_thickness, vegg_idx, cursor, excluded_walls)
             outside_start = cursor-outside_offset
             outside_end = outside_start+outside_length
             _dh(ax, outside_start, cursor, -.25, f"{round(outside_offset*1000)} mm", ey=-.25, col="#555", fs=5.5)
@@ -870,7 +870,7 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
 
     lbl(-WT/2, UC/2,        ("Vinkelbeslag" if IS_FRYS else f"U-kanal\n{round(WT*1000)} mm"),  fs=5.5, col="#1a3a5c")
     lbl(L+WT/2, UC/2,      ("Vinkelbeslag" if IS_FRYS else f"U-kanal\n{round(WT*1000)} mm"),  fs=5.5, col="#1a3a5c")
-    lbl(-WT/2, UC+H/2,      f"Vegg\n{vegg_label_left}", fs=6, col="#1a3a5c")
+    lbl(-WT/2, UC+H/2,      vegg_label_left if vegg_label_left.startswith("Vegg ") else f"Vegg\n{vegg_label_left}", fs=6, col="#1a3a5c")
     lbl(L+WT/2, UC+H/2,    f"Vegg\n{vegg_label_right}", fs=6, col="#1a3a5c")
     lbl(L/2, UC+H+TAK/2,   "Tak", fs=6)
     if IS_FRYS:
@@ -885,7 +885,7 @@ def stramo_snitt(pts, H, pw_m, dorer, info, rom_type, panel_key,
     outside = np.asarray(floor_outline(pts, WT))
     direction = outside[(vegg_idx+1)%nn] - outside[vegg_idx]
     L = float(np.linalg.norm(direction))-2*WT
-    vl_left  = f"V{vegg_idx+1}"
+    vl_left  = f"Vegg {vegg_idx+1}"
     vl_right = "prinsipp"
 
     UC = wall_base(rom_type, panel_key); TAK = WT

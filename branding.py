@@ -9,12 +9,18 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+import re
 
 LOGO_PATH  = Path(__file__).parent / "assets" / "stramo_logo.png"
 
 # Farger hentet fra logoen
 STRAMO_BLA  = "#0d3b54"
 STRAMO_GUL  = "#e3e011"
+
+
+def project_name(value: str) -> str:
+    """Remove the old test suffix from displayed project and room names."""
+    return re.sub(r"(?:\s*[-–—]\s*|\s+)bildetest\s*$", "", value, flags=re.IGNORECASE).strip()
 
 
 def logo_finnes() -> bool:

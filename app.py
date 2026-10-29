@@ -27,7 +27,8 @@ from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
 from project_ui import (prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui, finishing_ui)
 from oversikt import oversikt_ui, kpi, kpi_rad, tall
 from html import escape as html_escape
-from branding import LOGO_PATH, logo_finnes, logo_data_uri
+from branding import LOGO_PATH, logo_finnes, logo_data_uri, project_name
+from dimensions import exterior_wall
 from thermal_ui import thermal_inputs, thermal_ui
 
 st.set_page_config(
@@ -248,7 +249,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r15")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r16")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -335,9 +336,9 @@ with inndata_kol:
         if form_valg == "L-form":
             st.caption("Den lengste vannrette og loddrette siden er totalmål. Endrer du ett delmål, beregnes det andre automatisk. Ved endring av totalmålet beholdes sist redigerte delmål.")
             defaults = [5850, 4450, 2925, 2225, 2925, 2225]
-            labels = ["V1 – første vannrette side", "V2 – neste loddrette side",
-                      "V3 – neste vannrette side", "V4 – neste loddrette side",
-                      "V5 – siste vannrette side", "V6 – siste loddrette side"]
+            labels = ["Vegg 1 – første vannrette side", "Vegg 2 – neste loddrette side",
+                      "Vegg 3 – neste vannrette side", "Vegg 4 – neste loddrette side",
+                      "Vegg 5 – siste vannrette side", "Vegg 6 – siste loddrette side"]
             for j in range(6):
                 if f"l_side_{j}" not in st.session_state:
                     st.session_state[f"l_side_{j}"] = defaults[j]
@@ -378,7 +379,7 @@ with inndata_kol:
             for j, (x,y) in enumerate(pts):
                 nx,ny = pts[(j+1)%6]
                 ax.annotate(f"H{j+1}", (x,y), xytext=(5,5), textcoords="offset points", fontsize=8)
-                ax.text((x+nx)/2, (y+ny)/2, f"V{j+1}", ha="center", va="center",
+                ax.text((x+nx)/2, (y+ny)/2, f"Vegg {j+1}", ha="center", va="center",
                         bbox=dict(facecolor="white",edgecolor="none",pad=2), fontsize=9)
             ax.set_aspect("equal"); ax.margins(.2); ax.axis("off")
             st.pyplot(preview); plt.close(preview)
@@ -620,7 +621,7 @@ with innhold:
             st.session_state["ed_drawing_walls"] = list(current_room["excluded_walls"])
         st.session_state.setdefault("ed_drawing_walls", list(current_room["excluded_walls"]))
         selected_walls = st.multiselect("Vegger som skal utelates i montasjetegninger",list(range(len(inp.pts))),
-            format_func=lambda i:f"V{i+1}",key="ed_drawing_walls",placeholder="Ingen – alle vegger tegnes")
+            format_func=lambda i:f"Vegg {i+1}",key="ed_drawing_walls",placeholder="Ingen – alle vegger tegnes")
         current_room["excluded_walls"] = list(selected_walls)
         for saved in st.session_state["project_rooms"]:
             if saved["id"] == current_room["id"]:
@@ -637,7 +638,7 @@ if bakfil is None and current_room.get("background"):
 
 # ── Toppfelt med nøkkeltall ───────────────────────────────────────────────────
 with topp:
-    _rom_navn = html_escape(navn.strip() or rom_type)
+    _rom_navn = html_escape(project_name(navn) or rom_type)
     if modul in PROSJEKT_MODULER:
         _antall = len(st.session_state["project_rooms"])
         _tittel = f"Prosjekt {html_escape(pnr)}"
@@ -712,7 +713,7 @@ with innhold:
         st.dataframe(material_view.style.set_properties(
             subset=pd.IndexSlice[[material_view.index[-1]], :],
             **{"background-color": "#07384c", "color": "white", "font-weight": "bold"}),
-            use_container_width=True, hide_index=True)
+            use_container_width=True, hide_index=True, height="content")
         from cutlist_pdf import cutting_pdf
         st.download_button(
             "Last ned materialliste PDF",
@@ -725,7 +726,7 @@ with innhold:
 
     elif modul == "FDV":
         st.subheader("FDV")
-        st.markdown(lag_fdv_tekst(navn, panel_key, rom_type))
+        st.markdown(lag_fdv_tekst(project_name(navn), panel_key, rom_type))
         st.subheader("FDV-oversikt")
         st.dataframe(fdv_df, use_container_width=True, hide_index=True)
         try:
@@ -734,8 +735,8 @@ with innhold:
             selected_fdv = [r for r in selected_fdv if r["id"] != current_room["id"]] + [current_room]
             if any(not r["input"]["panel_key"].startswith("PIR") for r in selected_fdv):
                 raise ValueError("Standardpakken dokumenterer BALEX PIR STANDARD. Velg riktig leverandørdokumentasjon for andre paneltyper.")
-            pdf = lag_standard_fdv_pdf(navn or "Prosjekt", pnr,
-                                      tuple(r["input"]["navn"] for r in selected_fdv))
+            pdf = lag_standard_fdv_pdf(project_name(navn) or "Prosjekt", pnr,
+                                      tuple(project_name(r["input"]["navn"]) for r in selected_fdv))
             st.download_button(
                 "Last ned standard FDV PDF", pdf,
                 f"{navn or 'prosjekt'}_fdv.pdf", "application/pdf",
@@ -763,10 +764,14 @@ with innhold:
             )
             wall_orders = panel_order_rows(result["df_kapp"], H_mm, pw_mm)
             vdf = pd.DataFrame([{
-                "Vegg": f"V{i+1}", "Utvendig lengde (m)": round(w, 3),
+                "Vegg": f"Vegg {i+1}", "Utvendig lengde (m)": round(w, 3),
                 "Utvendig lengde (mm)": round(w*1000),
                 "Antall elementer": int(wall_orders.Vegg.eq(f"Vegg {i+1}").sum()),
-            } for i, w in enumerate(wall_lengths(exterior_pts))])
+            } for i, w in enumerate([
+                math.dist(*exterior_wall(inp.pts, pan_info.tykkelse_mm/1000, i, inp.excluded_walls))
+                if i not in inp.excluded_walls else w
+                for i, w in enumerate(wall_lengths(exterior_pts))
+            ])])
             st.dataframe(vdf, use_container_width=True, hide_index=True)
 
         with tab_snitt:
@@ -887,7 +892,7 @@ with innhold:
                        for r in st.session_state["project_rooms"]]
         if not any(r["id"] == current_room["id"] for r in order_rooms):
             order_rooms.append(current_room)
-        order_labels = {r["id"]: r["input"]["navn"] or r["input"]["rom_type"] for r in order_rooms}
+        order_labels = {r["id"]: project_name(r["input"]["navn"]) or r["input"]["rom_type"] for r in order_rooms}
         order_options = ["Alle rom", *order_labels]
         if st.session_state.get("order_room_choice") not in order_options:
             st.session_state["order_room_choice"] = "Alle rom"
@@ -919,7 +924,7 @@ with innhold:
         export_rooms = st.session_state["project_rooms"] if modul == "Sammenstilling" else [current_room]
         if modul == "Sammenstilling" and export_rooms:
             export_options = ["Alle rom"] + [r["id"] for r in export_rooms]
-            export_labels = {r["id"]: f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(export_rooms)}
+            export_labels = {r["id"]: f"{i+1}. {project_name(r['input']['navn']) or r['input']['rom_type']}" for i,r in enumerate(export_rooms)}
             if st.session_state.get("export_room_choice") not in export_options:
                 st.session_state["export_room_choice"] = "Alle rom"
             export_choice = st.selectbox("Last ned for rom", export_options,

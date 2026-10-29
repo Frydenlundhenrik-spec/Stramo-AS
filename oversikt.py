@@ -9,6 +9,7 @@ import streamlit as st
 
 from kalkulasjon import beregn_prosjekt
 from project_file import world_input
+from branding import project_name
 
 DOKUMENTER = [
     ("Tegninger", ":material/architecture:", "Plan, snitt, tak, vegger, produksjon og 3D"),
@@ -147,7 +148,7 @@ def oversikt_ui() -> bool:
             merke = '<span class="s-merke ok">Åpen</span>'
         else:
             merke = '<span class="s-merke ok">Klar</span>'
-        navn = html.escape(room["input"]["navn"] or room["input"]["rom_type"])
+        navn = html.escape(project_name(room["input"]["navn"]) or room["input"]["rom_type"])
         nr = "" if er_utkast else f"{rooms.index(room) + 1}. "
         with kolonner[i % 3]:
             with st.container(border=True, key=f"romkort_{room['id']}"):

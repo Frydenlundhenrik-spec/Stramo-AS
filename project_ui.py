@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 import streamlit as st
 from database import PANEL_DB
+from branding import project_name
 from geometry import wall_lengths
 from kalkulasjon import beregn_prosjekt
 from montasje import tegn_3d_modell, figur_som_pdf
@@ -237,7 +238,7 @@ def room_bar():
     Tegnes før beregningen, slik at man kan bytte rom også når målene er ugyldige."""
     rooms = st.session_state["project_rooms"]
     active = st.session_state.get("active_room_id")
-    labels = {r["id"]:f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(rooms)}
+    labels = {r["id"]:f"{i+1}. {project_name(r['input']['navn']) or r['input']['rom_type']}" for i,r in enumerate(rooms)}
     options = list(labels)
     if not active:
         name = (st.session_state.get("ed_name") or "").strip() or st.session_state.get("ed_room_type") or "Nytt rom"
@@ -380,7 +381,7 @@ def assembly_plan(rooms):
         from shapely.ops import unary_union
         footprint = unary_union([Polygon(floor_outline(world_input(r).pts,
             PANEL_DB[world_input(r).panel_key]['t']/1000)) for r in rooms])
-        info.update(navn="Tasty Fredrikstad" if all('Tasty' in r['input']['navn'] for r in rooms) else ' / '.join(r['input']['navn'] for r in rooms),
+        info.update(navn="Tasty Fredrikstad" if all('Tasty' in r['input']['navn'] for r in rooms) else ' / '.join(project_name(r['input']['navn']) for r in rooms),
                     tnr='SAM-01', A=round(footprint.area,2), P=round(footprint.length,2))
         _tegn_fig_title_block(fig,info)
         pts=np.asarray(bounds);low,high=pts.min(axis=0),pts.max(axis=0)
@@ -398,7 +399,7 @@ def assembly_ui():
         st.info("Tegn et rom og trykk «Legg til ferdig rom». Gjenta for neste rom, og sett dem sammen her til slutt.")
         return
     st.caption("Plasser ferdigtegnede rom. Velg deretter vegger som skal utelates. Rommenes grunntegning beholdes og kan redigeres senere.")
-    labels = {r["id"]:f"{i+1}. {r['input']['navn'] or r['input']['rom_type']}" for i,r in enumerate(rooms)}
+    labels = {r["id"]:f"{i+1}. {project_name(r['input']['navn']) or r['input']['rom_type']}" for i,r in enumerate(rooms)}
     for room in rooms:
         rid = room["id"]
         with st.expander(labels[rid],expanded=True):
@@ -409,7 +410,7 @@ def assembly_ui():
             lengths = wall_lengths(room["input"]["pts"])
             st.caption("Avsluttende veggvalg: slå av veggen her, ikke slett hjørnepunktene.")
             room["excluded_walls"] = st.multiselect("Vegger som skal utelates",list(range(len(lengths))),
-                default=room["excluded_walls"],format_func=lambda i, lengths=tuple(lengths):f"V{i+1} – {lengths[i]*1000:.0f} mm",key=f"omit_{rid}")
+                default=room["excluded_walls"],format_func=lambda i, lengths=tuple(lengths):f"Vegg {i+1} – {lengths[i]*1000:.0f} mm",key=f"omit_{rid}")
             if room["excluded_walls"]:
                 st.caption("Veggen, tilhørende U-kanal og dører/åpninger utelates fra sammenstillingen, mengdene og IFC. Du kan slå veggen på igjen.")
     st.subheader("Koble rom mot en vegg")
@@ -418,8 +419,8 @@ def assembly_ui():
         target_id = st.selectbox("Rom som skal beholdes på plass",[rid for rid in labels if rid!=moving_id],format_func=labels.get,key="snap_target")
         moving = next(r for r in rooms if r["id"]==moving_id)
         target = next(r for r in rooms if r["id"]==target_id)
-        own_wall = st.selectbox("Vegg på rommet som flyttes",range(len(moving["input"]["pts"])),format_func=lambda i:f"V{i+1}",key="snap_own_wall")
-        target_wall = st.selectbox("Vegg det skal kobles mot",range(len(target["input"]["pts"])),format_func=lambda i:f"V{i+1}",key="snap_target_wall")
+        own_wall = st.selectbox("Vegg på rommet som flyttes",range(len(moving["input"]["pts"])),format_func=lambda i:f"Vegg {i+1}",key="snap_own_wall")
+        target_wall = st.selectbox("Vegg det skal kobles mot",range(len(target["input"]["pts"])),format_func=lambda i:f"Vegg {i+1}",key="snap_target_wall")
         st.caption("Kobler mot utsiden av veggen som beholdes, med plass til paneltykkelsen. Veggene må vende mot hverandre.")
         if st.button("Plasser inntil valgt vegg",key="snap_apply"):
             try:
@@ -436,7 +437,7 @@ def assembly_ui():
     if matches:
         st.info("Fant kjøleromsvegger som er helt dekket av fryseromsvegger. Fryseromsveggene beholdes.")
         for cool,wall,freezer,fw in matches:
-            st.write(f"{labels[cool]} V{wall+1} → bruker {labels[freezer]} V{fw+1}")
+            st.write(f"{labels[cool]} Vegg {wall+1} → bruker {labels[freezer]} Vegg {fw+1}")
         if st.button("Bruk fryseromsvegger som fellesvegger",key="apply_shared_walls"):
             affected = []
             for cool,wall,_,_ in matches:

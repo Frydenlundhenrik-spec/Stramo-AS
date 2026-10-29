@@ -23,7 +23,7 @@ for room in rooms:
         thickness=PANEL_DB[inp.panel_key]['t']/1000
         assert f'{round(wall_lengths(floor_outline(inp.pts,thickness))[wall]*1000)} mm' in labels,(wall,labels)
         assert not any('mm innv.' in label for label in labels),(wall,labels)
-        assert any(text.startswith(f'Prinsippsnitt langs V{wall+1}') for text in labels)
+        assert any(text.startswith(f'Prinsippsnitt langs Vegg {wall+1}') for text in labels)
         assert '80 mm U-kan.' not in labels
         assert f'Vegg\nV{(wall+2)%len(inp.pts)+1}' not in labels
         thickness=PANEL_DB[inp.panel_key]['t']/1000
