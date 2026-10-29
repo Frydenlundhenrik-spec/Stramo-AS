@@ -134,8 +134,6 @@ def panel_summary_ui(rooms):
         "Leveringslengde_mm":"Leveringslengde (mm)", "Bredde_mm":"Bredde (mm)", "Tykkelse_mm":"Tykkelse (mm)",
         "Bestill_hele_elementer":"Bestilling (stk)", "Bestill_m2":"Bestilling (m²)", "Bestill_vekt_kg":"Bestilling (kg)"})
     st.dataframe(total.round(3),hide_index=True)
-    st.caption("Elementer bestilles på beregnet lengde. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor, uten prosentvis kapptillegg. Kalkulasjon, bestillingsliste og transport bruker samme bestillingsmengder.")
-    st.caption("Panelvekt beregnes automatisk som areal × kg/m². Balex PIR STANDARD: 80 mm = 11,8, 100 mm = 12,6 og 120 mm = 13,2 kg/m² (produktdatablad 22.10.2026, side 3). Andre paneltyper merkes ESTIMAT. Tilbehør og emballasje er ikke inkludert.")
     with st.expander("Kappfordeling på hele elementer"):
         plan = panel_cutting_plan(rooms)
         st.dataframe(plan, hide_index=True)
