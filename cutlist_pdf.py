@@ -37,7 +37,7 @@ def project_materials(rooms):
         inp=world_input(room);form=room["form"]
         result=beregn_prosjekt(inp,pris_override=room.get("prices",{}))
         for _,r in result["df_mat"].iterrows():
-            if r.Post.startswith(("Vegg ","Tak (panel)","Gulv", "Tilbehør beregnet", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
+            if r.Post.startswith(("Panel", "Vegg ","Tak (panel)","Gulv", "Tilbehør beregnet", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
             group="Beslag" if r.Post.startswith("U-kanal") else ("Dører" if r.Post=="Dør" else "Tilbehør")
             product=r.Type.removesuffix(" – PRIS MANGLER")
             if group == "Dører":
@@ -113,6 +113,9 @@ def cutting_pdf(rooms, kind="alle"):
                 return f"{v:,.3f}".rstrip("0").rstrip(".").replace(","," ").replace(".",",")
             return str(v)
         labels={"Produkt":"Produkt" if category=="Elementer" else category or "Produkt", "Panel":"Panel", "Høyde_mm":"Høyde / lengde\nmm",
+            "Leveringslengde (mm)":"Leveringslengde\n(mm)", "Bredde (mm)":"Bredde\n(mm)",
+            "Tykkelse (mm)":"Tykkelse\n(mm)", "Antall (stk)":"Antall\n(stk)",
+            "Enhetspris (kr)":"Enhetspris\n(kr)", "Totalpris (kr)":"Totalpris\n(kr)",
             "Leveringslengde_mm":"Leveringslengde\nmm", "Bredde_mm":"Bredde\nmm", "Tykkelse_mm":"Tykkelse\nmm",
             "Stk":"Antall" if category in ("Beslag","Dører","Tilbehør") else "Antall (stk)", "Antall_stk":"Antall (stk)", "Deler_stk":"Deler\nstk",
             "Areal_m2":"Areal\nm²", "Vekt_kg":"Vekt\nkg", "Løpemeter":"Lengde\n"+("m" if category=="Tilbehør" else "LM"),
@@ -125,6 +128,9 @@ def cutting_pdf(rooms, kind="alle"):
         text_columns=set(text_weights)|{"Plate","ID","Del","Enhet","Referanse"}
         weights=[text_weights.get(c,1) for c in frame.columns]
         widths=[(page_w-56)*w/sum(weights) for w in weights]
+        if "Leveringslengde (mm)" in frame.columns:
+            weights=[95,185,92,48,56,44,55,55,80,90]
+            widths=[(page_w-56)*w/sum(weights) for w in weights]
         if category in ("Beslag", "Dører", "Tilbehør"):
             widths=[(page_w-56)*.73, (page_w-56)*.12, (page_w-56)*.15]
         header_style=ParagraphStyle("table_header",parent=normal,fontName=bold,textColor=colors.white,fontSize=7,leading=10)
@@ -181,6 +187,7 @@ def cutting_pdf(rooms, kind="alle"):
         section("Elementliste")
         story.append(para("Ferdige deler med samme høyde, bredde og tykkelse summeres på én linje. Paneltyper holdes adskilt. Vekt er estimert når leverandørvekt ikke er oppgitt.",note))
         table(with_totals(grouped_cuts(rooms),["Antall_stk","Areal_m2","Vekt_kg"],"Panel"))
+    if kind in ("alle", "bestilling") and rooms:
         section("Bestillingsliste elementer")
         story.append(para("Lengder leveres på mål. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor. Ingen prosentvis kapptillegg. Vekt merket ESTIMAT gjelder bare paneler.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))

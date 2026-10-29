@@ -55,39 +55,30 @@ def materialliste(
     def ep(key: str, default: float) -> float:
         return override.get(key, default) * breeam_multiplier
 
-    # ── Vegger ──────────────────────────────────────────────────────────────
-    for i, wl in enumerate(wls):
-        if i in excluded_walls:
-            continue
-        np_ = len(ordered[ordered.Vegg == f"Vegg {i+1}"])
-        area = sum(allocation.get(f"Vegg {i+1}", 0) for allocation in ordered.Fordeling_m2)
-        unit_p = ep(f"vegg_{i}", pan["pris"])
+    # Hele råelementer grupperes på leveringsmål, som i bestillingslisten.
+    for (length, width), blanks in ordered.groupby(
+            ["Leveringslengde_mm", "Bredde_mm"], sort=False):
+        area = float(blanks.Bestill_m2.sum())
+        cost = 0.0
+        missing_price = False
+        for allocation in blanks.Fordeling_m2:
+            for zone, allocated_area in allocation.items():
+                key = f"vegg_{int(zone.split()[1])-1}" if zone.startswith("Vegg ") else {
+                    "Tak": "tak", "Gulv": "gulv_pir"}[zone]
+                unit_price = ep(key, pan["pris"])
+                missing_price |= not math.isfinite(unit_price) or unit_price <= 0
+                cost += allocated_area * unit_price
         rows.append(dict(
-            Post=f"Vegg {i+1}", Type=pan["label"], Enhet="m²",
-            Mengde=area, **_kr(unit_p, area), NS3420=_NS["vegg"],
-            CO2_k=pan["co2"],
+            Post="Panel", Type=pan["label"] + (" – PRIS MANGLER" if missing_price else ""), Enhet="m²",
+            Leveringslengde_mm=int(length), Bredde_mm=int(width), Tykkelse_mm=pan["t"],
+            Bestill_hele_elementer=len(blanks), Mengde=area,
+            **_kr(cost / area, area), NS3420=_NS["vegg"], CO2_k=pan["co2"],
         ))
-
-    # ── Tak ─────────────────────────────────────────────────────────────────
-    unit_tak = ep("tak", pan["pris"])
-    roof_area = float(ordered.loc[ordered.Vegg == "Tak", "Bestill_m2"].sum())
-    rows.append(dict(
-        Post="Tak (panel)", Type=pan["label"], Enhet="m²",
-        Mengde=roof_area, **_kr(unit_tak, roof_area), NS3420=_NS["tak"],
-        CO2_k=pan["co2"],
-    ))
 
     # ── Gulv ─────────────────────────────────────────────────────────────────
     if rom_type.startswith("Kjølerom"):
         pass  # Kjølerom: gulvet er eksisterende betong, ikke kalkulert
     else:
-        unit_pir = ep("gulv_pir", pan["pris"])
-        floor_area = float(ordered.loc[ordered.Vegg == "Gulv", "Bestill_m2"].sum())
-        rows.append(dict(
-            Post=f"Gulv – {pan['label']}", Type=pan["label"],
-            Enhet="m²", Mengde=floor_area, **_kr(unit_pir, floor_area),
-            NS3420=_NS["gulv_pir"], CO2_k=pan["co2"],
-        ))
         from finishing import plywood_cuts, board_count
         board_area = board_count(plywood_cuts(pts_polygon, plywood_width_mm, plywood_length_mm)) * plywood_width_mm * plywood_length_mm / 1e6
         unit_spon = ep("gulv_finer", 1000)
@@ -195,6 +186,11 @@ def materialliste_med_sum(frame: pd.DataFrame) -> pd.DataFrame:
     """Present material rows and the sum of entered prices, without changing calculation data."""
     table = frame.drop(columns=["CO₂ (kg)", "NS3420"], errors="ignore").copy()
     table["Type"] = table["Type"].str.removesuffix(" – PRIS MANGLER")
+    dimensions = {"Leveringslengde_mm": "Leveringslengde (mm)", "Bredde_mm": "Bredde (mm)",
+                  "Tykkelse_mm": "Tykkelse (mm)", "Bestill_hele_elementer": "Antall (stk)"}
+    table = table.rename(columns=dimensions)
+    table = table.reindex(columns=["Post", "Type", *dimensions.values(), "Enhet", "Mengde",
+                                   "Enhetspris (kr)", "Totalpris (kr)"])
     total = {"Post": "SUM", "Type": "", "Enhet": "",
              "Totalpris (kr)": round(float(table["Totalpris (kr)"].sum()), 2)}
     return pd.concat([table, pd.DataFrame([total])], ignore_index=True)

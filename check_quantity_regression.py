@@ -21,13 +21,13 @@ def check_quantities(room):
     result = beregn_prosjekt(inp)
     ordered = panel_summary([room])
     materials = result['df_mat']
-    walls = materials[materials.Post.str.startswith('Vegg ')]
+    panels = materials[materials.Post.eq('Panel')]
     wall_orders = ordered[ordered.Del.str.startswith('Vegg ')]
     assert result['ant_veggpanel'] == wall_orders.Bestill_hele_elementer.sum()
-    assert np.isclose(walls.Mengde.sum(), wall_orders.Bestill_m2.sum())
-    for zone, mask in [('Tak', materials.Post.eq('Tak (panel)')),
-                       ('Gulv', materials.Post.str.startswith('Gulv – PIR'))]:
-        assert np.isclose(materials.loc[mask, 'Mengde'].sum(), ordered.loc[ordered.Del.eq(zone), 'Bestill_m2'].sum())
+    assert np.isclose(panels.Mengde.sum(), ordered.Bestill_m2.sum())
+    assert panels.Bestill_hele_elementer.sum() == ordered.Bestill_hele_elementer.sum()
+    for length, orders in ordered.groupby('Leveringslengde_mm'):
+        assert np.isclose(panels.loc[panels.Leveringslengde_mm.eq(length), 'Mengde'].sum(), orders.Bestill_m2.sum())
     screw_row = materials.loc[materials.Type.str.startswith('22 mm hvite skruer')].iloc[0]
     raw_screws = fixing_screw_count(inp.pts,inp.hoyde_m,inp.rom_type,
                                   PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls)

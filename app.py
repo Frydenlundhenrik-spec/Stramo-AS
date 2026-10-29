@@ -197,15 +197,15 @@ def _beregn_cached(
 
 
 # ── Navigasjon og sideoppsett ─────────────────────────────────────────────────
-MODULER = ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Elementer",
+MODULER = ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Bestilling", "Elementer",
            "FDV", "Transport", "Sammenstilling"]
 # Menyikoner (Material Symbols) i samme rekkefølge som MODULER; tegnes med CSS.
-MODUL_IKON = ["dashboard", "edit_square", "architecture", "calculate", "view_column",
+MODUL_IKON = ["dashboard", "edit_square", "architecture", "calculate", "shopping_cart", "view_column",
               "description", "local_shipping", "join_inner"]
 # Sidene der inndatapanelet vises ved siden av innholdet.
 INNDATA_MODULER = {"Rom", "Tegninger"}
 # Sidene som gjelder hele prosjektet, ikke rommet som er åpent.
-PROSJEKT_MODULER = {"Oversikt", "Transport", "Sammenstilling"}
+PROSJEKT_MODULER = {"Oversikt", "Bestilling", "Transport", "Sammenstilling"}
 
 # Keep an open session on the calculation page after removing the old menu item.
 _GAMLE_MODULER = {"U-verdi og varmetap": "Kalkulasjon", "Montasjetegninger": "Tegninger",
@@ -248,7 +248,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.27-r11")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r12")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -700,6 +700,9 @@ with innhold:
         from materialer import materialliste_med_sum
         material_table = materialliste_med_sum(result["df_mat"])
         material_view = material_table.copy()
+        for column in ("Leveringslengde (mm)", "Bredde (mm)", "Tykkelse (mm)", "Antall (stk)"):
+            material_view[column] = material_view[column].map(
+                lambda value: "" if pd.isna(value) else f"{value:.0f}")
         material_view["Mengde"] = material_view["Mengde"].map(
             lambda value: "" if pd.isna(value) else f"{value:.3f}".rstrip("0").rstrip(".").replace(".", ","))
         for column in ("Enhetspris (kr)", "Totalpris (kr)"):
@@ -877,6 +880,26 @@ with innhold:
         from transport import transport_ui
         transport_ui(st.session_state["project_rooms"] or [current_room])
 
+    elif modul == "Bestilling":
+        from purchase_summary import panel_summary_ui
+        from cutlist_pdf import cutting_pdf
+        order_rooms = [current_room if r["id"] == current_room["id"] else r
+                       for r in st.session_state["project_rooms"]]
+        if not any(r["id"] == current_room["id"] for r in order_rooms):
+            order_rooms.append(current_room)
+        order_labels = {r["id"]: r["input"]["navn"] or r["input"]["rom_type"] for r in order_rooms}
+        order_options = ["Alle rom", *order_labels]
+        if st.session_state.get("order_room_choice") not in order_options:
+            st.session_state["order_room_choice"] = "Alle rom"
+        order_choice = st.selectbox("Bestilling for", order_options,
+            format_func=lambda value: order_labels.get(value, value), key="order_room_choice")
+        if order_choice != "Alle rom":
+            order_rooms = [r for r in order_rooms if r["id"] == order_choice]
+        panel_summary_ui(order_rooms)
+        st.download_button("Last ned bestillingsliste elementer PDF",
+            cutting_pdf(order_rooms, "bestilling"), "bestillingsliste-elementer.pdf",
+            "application/pdf", key="panel_order_pdf")
+
     elif modul == "Elementer":
         st.subheader("Elementer")
         sam = result["sam"]
@@ -884,11 +907,9 @@ with innhold:
         with c1: st.info(f"Veggelementer: {sam['tot_panel']} stk")
         with c2: st.info(f"Takelementer: {sam['tak']} stk")
         with c3: st.info(f"Gulvelementer: {sam['gulv']} stk" if "Fryserom" in rom_type else "Kjølerom: ingen gulvpanel")
-        from purchase_summary import element_cutlist, panel_summary_ui
+        from purchase_summary import element_cutlist
         cut_export = element_cutlist([current_room])
         st.dataframe(cut_export.round(3), use_container_width=True, hide_index=True)
-
-        panel_summary_ui([current_room])
 
     if modul in ("Kalkulasjon", "Elementer", "Sammenstilling"):
         finishing_ui(st.session_state["project_rooms"] if modul == "Sammenstilling" else [current_room])
