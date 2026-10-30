@@ -26,6 +26,60 @@ def polygon_winding(pts):
     return 1 if signed > 0 else -1
 
 
+def pentagon_parameters(sides):
+    """Validate exterior wall lengths in mm; return L, B and the two corner cuts."""
+    if len(sides) != 5 or any(isinstance(v, bool) or not isinstance(v, (int, float))
+                              or not math.isfinite(v) or v <= 0 for v in sides):
+        raise ValueError("Oppgi fem positive, endelige vegglengder i mm.")
+    length, right, diagonal, top, width = map(float, sides)
+    if not 500 <= length <= 50000 or not 500 <= width <= 30000:
+        raise ValueError("Vegg 1 må være 500–50000 mm og vegg 5 må være 500–30000 mm.")
+    cut_x, cut_y = length-top, width-right
+    if min(cut_x, cut_y) < 50-EPS:
+        raise ValueError("Vegg 2 må være minst 50 mm kortere enn vegg 5, og vegg 4 minst 50 mm kortere enn vegg 1.")
+    # Remove numerical roundoff at the valid minimum before project serialization.
+    cut_x, cut_y = max(50.0, cut_x), max(50.0, cut_y)
+    if not math.isclose(diagonal, math.hypot(cut_x, cut_y), rel_tol=1e-10, abs_tol=EPS):
+        raise ValueError("Skråveggens lengde stemmer ikke med de øvrige vegglengdene.")
+    return length, width, cut_x, cut_y
+
+
+def pentagon_sides(length_mm, width_mm, cut_x_mm, cut_y_mm):
+    """Convert the existing corner-cut representation to five exterior lengths."""
+    values = (length_mm, width_mm, cut_x_mm, cut_y_mm)
+    if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) for v in values):
+        raise ValueError("Rommålene må være endelige tall i mm.")
+    sides = [float(length_mm), width_mm-cut_y_mm, math.hypot(cut_x_mm, cut_y_mm),
+             length_mm-cut_x_mm, float(width_mm)]
+    pentagon_parameters(sides)
+    return sides
+
+
+def update_pentagon_sides(sides, changed, value, adjust_wall=3):
+    """Edit one wall; diagonal edits move the chosen neighbour (zero-based 1 or 3).
+
+    Straight-wall edits keep the other straight lengths. No length is rounded or
+    silently clamped, and the supplied list is never mutated on failure.
+    """
+    length, width, cut_x, cut_y = pentagon_parameters(sides)
+    if type(changed) is not int or not 0 <= changed < 5 or type(adjust_wall) is not int or adjust_wall not in (1, 3):
+        raise ValueError("Velg en gyldig vegg og enten vegg 2 eller vegg 4 som tilpasses.")
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value <= 0:
+        raise ValueError("Vegglengden må være et positivt, endelig tall i mm.")
+    result = list(map(float, sides))
+    result[changed] = float(value)
+    if changed == 2:
+        fixed_cut = cut_y if adjust_wall == 3 else cut_x
+        if value <= fixed_cut:
+            raise ValueError("Skråveggen kan ikke få denne lengden med de øvrige målene. Ingen mål er endret.")
+        moving_cut = math.sqrt((value-fixed_cut)*(value+fixed_cut))
+        result[adjust_wall] = (length if adjust_wall == 3 else width)-moving_cut
+    else:
+        result[2] = math.hypot(result[0]-result[3], result[4]-result[1])
+    pentagon_parameters(result)
+    return result
+
+
 def l_polygon(sides):
     """Infer the concave corner from six consecutive lengths; V1 runs right.
 

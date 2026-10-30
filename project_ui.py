@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from database import PANEL_DB
 from branding import project_name
-from geometry import wall_lengths
+from geometry import wall_lengths, pentagon_sides
 from kalkulasjon import beregn_prosjekt
 from montasje import tegn_3d_modell, figur_som_pdf
 from ifc_export import gen_ifc
@@ -84,10 +84,12 @@ def restore_editor(room):
         state["ed_corners"] = len(form["points_mm"])
         for i,(x,y) in enumerate(form["points_mm"]):
             state[f"px{i}"],state[f"py{i}"] = float(x),float(y)
+    elif form["kind"] == "Femkant – avskåret hjørne":
+        sides = pentagon_sides(form["length_mm"], form["width_mm"], form["cut_x_mm"], form["cut_y_mm"])
+        state.update({f"ed_pentagon_side_{i}": float(v) for i, v in enumerate(sides)})
+        state["ed_pentagon_adjust"] = form.get("diagonal_adjust_wall", 3)
     else:
         state.update(ed_length=form["length_mm"],ed_width=form["width_mm"])
-        if "cut_x_mm" in form:
-            state.update(ed_cut_x=form["cut_x_mm"],ed_cut_y=form["cut_y_mm"])
     for i,(key,count,wall,offset,hinge) in enumerate(data["dorer"]):
         state.update({f"dt_{data['rom_type']}_{i}":key,f"da{i}":count,f"dw{i}":wall+1,
                       f"do{i}":round((offset+corner_shift(data["pts"], thickness, wall))*1000),f"dh{i}":hinge})

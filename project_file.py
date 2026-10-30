@@ -105,12 +105,16 @@ def validate_room(room):
                 raise ValueError("Ugyldig hjørne.")
             for value in point:
                 number(value,-1000000,1000000)
+    elif kind == "Femkant – avskåret hjørne":
+        number(form["length_mm"],500,50000)
+        number(form["width_mm"],500,30000)
+        number(form["cut_x_mm"],50,form["length_mm"])
+        number(form["cut_y_mm"],50,form["width_mm"])
+        if type(form.get("diagonal_adjust_wall", 3)) is not int or form.get("diagonal_adjust_wall", 3) not in (1, 3):
+            raise ValueError("Velg vegg 2 eller vegg 4 som nabovegg til skråveggen.")
     else:
         integer(form["length_mm"],500,50000)
         integer(form["width_mm"],500,30000)
-        if kind == "Femkant – avskåret hjørne":
-            integer(form["cut_x_mm"],50,form["length_mm"])
-            integer(form["cut_y_mm"],50,form["width_mm"])
     basis = form.get("dimension_basis", "internal")
     if basis not in ("internal", "external"):
         raise ValueError("Ukjent målgrunnlag.")

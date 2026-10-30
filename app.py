@@ -12,7 +12,8 @@ import streamlit as st
 
 from construction import door_keys, floor_depth
 from database import BESLAG_DB, DOR_DB, FORM_MALER, PANELER, load_databases
-from geometry import wall_lengths, validate_polygon, l_polygon, door_dimensions, transform_polygon
+from geometry import (wall_lengths, validate_polygon, l_polygon, door_dimensions, transform_polygon,
+                      pentagon_sides, pentagon_parameters, update_pentagon_sides)
 from kalkulasjon import ProjectInput, beregn_prosjekt, kalkulasjon_sammendrag
 from fdv import lag_fdv_oversikt, lag_fdv_tekst
 from build_standard_fdv import lag_standard_fdv_pdf
@@ -166,6 +167,20 @@ def update_l_side(changed, previous):
     st.session_state.pop("ed_l_error", None)
 
 
+def update_pentagon_side(changed, previous):
+    try:
+        sides = update_pentagon_sides(
+            previous, changed, st.session_state[f"ed_pentagon_side_{changed}"],
+            st.session_state.get("ed_pentagon_adjust", 3))
+    except ValueError as exc:
+        sides = previous
+        st.session_state["ed_pentagon_error"] = f"Endringen ble ikke brukt: {exc}"
+    else:
+        st.session_state.pop("ed_pentagon_error", None)
+    for j, value in enumerate(sides):
+        st.session_state[f"ed_pentagon_side_{j}"] = float(value)
+
+
 def card(t: str, v: str, s: str = "") -> None:
     sub = f'<div class="cs">{s}</div>' if s else ""
     st.markdown(
@@ -249,7 +264,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.29-r16")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r1")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -323,7 +338,8 @@ with inndata_kol:
     thermal_data = thermal_inputs(rom_type)
     with st.expander(':material/square_foot: Romform og mål', expanded=True):
         st.caption("Rommål er utvendige mål. Døravstander måles fra utvendig hjørne til dørkant.")
-        form_valg = st.selectbox("Form", list(FORM_MALER.keys()), key="ed_shape")
+        form_valg = st.selectbox("Form", list(FORM_MALER.keys()), key="ed_shape",
+                                format_func=lambda name: "Femkant med skråvegg" if name == "Femkant – avskåret hjørne" else name)
         st.caption(FORM_MALER[form_valg]["besk"])
         hk, bk = st.columns(2)
         H_mm = hk.number_input("Veggpanelhøyde (mm)", min_value=1800, max_value=8000, value=2500, step=50, key="ed_height")
@@ -383,6 +399,37 @@ with inndata_kol:
                         bbox=dict(facecolor="white",edgecolor="none",pad=2), fontsize=9)
             ax.set_aspect("equal"); ax.margins(.2); ax.axis("off")
             st.pyplot(preview); plt.close(preview)
+        elif form_valg == "Femkant – avskåret hjørne":
+            if not all(f"ed_pentagon_side_{j}" in st.session_state for j in range(5)):
+                length = st.session_state.get("ed_length", 5850)
+                width = st.session_state.get("ed_width", 4450)
+                defaults = pentagon_sides(length, width,
+                    st.session_state.get("ed_cut_x", min(1100, length/2)),
+                    st.session_state.get("ed_cut_y", min(1100, width/2)))
+                for j, value in enumerate(defaults):
+                    st.session_state.setdefault(f"ed_pentagon_side_{j}", float(value))
+            previous = [st.session_state[f"ed_pentagon_side_{j}"] for j in range(5)]
+            labels = ["Vegg 1 – nederst", "Vegg 2 – høyre", "Vegg 3 – skråvegg",
+                      "Vegg 4 – øverst", "Vegg 5 – venstre"]
+            for j in range(0, 5, 2):
+                columns = st.columns(2)
+                for k in range(j, min(j+2, 5)):
+                    columns[k-j].number_input(f"{labels[k]} (mm)", min_value=0.0,
+                        step=1.0, format="%.2f", key=f"ed_pentagon_side_{k}",
+                        on_change=update_pentagon_side, args=(k, previous),
+                        help=f"Vegg {k+1} på plantegningen, fra H{k+1} til H{(k+1)%5+1}. Utvendig lengde.")
+            st.selectbox("Når skråveggen endres, tilpasses", [3, 1],
+                format_func=lambda j: f"Vegg {j+1}", key="ed_pentagon_adjust",
+                help="Vegg 1 og vegg 5 beholder totalmålene. Den andre naboveggen beholdes også.")
+            if st.session_state.get("ed_pentagon_error"):
+                st.warning(st.session_state["ed_pentagon_error"])
+            L_mm, B_mm, CX_mm, CY_mm = pentagon_parameters(previous)
+            # Keep the total dimensions when changing to another room shape.
+            st.session_state["ed_length"] = round(L_mm)
+            st.session_state["ed_width"] = round(B_mm)
+            slope = math.degrees(math.atan2(CY_mm, CX_mm))
+            st.caption(f"Veggnumrene følger plantegningen. Skråvegg: {slope:.1f}° mot vannrett, beregnet fra lengdene.")
+            pts = FORM_MALER[form_valg]["func"](L_mm/1000, B_mm/1000, CX_mm/1000, CY_mm/1000)
         elif form_valg != "Egendefinert polygon":
             c1, c2 = st.columns(2)
             with c1:
@@ -391,17 +438,7 @@ with inndata_kol:
                 B_mm = st.number_input("Bredde (mm)", min_value=500, max_value=30000, value=4450, step=50, key="ed_width")
             L_inp = L_mm / 1000.0
             B_inp = B_mm / 1000.0
-            if form_valg == "Femkant – avskåret hjørne":
-                cc1, cc2 = st.columns(2)
-                with cc1:
-                    CX_mm = st.number_input("Avskjær X (mm)", min_value=50, max_value=L_mm, value=1100, step=50, key="ed_cut_x")
-                with cc2:
-                    CY_mm = st.number_input("Avskjær Y (mm)", min_value=50, max_value=B_mm, value=1100, step=50, key="ed_cut_y")
-                CX = CX_mm / 1000.0
-                CY = CY_mm / 1000.0
-            else:
-                CX = CY = 0.0
-            pts = FORM_MALER[form_valg]["func"](L_inp, B_inp, CX, CY)
+            pts = FORM_MALER[form_valg]["func"](L_inp, B_inp, 0.0, 0.0)
         else:
             n_pts = int(st.number_input("Antall hjørner", min_value=3, max_value=16, value=5, step=1, key="ed_corners"))
             defs  = [(0,0),(5850,0),(5850,3350),(4750,4450),(0,4450)]
@@ -609,7 +646,8 @@ elif form_valg == "Egendefinert polygon":
 else:
     form_data.update(length_mm=L_mm,width_mm=B_mm)
     if form_valg == "Femkant – avskåret hjørne":
-        form_data.update(cut_x_mm=CX_mm,cut_y_mm=CY_mm)
+        form_data.update(cut_x_mm=CX_mm,cut_y_mm=CY_mm,
+                         diagonal_adjust_wall=st.session_state.get("ed_pentagon_adjust", 3))
 try:
     current_room = capture_room(inp,form_data,bakfil)
 except ValueError as exc:
