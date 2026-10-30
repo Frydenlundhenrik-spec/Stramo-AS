@@ -10,6 +10,7 @@ import matplotlib.patches as mpatches
 from matplotlib.patches import Polygon as MplPolygon, Arc, FancyArrowPatch
 from matplotlib.path import Path
 import matplotlib.patheffects as pe
+from matplotlib.backends.backend_agg import RendererAgg
 from database import PANEL_DB, DOR_DB
 from geometry import wall_lengths, ensure_ccw, Point, door_dimensions, polygon_winding
 from dimensions import exterior_door, exterior_wall
@@ -241,17 +242,21 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
         ("Areal",      f"{info['A']:.2f} m²",0.22, False,  8),
         ("Omkrets",    f"{info['P']:.2f} m", 0.12, False,  8),
     ]
+    # SVG/PDF canvases do not expose get_renderer(). Measure text independently
+    # without replacing the active canvas used by Streamlit or vector exports.
+    renderer = RendererAgg(ax.figure.bbox.width, ax.figure.bbox.height, ax.figure.dpi)
     for lbl, val, frac, bold, fs in rows:
         yp = ymn + h * frac
         ax.text(tx+0.14, yp-h*0.014, lbl, fontsize=6.5, color="#5c6670", va="top", zorder=21)
         value_text = ax.text(tx+0.14, yp-h*0.047, str(val) or "–", fontsize=fs+0.5,
                 fontweight="bold" if bold else "normal",
                 color=BLUE if bold else "black", va="top", zorder=21)
-        renderer = ax.figure.canvas.get_renderer()
-        text_width = value_text.get_window_extent(renderer).width
         field_width = (bw-0.28) * ax.bbox.width / bw
-        if text_width > field_width:
-            value_text.set_fontsize((fs+0.5)*field_width/text_width)
+        for _ in range(4):
+            text_width = value_text.get_window_extent(renderer).width
+            if text_width <= field_width:
+                break
+            value_text.set_fontsize(value_text.get_fontsize()*field_width/text_width*.98)
         ax.plot([tx, tx+bw], [yp, yp], color="#aaa", lw=0.4, zorder=21)
     return tx + bw
 
