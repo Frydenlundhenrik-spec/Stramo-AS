@@ -107,7 +107,10 @@ st.markdown("""
   .st-key-inndata [data-testid="stExpander"] summary p{font-weight:600;font-size:15px;color:var(--s-bla);}
   .st-key-skjult_inndata{display:none!important;}
   .st-key-inndata_veksle button{color:var(--s-bla);min-height:0;padding:2px 6px;}
-  div[data-testid="stColumn"]:has(.st-key-tegning_folger){position:sticky;top:3.75rem;align-self:flex-start;}
+  @media(min-width:768px){
+    div[data-testid="stColumn"]:has(.st-key-tegning_folger){position:sticky;top:3.75rem;align-self:flex-start;}
+    .st-key-tegning_folger{max-height:calc(100dvh - 4.5rem);overflow-y:auto;}
+  }
 
   /* Prosjektoversikt */
   .s-seksjon-tittel{font-size:17px;font-weight:700;color:var(--s-bla);margin:20px 0 10px;}
@@ -264,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r1")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r2")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -274,6 +277,7 @@ def _bytt_inndatapanel():
 _inndata_minimert = st.session_state.get("inndata_minimert", False)
 if modul in INNDATA_MODULER and not _inndata_minimert:
     _venstre, innhold = st.columns([1.25, 2.4], gap="large")
+    innhold = innhold.container(key="tegning_folger")
     inndata_kol = _venstre.container(key="inndata")
     with inndata_kol:
         st.button("Skjul inndata", key="inndata_veksle", type="tertiary", icon=":material/left_panel_close:",
@@ -374,31 +378,6 @@ with inndata_kol:
                 st.error(str(exc))
                 pts = st.session_state.get("last_valid_l_polygon", l_polygon(defaults))
                 st.caption("Forhåndsvisningen viser siste gyldige form. Kalkulasjon og eksport venter til målene stemmer.")
-            rotate_col, mirror_col, reset_col = st.columns(3)
-            turns = st.session_state.get("l_turns", 0)
-            mirrored = st.session_state.get("l_mirrored", False)
-            if rotate_col.button("Roter 90°", key="l_rotate", help="Roter med klokken"):
-                turns = (turns + 1) % 4
-            if mirror_col.button("Speilvend", key="l_mirror", help="Speilvend venstre/høyre i visningen"):
-                turns = (-turns) % 4
-                mirrored = not mirrored
-            if reset_col.button("Nullstill retning", key="l_reset"):
-                turns, mirrored = 0, False
-            st.session_state["l_turns"] = turns
-            st.session_state["l_mirrored"] = mirrored
-            pts = transform_polygon(pts, turns, mirrored)
-            st.caption("Rotasjon og speiling flytter hele rommet. Hjørne-/sidenummer og målene i feltene beholdes.")
-            preview, ax = plt.subplots(figsize=(5,4))
-            loop = pts + [pts[0]]
-            ax.fill(*zip(*pts), color="#dce8f5")
-            ax.plot(*zip(*loop), color="#1a3a5c")
-            for j, (x,y) in enumerate(pts):
-                nx,ny = pts[(j+1)%6]
-                ax.annotate(f"H{j+1}", (x,y), xytext=(5,5), textcoords="offset points", fontsize=8)
-                ax.text((x+nx)/2, (y+ny)/2, f"Vegg {j+1}", ha="center", va="center",
-                        bbox=dict(facecolor="white",edgecolor="none",pad=2), fontsize=9)
-            ax.set_aspect("equal"); ax.margins(.2); ax.axis("off")
-            st.pyplot(preview); plt.close(preview)
         elif form_valg == "Femkant – avskåret hjørne":
             if not all(f"ed_pentagon_side_{j}" in st.session_state for j in range(5)):
                 length = st.session_state.get("ed_length", 5850)
@@ -415,12 +394,9 @@ with inndata_kol:
                 columns = st.columns(2)
                 for k in range(j, min(j+2, 5)):
                     columns[k-j].number_input(f"{labels[k]} (mm)", min_value=0.0,
-                        step=1.0, format="%.2f", key=f"ed_pentagon_side_{k}",
+                        step=1.0, format="%.0f", key=f"ed_pentagon_side_{k}", disabled=k == 2,
                         on_change=update_pentagon_side, args=(k, previous),
                         help=f"Vegg {k+1} på plantegningen, fra H{k+1} til H{(k+1)%5+1}. Utvendig lengde.")
-            st.selectbox("Når skråveggen endres, tilpasses", [3, 1],
-                format_func=lambda j: f"Vegg {j+1}", key="ed_pentagon_adjust",
-                help="Vegg 1 og vegg 5 beholder totalmålene. Den andre naboveggen beholdes også.")
             if st.session_state.get("ed_pentagon_error"):
                 st.warning(st.session_state["ed_pentagon_error"])
             L_mm, B_mm, CX_mm, CY_mm = pentagon_parameters(previous)
@@ -428,7 +404,7 @@ with inndata_kol:
             st.session_state["ed_length"] = round(L_mm)
             st.session_state["ed_width"] = round(B_mm)
             slope = math.degrees(math.atan2(CY_mm, CX_mm))
-            st.caption(f"Veggnumrene følger plantegningen. Skråvegg: {slope:.1f}° mot vannrett, beregnet fra lengdene.")
+            st.caption(f"Vegg 3 beregnes automatisk fra de andre veggmålene. Vinkel mot vannrett: {slope:.1f}°.")
             pts = FORM_MALER[form_valg]["func"](L_mm/1000, B_mm/1000, CX_mm/1000, CY_mm/1000)
         elif form_valg != "Egendefinert polygon":
             c1, c2 = st.columns(2)
@@ -448,10 +424,41 @@ with inndata_kol:
                 dx = float(defs[i][0]) if i < len(defs) else 0.0
                 dy = float(defs[i][1]) if i < len(defs) else 0.0
                 with c1:
-                    px_mm = st.number_input(f"X{i+1} (mm)", value=dx, step=50.0, key=f"px{i}")
+                    px_mm = st.number_input(f"X{i+1} (mm)", value=dx, step=50.0, format="%.0f", key=f"px{i}")
                 with c2:
-                    py_mm = st.number_input(f"Y{i+1} (mm)", value=dy, step=50.0, key=f"py{i}")
+                    py_mm = st.number_input(f"Y{i+1} (mm)", value=dy, step=50.0, format="%.0f", key=f"py{i}")
                 pts.append((px_mm / 1000.0, py_mm / 1000.0))
+
+        # Keep base geometry separate: orientation must be applied exactly once,
+        # including when a custom polygon is saved and opened again.
+        base_pts = list(pts)
+        rotate_col, mirror_col, reset_col = st.columns(3)
+        turns = st.session_state.get("ed_turns", st.session_state.get("l_turns", 0))
+        mirrored = st.session_state.get("ed_mirrored", st.session_state.get("l_mirrored", False))
+        if rotate_col.button("Roter 90°", key="ed_rotate", help="Roter med klokken"):
+            turns = (turns + 1) % 4
+        if mirror_col.button("Speilvend", key="ed_mirror", help="Speilvend venstre/høyre i visningen"):
+            turns = (-turns) % 4
+            mirrored = not mirrored
+        if reset_col.button("Nullstill retning", key="ed_reset"):
+            turns, mirrored = 0, False
+        st.session_state["ed_turns"] = turns
+        st.session_state["ed_mirrored"] = mirrored
+        if turns or mirrored:
+            pts = transform_polygon(base_pts, turns, mirrored)
+        st.caption("Rotasjon og speiling flytter hele rommet. Hjørne-/veggnummer og målene i feltene beholdes.")
+        if form_valg == "L-form":
+            preview, ax = plt.subplots(figsize=(5,4))
+            loop = pts + [pts[0]]
+            ax.fill(*zip(*pts), color="#dce8f5")
+            ax.plot(*zip(*loop), color="#1a3a5c")
+            for j, (x,y) in enumerate(pts):
+                nx,ny = pts[(j+1)%len(pts)]
+                ax.annotate(f"H{j+1}", (x,y), xytext=(5,5), textcoords="offset points", fontsize=8)
+                ax.text((x+nx)/2, (y+ny)/2, f"Vegg {j+1}", ha="center", va="center",
+                        bbox=dict(facecolor="white",edgecolor="none",pad=2), fontsize=9)
+            ax.set_aspect("equal"); ax.margins(.2); ax.axis("off")
+            st.pyplot(preview); plt.close(preview)
 
         origin = st.session_state.get("ed_form_origin", [0, 0])
         pts = [(x+origin[0]/1000, y+origin[1]/1000) for x,y in pts]
@@ -638,16 +645,15 @@ inp = ProjectInput(
 # Portable room snapshot includes only project data, never secrets or chat history.
 form_data = {"dimension_basis":"external", "origin_mm":origin, "waste_pct":10,"panel_kg_m2":0,"panel_stock_mm":0,"kind": form_valg, "plywood_width_mm": st.session_state.get("ed_finer_width",1500), "plywood_length_mm": st.session_state.get("ed_finer_length",3000)}
 form_data["thermal"] = thermal_data
+form_data.update(turns=turns, mirrored=mirrored)
 if form_valg == "L-form":
-    form_data.update(sides_mm=[st.session_state[f"l_side_{j}"] for j in range(6)],
-                     turns=st.session_state.get("l_turns",0), mirrored=st.session_state.get("l_mirrored",False))
+    form_data.update(sides_mm=[st.session_state[f"l_side_{j}"] for j in range(6)])
 elif form_valg == "Egendefinert polygon":
-    form_data["points_mm"] = [[(x-origin[0]/1000)*1000,(y-origin[1]/1000)*1000] for x,y in exterior_pts]
+    form_data["points_mm"] = [[x*1000,y*1000] for x,y in base_pts]
 else:
     form_data.update(length_mm=L_mm,width_mm=B_mm)
     if form_valg == "Femkant – avskåret hjørne":
-        form_data.update(cut_x_mm=CX_mm,cut_y_mm=CY_mm,
-                         diagonal_adjust_wall=st.session_state.get("ed_pentagon_adjust", 3))
+        form_data.update(cut_x_mm=CX_mm,cut_y_mm=CY_mm)
 try:
     current_room = capture_room(inp,form_data,bakfil)
 except ValueError as exc:
@@ -709,10 +715,9 @@ with innhold:
 
     elif modul == "Rom":
         # Kolonnen med tegningen følger med når man blar i inndatapanelet (se CSS).
-        with st.container(key="tegning_folger"):
-            _plan = tegn_plantegning(inp, result, bakfil, apninger=apninger_list or None)
-            st.pyplot(_plan, use_container_width=True)
-            plt.close(_plan)
+        _plan = tegn_plantegning(inp, result, bakfil, apninger=apninger_list or None)
+        st.pyplot(_plan, use_container_width=True)
+        plt.close(_plan)
         st.caption("Plantegningen oppdateres mens du endrer målene. Snitt, tak, vegger, produksjonstegninger, "
                    "3D og PDF finner du under «Tegninger».")
 
@@ -802,7 +807,7 @@ with innhold:
             )
             wall_orders = panel_order_rows(result["df_kapp"], H_mm, pw_mm)
             vdf = pd.DataFrame([{
-                "Vegg": f"Vegg {i+1}", "Utvendig lengde (m)": round(w, 3),
+                "Vegg": f"Vegg {i+1}",
                 "Utvendig lengde (mm)": round(w*1000),
                 "Antall elementer": int(wall_orders.Vegg.eq(f"Vegg {i+1}").sum()),
             } for i, w in enumerate([

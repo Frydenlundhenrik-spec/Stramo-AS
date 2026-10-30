@@ -1,4 +1,4 @@
-"""Editable pentagon walls, exact project round trips and independent rooms."""
+"""Four editable pentagon walls, calculated diagonal and exact project round trips."""
 from copy import deepcopy
 import math
 
@@ -6,7 +6,8 @@ import numpy as np
 from streamlit.testing.v1 import AppTest
 
 from geometry import wall_lengths
-from project_file import decode_project, encode_project
+from project_file import decode_project, encode_project, form_points
+from dimensions import inside_from_outside
 
 
 app = AppTest.from_file("app.py", default_timeout=60).run()
@@ -33,6 +34,9 @@ checked()
 assert "Femkant med skråvegg" in app.selectbox(key="ed_shape").options
 assert not any("Avskjær" in item.label for item in app.number_input)
 assert all(f"Vegg {i+1}" in app.number_input(key=f"ed_pentagon_side_{i}").label for i in range(5))
+assert app.number_input(key="ed_pentagon_side_2").disabled
+assert not any(item.key == "ed_pentagon_adjust" for item in app.selectbox)
+assert all(app.number_input(key=f"ed_pentagon_side_{i}").proto.format == "%.0f" for i in range(5))
 initial = [5850, 3350, math.hypot(1100, 1100), 4750, 4450]
 assert np.allclose(values(), initial)
 
@@ -43,25 +47,26 @@ for index, length in ((0, 6000), (1, 3100), (4, 4600), (3, 4500)):
     assert sides[index] == length
     assert math.isclose(sides[2], math.hypot(sides[0]-sides[3], sides[4]-sides[1]), abs_tol=1e-8)
 
-# Editing the diagonal can move either adjoining endpoint, preserving the totals.
-change(2, 2500)
-assert np.allclose(values(), [6000, 3100, 2500, 4000, 4600])
-app.selectbox(key="ed_pentagon_adjust").set_value(1).run()
-change(2, 2600)
+# Older files may contain fractional endpoints from the old diagonal editor.
+# Formatting these as whole mm must not change the actual geometry on reload.
+legacy = deepcopy(app.session_state["last_valid_editor"])
+legacy["form"].update(cut_x_mm=2000, cut_y_mm=math.sqrt(2600**2-2000**2),
+                      diagonal_adjust_wall=1)
+legacy["input"]["pts"] = [list(p) for p in inside_from_outside(form_points(legacy["form"]), .08)]
+app.session_state["pending_project"] = decode_project(encode_project([], legacy, None))
+app.run()
+checked()
 expected = [6000, 4600-math.sqrt(2600**2-2000**2), 2600, 4000, 4600]
 assert np.allclose(values(), expected, atol=1e-8, rtol=0)
 assert not float(values()[1]).is_integer(), "Do not round away exact geometry."
 
 # Invalid edits must keep the last valid room instead of corrupting its snapshot.
 before = deepcopy(app.session_state["last_valid_editor"])
-change(2, 100)
-assert np.allclose(values(), expected, atol=1e-8, rtol=0)
-assert app.warning
-assert app.session_state["last_valid_editor"]["input"]["pts"] == before["input"]["pts"]
 change(3, 6100)
 assert np.allclose(values(), expected, atol=1e-8, rtol=0)
 assert app.warning
-change(2, 2600)
+assert app.session_state["last_valid_editor"]["input"]["pts"] == before["input"]["pts"]
+change(3, 4000)
 
 app.text_input(key="ed_name").set_value("Femkant med presise mål").run()
 app.button(key="add_finished_room").click().run()
@@ -75,16 +80,16 @@ app.session_state["pending_editor"] = deepcopy(project["rooms"][0])
 app.run()
 checked()
 assert np.allclose(values(), expected, atol=1e-8, rtol=0)
-assert app.selectbox(key="ed_pentagon_adjust").value == 1
+assert app.number_input(key="ed_pentagon_side_2").disabled
 
-# Older project files have no preferred adjoining wall; they use wall 4.
+# Older project files without the unused adjoining-wall preference still load.
 legacy = deepcopy(saved)
 legacy["form"].pop("diagonal_adjust_wall", None)
 app.session_state["pending_editor"] = legacy
 app.run()
 checked()
 assert np.allclose(values(), expected, atol=1e-8, rtol=0)
-assert app.selectbox(key="ed_pentagon_adjust").value == 3
+assert not any(item.key == "ed_pentagon_adjust" for item in app.selectbox)
 
 # New rooms must not inherit the previous pentagon's edited dimensions.
 app.button(key="new_freezer_room").click().run()
@@ -127,4 +132,4 @@ app.selectbox(key="ed_shape").set_value("Rektangel").run()
 checked()
 assert app.number_input(key="ed_length").value == 700
 assert app.number_input(key="ed_width").value == 800
-print("PASS: five editable walls, automatic diagonal, both neighbours, rejected invalid edits, exact save/restore, independent rooms, L-form and rectangle transitions")
+print("PASS: four editable walls, read-only automatic diagonal, integer display with exact legacy geometry, rejected invalid edits, save/restore, independent rooms and shape transitions")

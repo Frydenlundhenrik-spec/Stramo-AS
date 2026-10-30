@@ -52,13 +52,14 @@ def restore_editor(room):
         if form["kind"] == "L-form":
             form["sides_mm"] = [round(v*1000) for v in wall_lengths(outer)]
         elif form["kind"] == "Rektangel":
-            form.update(length_mm=round(np.ptp(outer[:,0])*1000), width_mm=round(np.ptp(outer[:,1])*1000))
+            lengths = wall_lengths(outer)
+            form.update(length_mm=round(lengths[0]*1000), width_mm=round(lengths[1]*1000))
         else:
-            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist())
+            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist(), turns=0, mirrored=False)
         generated = np.asarray(_form_points(form))
         shift = outer[0]-generated[0]
         if not np.allclose(generated+shift, outer):
-            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist())
+            form.update(kind="Egendefinert polygon", points_mm=(outer*1000).tolist(), turns=0, mirrored=False)
             shift = np.zeros(2)
         form.update(dimension_basis="external", origin_mm=(shift*1000).tolist())
     st.session_state["ed_form_origin"] = form.get("origin_mm", [0,0])
@@ -73,13 +74,13 @@ def restore_editor(room):
         st.session_state[f"ed_accessory_{key}"] = float(value) if key == "pakninger" else int(value)
     state = dict(ed_drawing_walls=list(room["excluded_walls"]),ed_panel_stock=form.get("panel_stock_mm",0),ed_finer_width=form.get("plywood_width_mm",1500),ed_finer_length=form.get("plywood_length_mm",3000),ed_name=data["navn"],ed_pnr=data["pnr"],ed_tnr=data["tnr"],
                  ed_date=data["dato"],ed_scale=data["maalestokk"],ed_room_type=data["rom_type"],
+                 ed_turns=form.get("turns",0),ed_mirrored=form.get("mirrored",False),
                  ed_panel=data["panel_key"],ed_shape=form["kind"],ed_height=round(data["hoyde_m"]*1000),
                  ed_panel_width=round(data["panelbredde_m"]*1000),ed_doors=len(data["dorer"]),
                  ed_beslag=data["beslag_valg"],n_apninger=len(data.get("apninger") or []),
                  pris_override=copy.deepcopy(room["prices"]))
     if form["kind"] == "L-form":
         state.update({f"l_side_{i}":v for i,v in enumerate(form["sides_mm"])})
-        state.update(l_turns=form["turns"],l_mirrored=form["mirrored"])
     elif form["kind"] == "Egendefinert polygon":
         state["ed_corners"] = len(form["points_mm"])
         for i,(x,y) in enumerate(form["points_mm"]):
@@ -87,7 +88,6 @@ def restore_editor(room):
     elif form["kind"] == "Femkant – avskåret hjørne":
         sides = pentagon_sides(form["length_mm"], form["width_mm"], form["cut_x_mm"], form["cut_y_mm"])
         state.update({f"ed_pentagon_side_{i}": float(v) for i, v in enumerate(sides)})
-        state["ed_pentagon_adjust"] = form.get("diagonal_adjust_wall", 3)
     else:
         state.update(ed_length=form["length_mm"],ed_width=form["width_mm"])
     for i,(key,count,wall,offset,hinge) in enumerate(data["dorer"]):

@@ -17,7 +17,7 @@ assert vals()==[8960,8910,6410,4860,2550,4050],vals()
 change(1,9000)
 assert vals()==[8960,9000,6410,4860,2550,4140],vals()
 before=vals(); change(4,10000); assert vals()==before
-for key in ['l_rotate','l_mirror']:
+for key in ['ed_rotate','ed_mirror']:
  a.button(key=key).click().run(); assert vals()==before; assert not a.exception
 # Old project orientation with V6 as height must keep that total too.
 for i,v in enumerate([8720,6685,4860,2410,3860,9095]):

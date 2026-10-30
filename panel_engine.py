@@ -24,11 +24,13 @@ def _signed_area(pts: np.ndarray) -> float:
     return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(y, np.roll(x, -1)))
 
 
-def _ensure_ccw_np(pts: Sequence[Point]) -> np.ndarray:
+def _ordered_points_np(pts: Sequence[Point]) -> np.ndarray:
     a = np.array(pts, dtype=float)
     if len(a) < 3:
         raise ValueError("Polygon må ha minst 3 punkter")
-    return a if _signed_area(a) > 0 else a[::-1].copy()
+    # Mirroring changes winding, not wall identity. Reversing the vertices would
+    # move the end offcut to the other side and change the ordering quantities.
+    return a
 
 
 def polygon_area(pts: Sequence[Point]) -> float:
@@ -40,7 +42,7 @@ def polygon_area(pts: Sequence[Point]) -> float:
 
 def main_axis_from_longest_wall(pts: Sequence[Point]) -> tuple[np.ndarray, np.ndarray]:
     """Returnerer lokal X-retning langs lengste vegg og lokal Y-retning vinkelrett på denne."""
-    a = _ensure_ccw_np(pts)
+    a = _ordered_points_np(pts)
     best_len = -1.0
     best_dir = np.array([1.0, 0.0])
     for i in range(len(a)):
@@ -48,7 +50,7 @@ def main_axis_from_longest_wall(pts: Sequence[Point]) -> tuple[np.ndarray, np.nd
         p2 = a[(i + 1) % len(a)]
         v = p2 - p1
         L = float(np.linalg.norm(v))
-        if L > best_len:
+        if L > best_len + 1e-9:
             best_len = L
             best_dir = v / L
     x_axis = best_dir
@@ -133,7 +135,7 @@ def generate_roof_floor_panels(
     if panel_width_mm <= 0:
         raise ValueError('Elementbredde må være større enn 0')
 
-    pts_np = _ensure_ccw_np(pts)
+    pts_np = _ordered_points_np(pts)
     x_axis, y_axis = main_axis_from_longest_wall(pts_np)
     origin = pts_np[0]
     local = world_to_local(pts_np, origin, x_axis, y_axis)

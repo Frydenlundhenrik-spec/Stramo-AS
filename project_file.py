@@ -23,11 +23,15 @@ def form_points(form):
 def _form_points(form):
     kind = form["kind"]
     if kind == "L-form":
-        return transform_polygon(l_polygon(form["sides_mm"]), form["turns"], form["mirrored"])
-    if kind == "Egendefinert polygon":
-        return [(x/1000,y/1000) for x,y in form["points_mm"]]
-    return FORM_MALER[kind]["func"](form["length_mm"]/1000, form["width_mm"]/1000,
-                                    form.get("cut_x_mm",0)/1000, form.get("cut_y_mm",0)/1000)
+        points = l_polygon(form["sides_mm"])
+    elif kind == "Egendefinert polygon":
+        points = [(x/1000,y/1000) for x,y in form["points_mm"]]
+    else:
+        points = FORM_MALER[kind]["func"](form["length_mm"]/1000, form["width_mm"]/1000,
+                                        form.get("cut_x_mm",0)/1000, form.get("cut_y_mm",0)/1000)
+    turns, mirrored = form.get("turns", 0), form.get("mirrored", False)
+    # Identity must retain the coordinates of older custom polygons.
+    return transform_polygon(points, turns, mirrored) if turns or mirrored else points
 
 
 def make_room(inp, form, prices, background=None):
@@ -89,14 +93,14 @@ def validate_room(room):
                 raise ValueError("Antall tilbehør må være hele stykk.")
     if kind not in FORM_MALER:
         raise ValueError("Ukjent romform.")
+    integer(form.get("turns", 0),0,3)
+    if not isinstance(form.get("mirrored", False),bool):
+        raise ValueError("Ugyldig speilvalg.")
     if kind == "L-form":
         if len(form["sides_mm"]) != 6:
             raise ValueError("L-formen må ha seks mål.")
         for value in form["sides_mm"]:
             integer(value,100,1000000)
-        integer(form["turns"],0,3)
-        if not isinstance(form["mirrored"],bool):
-            raise ValueError("Ugyldig speilvalg.")
     elif kind == "Egendefinert polygon":
         if not 3 <= len(form["points_mm"]) <= 16:
             raise ValueError("Egendefinert rom må ha 3–16 hjørner.")
