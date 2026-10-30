@@ -147,7 +147,8 @@ def validate_room(room):
         if len(opening) != 6 or not isinstance(opening[5],str) or len(opening[5]) > 300:
             raise ValueError("Ugyldig åpning.")
         integer(opening[0],0,len(pts)-1)
-        number(opening[1],.05,10); number(opening[2],.1,5)
+        # Stored distances use the inside corner; the editor shows outside distances.
+        number(opening[1],0,10); number(opening[2],.1,5)
         number(opening[3],.1,3); number(opening[4],0,3)
         if opening[1]+opening[2] > lengths[opening[0]]+1e-6:
             raise ValueError("En åpning ligger utenfor veggen.")

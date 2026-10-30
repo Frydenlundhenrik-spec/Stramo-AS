@@ -311,6 +311,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
 
     # ── Dørmarkering med mål ──────────────────────────────────────────────────
     door_cursors = {}
+    dimension_lanes = {}
     for entry in dorer:
         dk, ant, wall_idx, offset_m, hengsel = _door_entry(entry)
         if wall_idx in excluded_walls or ant <= 0 or wall_idx >= nn or wls[wall_idx] < 1e-6:
@@ -369,11 +370,12 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
                     markersize=3.0, color=WALL_EDGE, zorder=8)
 
             # Mål-piler: hjørne→dør og dørbredde
-            from dimensions import exterior_door
             outer_start, outer_length, outer_offset = exterior_door(pts, WT, wall_idx, cursor, excluded_walls)
             # Door dimensions stay outside their room, also beside a shared wall.
-            _door_dim(ax, outer_start, dx_n, outer_offset, dw, -perp, outer_length, idx_d,
+            lane = dimension_lanes.get(wall_idx, 0)
+            _door_dim(ax, outer_start, dx_n, outer_offset, dw, -perp, outer_length, lane,
                       height_mm=DOR_DB[dk]["bh"])
+            dimension_lanes[wall_idx] = lane+1
 
             cursor += dw + 0.20
         door_cursors[wall_idx] = cursor
@@ -382,7 +384,7 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     if apninger:
         for ap in apninger:
             ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap
-            if ap_wall >= nn or wls[ap_wall] < 1e-6:
+            if ap_wall in excluded_walls or ap_wall >= nn or wls[ap_wall] < 1e-6:
                 continue
             p1a = pts_a[ap_wall]; p2a = pts_a[(ap_wall+1) % nn]
             vL  = wls[ap_wall]
@@ -410,6 +412,11 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
                     f"{ap_lbl}\n{round(ap_w*1000)}×{round(ap_h*1000)} mm{sill_txt}",
                     ha="center", va="center", fontsize=6.5, color="#000",
                     fontweight="bold", zorder=9)
+            outer_start, outer_length, outer_offset = exterior_door(pts, WT, ap_wall, ap_off, excluded_walls)
+            lane = dimension_lanes.get(ap_wall, 0)
+            _door_dim(ax, outer_start, da, outer_offset, ap_w, -perp_a, outer_length, lane,
+                      height_mm=round(ap_h*1000))
+            dimension_lanes[ap_wall] = lane+1
 
     # ── Vinkler ved hjørner ───────────────────────────────────────────────────
     for i in range(nn):
@@ -421,9 +428,10 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     # All plan dimensions and extension lines originate at OUTSIDE corners.
     outer = np.asarray(floor_outline(pts, WT))
     xmn, ymn = outer.min(axis=0); xmx, ymx = outer.max(axis=0)
+    total_lane = max(1.65, .60*max(dimension_lanes.values(), default=0)+.45)
     if standalone:
-        _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn-1.65, fs=10, total=True)
-        _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx+1.65, fs=10, total=True)
+        _dh(ax, xmn, xmx, ymn, f"{(xmx-xmn)*1000:.0f} mm", ey=ymn-total_lane, fs=10, total=True)
+        _dv(ax, ymn, ymx, xmx, f"{(ymx-ymn)*1000:.0f} mm", ex=xmx+total_lane, fs=10, total=True)
     for i in range(nn):
         p1, p2 = exterior_wall(pts, WT, i, excluded_walls) if i not in excluded_walls else (outer[i], outer[(i+1)%nn])
         length = np.linalg.norm(p2-p1)
@@ -433,22 +441,21 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
             continue
         if not standalone and i in excluded_walls:
             continue
-        has_door = any(_door_entry(d)[2] == i and _door_entry(d)[1] > 0 for d in dorer)
-        lane = 1.65 if has_door else .45
+        lane = max(1.65, .60*dimension_lanes[i]+.45) if i in dimension_lanes else .45
         outward = polygon_winding(pts_a)*np.array([(p2-p1)[1],-(p2-p1)[0]])/length
         if not standalone and any(path.contains_point((p1+p2)/2+outward*lane) for path in dimension_obstacles):
             continue
-        _dim_along_wall(ax, p1, p2, f"{length*1000:.0f} mm", offset=1.65 if has_door else .45,
+        _dim_along_wall(ax, p1, p2, f"{length*1000:.0f} mm", offset=lane,
                         fs=10, winding=polygon_winding(pts_a), total=True)
 
     if not standalone:
         return fig
-    ax.text((xmn+xmx)/2, ymn - 2.05,
+    ax.text((xmn+xmx)/2, ymn - total_lane-.40,
             f"PLANTEGNING  –  {DRAWING_SCALE}  ·  Utvendige mål",
             ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
 
-    ax.set_xlim(xmn - 2.0, xmx + 2.1)
-    ax.set_ylim(ymn - 2.55, ymx + 2.1)
+    ax.set_xlim(xmn - total_lane-.35, xmx + total_lane+.45)
+    ax.set_ylim(ymn - total_lane-.90, ymx + total_lane+.45)
     ax.set_aspect("equal"); ax.axis("off")
     fig.subplots_adjust(left=0.02, right=0.79, top=0.97, bottom=0.03)
     # Tittelblokken skal være like høy som rommet: les rommets topp og bunn
@@ -753,9 +760,15 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
                     f"{ap_lbl}\n{round(ap_w*1000)}×{round(ap_h*1000)} mm",
                     ha="center", va="center", fontsize=8,
                     color=AP_COL, fontweight="bold", zorder=7)
-            # Horisontale mål under veggen
-            _dh(ax, 0, ap_off, dim_bot,
-                f"{round(ap_off*1000)} mm", ey=dim_bot, col=AP_COL, fs=5.5)
+            # Same outside corner reference as the editor and door dimensions.
+            _, outside_length, outside_offset = exterior_door(
+                pts, wall_thickness, vegg_idx, ap_off, excluded_walls)
+            outside_start = ap_off-outside_offset
+            _dh(ax, outside_start, ap_off, dim_bot,
+                f"{round(outside_offset*1000)} mm", ey=dim_bot, col=AP_COL, fs=5.5)
+            _dh(ax, ap_off+ap_w, outside_start+outside_length, dim_bot,
+                f"{round((outside_length-outside_offset-ap_w)*1000)} mm",
+                ey=dim_bot, col=AP_COL, fs=5.5)
             _dh(ax, ap_off, ap_off+ap_w, dim_bot - 0.25,
                 f"{round(ap_w*1000)} mm", ey=dim_bot - 0.25, col=AP_COL, fs=5.5)
             dim_bot -= 0.55

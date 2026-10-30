@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r3")
+        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r4")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -387,14 +387,22 @@ with inndata_kol:
                     st.session_state.get("ed_cut_y", min(1100, width/2)))
                 for j, value in enumerate(defaults):
                     st.session_state.setdefault(f"ed_pentagon_side_{j}", float(value))
+            st.session_state["ed_pentagon_side_2"] = math.hypot(
+                st.session_state["ed_pentagon_side_0"]-st.session_state["ed_pentagon_side_3"],
+                st.session_state["ed_pentagon_side_4"]-st.session_state["ed_pentagon_side_1"])
             previous = [st.session_state[f"ed_pentagon_side_{j}"] for j in range(5)]
             labels = ["Vegg 1 – nederst", "Vegg 2 – høyre", "Vegg 3 – skråvegg",
                       "Vegg 4 – øverst", "Vegg 5 – venstre"]
             for j in range(0, 5, 2):
                 columns = st.columns(2)
                 for k in range(j, min(j+2, 5)):
+                    if k == 2:
+                        columns[k-j].text_input(f"{labels[k]} (mm)",
+                            value=f"{previous[k]:.0f}", disabled=True,
+                            help="Beregnet utvendig lengde fra H3 til H4.")
+                        continue
                     columns[k-j].number_input(f"{labels[k]} (mm)", min_value=0.0,
-                        step=1.0, format="%.0f", key=f"ed_pentagon_side_{k}", disabled=k == 2,
+                        step=1.0, format="%.0f", key=f"ed_pentagon_side_{k}",
                         on_change=update_pentagon_side, args=(k, previous),
                         help=f"Vegg {k+1} på plantegningen, fra H{k+1} til H{(k+1)%5+1}. Utvendig lengde.")
             if st.session_state.get("ed_pentagon_error"):
@@ -558,9 +566,10 @@ with inndata_kol:
                                           key=f"ap_sill{ai}")
             cb1, cb2, cb3 = st.columns(3)
             with cb1:
-                ap_offset_mm = st.number_input("Offset fra hjørne (mm)", min_value=50,
+                ap_offset_mm = st.number_input("Avstand fra utvendig hjørne (mm)", min_value=50,
                                                 max_value=10000, value=300, step=50,
-                                                key=f"ap_off{ai}")
+                                                key=f"ap_off{ai}",
+                                                help=f"Fra utvendig H{ap_wall+1} langs Vegg {ap_wall+1} til kanten av åpningen.")
             with cb2:
                 ap_w_mm = st.number_input("Bredde (mm)", min_value=100, max_value=5000,
                                           value=1000, step=50, key=f"ap_bw{ai}")

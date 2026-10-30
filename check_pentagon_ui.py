@@ -19,7 +19,7 @@ def checked():
 
 
 def values():
-    return [app.number_input(key=f"ed_pentagon_side_{i}").value for i in range(5)]
+    return [app.session_state[f"ed_pentagon_side_{i}"] for i in range(5)]
 
 
 def change(index, value):
@@ -33,10 +33,11 @@ app.selectbox(key="ed_shape").set_value("Femkant – avskåret hjørne").run()
 checked()
 assert "Femkant med skråvegg" in app.selectbox(key="ed_shape").options
 assert not any("Avskjær" in item.label for item in app.number_input)
-assert all(f"Vegg {i+1}" in app.number_input(key=f"ed_pentagon_side_{i}").label for i in range(5))
-assert app.number_input(key="ed_pentagon_side_2").disabled
+assert all(f"Vegg {i+1}" in app.number_input(key=f"ed_pentagon_side_{i}").label for i in (0,1,3,4))
+assert not any(item.key == "ed_pentagon_side_2" for item in app.number_input)
+assert next(item for item in app.text_input if item.label == "Vegg 3 – skråvegg (mm)").disabled
 assert not any(item.key == "ed_pentagon_adjust" for item in app.selectbox)
-assert all(app.number_input(key=f"ed_pentagon_side_{i}").proto.format == "%.0f" for i in range(5))
+assert all(app.number_input(key=f"ed_pentagon_side_{i}").proto.format == "%.0f" for i in (0,1,3,4))
 initial = [5850, 3350, math.hypot(1100, 1100), 4750, 4450]
 assert np.allclose(values(), initial)
 
@@ -44,6 +45,7 @@ assert np.allclose(values(), initial)
 for index, length in ((0, 6000), (1, 3100), (4, 4600), (3, 4500)):
     change(index, length)
     sides = values()
+    assert next(item for item in app.text_input if item.label == "Vegg 3 – skråvegg (mm)").value == f"{sides[2]:.0f}"
     assert sides[index] == length
     assert math.isclose(sides[2], math.hypot(sides[0]-sides[3], sides[4]-sides[1]), abs_tol=1e-8)
 
@@ -80,7 +82,7 @@ app.session_state["pending_editor"] = deepcopy(project["rooms"][0])
 app.run()
 checked()
 assert np.allclose(values(), expected, atol=1e-8, rtol=0)
-assert app.number_input(key="ed_pentagon_side_2").disabled
+assert next(item for item in app.text_input if item.label == "Vegg 3 – skråvegg (mm)").disabled
 
 # Older project files without the unused adjoining-wall preference still load.
 legacy = deepcopy(saved)
