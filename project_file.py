@@ -164,6 +164,15 @@ def validate_room(room):
         raise ValueError("Dupliserte veggvalg.")
     for value in room["excluded_walls"]:
         integer(value,0,len(pts)-1)
+    placement = room.get('placement')
+    if placement is not None:
+        if not isinstance(placement, dict) or not isinstance(placement.get('target_id'), str):
+            raise ValueError('Ugyldig romplassering.')
+        integer(placement['wall'], 0, len(pts)-1)
+        integer(placement['target_wall'], 0, 31)
+        number(placement['distance_mm'], 0, 1000000)
+        if not isinstance(placement['from_end'], bool):
+            raise ValueError('Ugyldig referansehjørne.')
     if not isinstance(room["prices"],dict) or len(room["prices"]) > 500:
         raise ValueError("Ugyldig prisliste.")
     for key,value in room["prices"].items():
@@ -248,7 +257,7 @@ def wall_segment(room, index, outside=False):
     return a,b,inward
 
 
-def snap_room(room, wall, target, target_wall):
+def snap_room(room, wall, target, target_wall, distance_mm=None, from_end=False):
     """Align start along target direction, on outside face of retained target wall."""
     a,b,n = wall_segment(room,wall)
     c,d,m = wall_segment(target,target_wall,outside=True)
@@ -258,8 +267,39 @@ def snap_room(room, wall, target, target_wall):
     own_start = a if np.dot(a,direction)<np.dot(b,direction) else b
     target_start = c
     shift = target_start-own_start
+    if distance_mm is not None:
+        number(distance_mm, 0, 1000000)
+        if target_wall in target['excluded_walls']:
+            raise ValueError('Velg en vegg som beholdes.')
+        from construction import floor_outline
+        own = np.asarray(floor_outline(world_input(room).pts, PANEL_DB[room['input']['panel_key']]['t']/1000))
+        other = np.asarray(floor_outline(world_input(target).pts, PANEL_DB[target['input']['panel_key']]['t']/1000))
+        start, end = other[target_wall], other[(target_wall+1) % len(other)]
+        if from_end:
+            start, end = end, start
+        along = (end-start)/np.linalg.norm(end-start)
+        if distance_mm/1000 >= np.linalg.norm(end-start):
+            raise ValueError('Avstanden må være kortere enn veggen rommet plasseres mot.')
+        corners = [own[wall], own[(wall+1) % len(own)]]
+        corner = min(corners, key=lambda p: float(p @ along))
+        # Retain the shared-wall face alignment, but measure along it from
+        # the actual exterior corners, including rotated/sloping walls.
+        shift += along * (float((start-corner-shift) @ along)+distance_mm/1000)
     return [round(room["position_mm"][0]+shift[0]*1000,3),
             round(room["position_mm"][1]+shift[1]*1000,3)]
+
+
+def placement_points(room, target, wall, target_wall, from_end=False):
+    """Exterior reference corner and projected room corner for plan dimensions."""
+    from construction import floor_outline
+    own = np.asarray(floor_outline(world_input(room).pts, PANEL_DB[room['input']['panel_key']]['t']/1000))
+    other = np.asarray(floor_outline(world_input(target).pts, PANEL_DB[target['input']['panel_key']]['t']/1000))
+    start, end = other[target_wall], other[(target_wall+1) % len(other)]
+    if from_end:
+        start, end = end, start
+    along = (end-start)/np.linalg.norm(end-start)
+    corner = min((own[wall], own[(wall+1) % len(own)]), key=lambda p: float(p @ along))
+    return start, start+along*float((corner-start) @ along), end
 
 
 def freezer_shared_walls(rooms):

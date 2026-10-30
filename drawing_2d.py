@@ -90,10 +90,11 @@ def _dim_along_wall(ax, p1, p2, lbl, offset=0.30, fs=DIM_FS, col=None, winding=1
         angle -= 180
     elif angle < -90:
         angle += 180
-    ax.text(mid[0] - perp[0]*0.14, mid[1] - perp[1]*0.14, lbl,
+    label = ax.text(mid[0] - perp[0]*0.14, mid[1] - perp[1]*0.14, lbl,
             ha="center", va="center", fontsize=fs, rotation=angle,
             color=col, fontweight="bold" if total else "normal", zorder=10,
             bbox=dict(fc="white", ec="none", pad=0.5))
+    return label
 
 
 def _polygon_ccw(pts_a) -> bool:
@@ -121,9 +122,12 @@ def _side_label(ax, pts_a, i, nn, fs=9, avstand=0.55):
         angle -= 180
     elif angle <= -89.5:
         angle += 180
-    ax.text(mid[0], mid[1], f"Vegg {i+1}", ha="center", va="center", rotation=angle,
+    label = ax.text(mid[0], mid[1], f"Vegg {i+1}", ha="center", va="center", rotation=angle,
             fontsize=fs, color=TOTAL_DIM_COL, fontweight="bold", zorder=14,
             bbox=dict(fc="white", ec="none", pad=0.2))
+    label._plan_candidates = [p1+(p2-p1)*t+perp*inset
+        for inset in (avstand, .30, .40, .70) for t in (.5, .3, .7, .2, .8)]
+    label._plan_room = Path(pts_a)
 
 
 def _corner_angle(ax, pts_a, i, radius=0.16, fs=8, vis_utvendig=True):
@@ -445,6 +449,16 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
         outward = polygon_winding(pts_a)*np.array([(p2-p1)[1],-(p2-p1)[0]])/length
         if not standalone and any(path.contains_point((p1+p2)/2+outward*lane) for path in dimension_obstacles):
             continue
+        if not standalone:
+            # Keep the complete dimension line clear of adjoining rooms, not
+            # just its midpoint (a small room can cover only one end).
+            from shapely.geometry import LineString, Polygon
+            obstacles = [Polygon(path.vertices).buffer(.16) for path in dimension_obstacles]
+            for _ in range(40):
+                line = LineString([p1+outward*lane, p2+outward*lane])
+                if not any(line.intersects(obstacle) for obstacle in obstacles):
+                    break
+                lane += .35
         _dim_along_wall(ax, p1, p2, f"{length*1000:.0f} mm", offset=lane,
                         fs=10, winding=polygon_winding(pts_a), total=True)
 

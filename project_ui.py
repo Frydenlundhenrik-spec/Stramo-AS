@@ -13,12 +13,12 @@ import plotly.graph_objects as go
 import streamlit as st
 from database import PANEL_DB
 from branding import project_name
-from geometry import wall_lengths, pentagon_sides
+from geometry import wall_lengths, pentagon_sides, polygon_winding
 from kalkulasjon import beregn_prosjekt
 from montasje import tegn_3d_modell, figur_som_pdf
 from ifc_export import gen_ifc
 from project_file import (make_room, encode_project, decode_project, validate_room,
-                          world_input, snap_room, freezer_shared_walls)
+                          world_input, snap_room, freezer_shared_walls, placement_points)
 
 
 def _editor_key(key):
@@ -167,6 +167,8 @@ def capture_room(inp, form, uploaded_background):
             room["position_mm"] = saved["position_mm"]
             if len(saved["input"]["pts"]) == len(inp.pts):
                 room["excluded_walls"] = saved["excluded_walls"]
+                if 'placement' in saved:
+                    room['placement'] = copy.deepcopy(saved['placement'])
             elif saved["excluded_walls"]:
                 st.warning("Antall vegger er endret. Velg utelatte vegger på nytt i sammenstillingen.")
                 st.session_state.pop(f"omit_{active}",None)
@@ -346,7 +348,35 @@ def finishing_ui(rooms):
             st.dataframe(summaries.round(3),hide_index=True)
 
 
-def assembly_plan(rooms):
+def _arrange_assembly_labels(ax):
+    """Place names and wall labels in free space using their rendered text bounds."""
+    fig = ax.figure
+    fig.canvas.draw()
+    renderer = fig.canvas.get_renderer()
+    movable = [text for text in ax.texts if hasattr(text, '_plan_candidates')]
+    fixed = [text.get_window_extent(renderer).expanded(1.04, 1.12)
+             for text in ax.texts if text.get_text() and text not in movable]
+    # Room names have first choice; wall labels can slide along their own wall.
+    movable.sort(key=lambda text: text.get_gid() != 'room-name')
+    for text in movable:
+        best, best_score = text.get_position(), float('inf')
+        for point in text._plan_candidates:
+            text.set_position(point)
+            box = text.get_window_extent(renderer).expanded(1.04, 1.12)
+            corners = ax.transData.inverted().transform(box.get_points())
+            x1,y1 = corners[0]; x2,y2 = corners[1]
+            if not text._plan_room.contains_points([[x1,y1],[x1,y2],[x2,y1],[x2,y2]]).all():
+                continue
+            score = sum(box.overlaps(other) for other in fixed)
+            if score < best_score:
+                best, best_score = point, score
+            if score == 0:
+                break
+        text.set_position(best)
+        fixed.append(text.get_window_extent(renderer).expanded(1.04, 1.12))
+
+
+def assembly_plan(rooms, highlight=None):
     from drawing_2d import stramo_plan, _tegn_fig_title_block
     from montasje import lag_tegningsinfo
     from construction import floor_outline
@@ -376,8 +406,12 @@ def assembly_plan(rooms):
             edge=q-p;t=np.clip((candidates-p)@edge/(edge@edge),0,1)
             clearance=np.minimum(clearance,np.linalg.norm(candidates-p-t[:,None]*edge,axis=1))
         at=candidates[np.argmax(clearance)] if len(candidates) else pts.mean(axis=0)
-        ax.text(*at,textwrap.fill(inp.navn,24),ha='center',va='center',fontsize=10,color='#07384c',
+        wrap = 9 if min(np.ptp(pts, axis=0)) < 3 else 24
+        name = ax.text(*at,textwrap.fill(inp.navn,wrap),ha='center',va='center',fontsize=10,color='#07384c',
                 bbox=dict(fc='white',ec='none',alpha=.9))
+        name.set_gid('room-name')
+        name._plan_candidates = candidates[np.argsort(-clearance)] if len(candidates) else [at]
+        name._plan_room = PolygonPath(pts)
     if rooms:
         from shapely.geometry import Polygon
         from shapely.ops import unary_union
@@ -391,6 +425,37 @@ def assembly_plan(rooms):
     ax.set_title('Plantegning · Utvendige mål',color='#07384c',fontsize=14,fontweight='bold')
     ax.set_aspect('equal');ax.axis('off')
     fig.subplots_adjust(left=.02,right=.79,top=.94,bottom=.03)
+    from drawing_2d import _dim_along_wall
+    by_id = {room['id']: room for room in rooms}
+    for room in rooms:
+        placement = room.get('placement')
+        if not placement or placement['target_id'] not in by_id:
+            continue
+        target = by_id[placement['target_id']]
+        try:
+            expected = snap_room(room, placement['wall'], target, placement['target_wall'],
+                                 placement['distance_mm'], placement['from_end'])
+            if not np.allclose(expected, room['position_mm'], atol=.01, rtol=0):
+                continue  # Manual edits changed the relationship; never print a stale distance.
+            start, end, _ = placement_points(room, target, placement['wall'],
+                                             placement['target_wall'], placement['from_end'])
+        except (ValueError, IndexError):
+            continue
+        winding = polygon_winding(world_input(target).pts) * (-1 if placement['from_end'] else 1)
+        _dim_along_wall(ax, start, end, f"{np.linalg.norm(end-start)*1000:.0f} mm",
+                        offset=.85, fs=10, winding=winding, total=True)
+    if highlight and highlight[0] in by_id:
+        target = by_id[highlight[0]]
+        outer = np.asarray(floor_outline(world_input(target).pts, PANEL_DB[target['input']['panel_key']]['t']/1000))
+        wall, from_end = highlight[1:]
+        a,b = outer[wall], outer[(wall+1)%len(outer)]
+        ax.plot([a[0],b[0]],[a[1],b[1]],color='#e0e000',linewidth=4,zorder=16)
+        corner = b if from_end else a
+        ax.plot(*corner,'o',mfc='white',mec='#07384c',ms=7,zorder=17)
+        ax.annotate(f"H{(wall+1)%len(outer)+1 if from_end else wall+1}",corner,
+                    xytext=(-12,-16),textcoords='offset points',ha='right',color='#07384c',
+                    fontweight='bold',bbox=dict(fc='white',ec='none',pad=1),zorder=18)
+    _arrange_assembly_labels(ax)
     return fig
 
 
@@ -400,59 +465,104 @@ def assembly_ui():
     if not rooms:
         st.info("Tegn et rom og trykk «Legg til ferdig rom». Gjenta for neste rom, og sett dem sammen her til slutt.")
         return
-    st.caption("Plasser ferdigtegnede rom. Velg deretter vegger som skal utelates. Rommenes grunntegning beholdes og kan redigeres senere.")
     labels = {r["id"]:f"{i+1}. {project_name(r['input']['navn']) or r['input']['rom_type']}" for i,r in enumerate(rooms)}
-    for room in rooms:
-        rid = room["id"]
-        with st.expander(labels[rid],expanded=True):
-            c1,c2 = st.columns(2)
-            x = c1.number_input("X-plassering (mm)",value=float(room["position_mm"][0]),min_value=-1000000.,max_value=1000000.,step=100.,key=f"pos_{rid}_x")
-            y = c2.number_input("Y-plassering (mm)",value=float(room["position_mm"][1]),min_value=-1000000.,max_value=1000000.,step=100.,key=f"pos_{rid}_y")
-            room["position_mm"] = [x,y]
-            lengths = wall_lengths(room["input"]["pts"])
-            st.caption("Avsluttende veggvalg: slå av veggen her, ikke slett hjørnepunktene.")
-            room["excluded_walls"] = st.multiselect("Vegger som skal utelates",list(range(len(lengths))),
-                default=room["excluded_walls"],format_func=lambda i, lengths=tuple(lengths):f"Vegg {i+1} – {lengths[i]*1000:.0f} mm",key=f"omit_{rid}")
-            if room["excluded_walls"]:
-                st.caption("Veggen, tilhørende U-kanal og dører/åpninger utelates fra sammenstillingen, mengdene og IFC. Du kan slå veggen på igjen.")
-    st.subheader("Koble rom mot en vegg")
-    if len(rooms)>1:
-        moving_id = st.selectbox("Rom som skal flyttes",list(labels),format_func=labels.get,key="snap_moving")
-        target_id = st.selectbox("Rom som skal beholdes på plass",[rid for rid in labels if rid!=moving_id],format_func=labels.get,key="snap_target")
-        moving = next(r for r in rooms if r["id"]==moving_id)
-        target = next(r for r in rooms if r["id"]==target_id)
-        own_wall = st.selectbox("Vegg på rommet som flyttes",range(len(moving["input"]["pts"])),format_func=lambda i:f"Vegg {i+1}",key="snap_own_wall")
-        target_wall = st.selectbox("Vegg det skal kobles mot",range(len(target["input"]["pts"])),format_func=lambda i:f"Vegg {i+1}",key="snap_target_wall")
-        st.caption("Kobler mot utsiden av veggen som beholdes, med plass til paneltykkelsen. Veggene må vende mot hverandre.")
-        if st.button("Plasser inntil valgt vegg",key="snap_apply"):
-            try:
-                if target_wall in target["excluded_walls"]:
-                    raise ValueError("Velg en vegg som beholdes.")
-                position = snap_room(moving,own_wall,target,target_wall)
-            except ValueError as exc:
-                st.error(str(exc))
-            else:
-                moving["position_mm"] = position
-                st.session_state["pending_position"] = (moving_id,position)
-                st.rerun()
-    matches = freezer_shared_walls(rooms)
-    if matches:
-        st.info("Fant kjøleromsvegger som er helt dekket av fryseromsvegger. Fryseromsveggene beholdes.")
-        for cool,wall,freezer,fw in matches:
-            st.write(f"{labels[cool]} Vegg {wall+1} → bruker {labels[freezer]} Vegg {fw+1}")
-        if st.button("Bruk fryseromsvegger som fellesvegger",key="apply_shared_walls"):
-            affected = []
-            for cool,wall,_,_ in matches:
-                room = next(r for r in rooms if r["id"]==cool)
-                room["excluded_walls"] = sorted(set(room["excluded_walls"]+[wall]))
-                affected.append(cool)
-            st.session_state["pending_wall_controls"] = affected
-            st.rerun()
-    fig = assembly_plan(rooms)
-    st.pyplot(fig)
-    pdf = figur_som_pdf(fig, "Plantegning")
-    plt.close(fig)
-    st.download_button("Last ned sammenstilling PDF",pdf,"sammenstilling.pdf","application/pdf")
+    controls, drawing = st.columns([1, 2.2], gap="large")
+    highlight = None
+    with controls:
+        st.subheader("Plasser rom")
+        if len(rooms)>1:
+            moving_id = st.selectbox("Rom som skal flyttes", list(labels), format_func=labels.get, key="snap_moving")
+            targets = [rid for rid in labels if rid != moving_id]
+            if st.session_state.get('snap_target') not in targets:
+                st.session_state['snap_target'] = targets[0]
+            target_id = st.selectbox("Plasser mot rom", targets, format_func=labels.get, key="snap_target")
+            moving = next(r for r in rooms if r['id']==moving_id)
+            target = next(r for r in rooms if r['id']==target_id)
+            signature = (moving_id, target_id, len(moving['input']['pts']), len(target['input']['pts']))
+            if st.session_state.get('snap_signature') != signature:
+                saved = moving.get('placement', {})
+                if (saved.get('target_id') != target_id
+                    or saved.get('wall', 0) >= len(moving['input']['pts'])
+                    or saved.get('target_wall', 0) >= len(target['input']['pts'])):
+                    saved = {}
+                for key, value in (('snap_own_wall', saved.get('wall', 0)),
+                                   ('snap_target_wall', saved.get('target_wall', 0)),
+                                   ('snap_from_end', saved.get('from_end', False)),
+                                   ('snap_distance', float(saved.get('distance_mm', 0)))):
+                    st.session_state[key] = value
+                st.session_state['snap_signature'] = signature
+            from construction import floor_outline
+            def wall_label(room, i):
+                outer = floor_outline(world_input(room).pts, PANEL_DB[room['input']['panel_key']]['t']/1000)
+                length = np.linalg.norm(np.subtract(outer[(i+1)%len(outer)], outer[i]))
+                return f"Vegg {i+1} · {length*1000:.0f} mm"
+            target_wall = st.selectbox("Vegg på hovedrom", range(len(target['input']['pts'])),
+                format_func=lambda i, room=target: wall_label(room, i), key='snap_target_wall')
+            own_wall = st.selectbox("Vegg på rommet som flyttes", range(len(moving['input']['pts'])),
+                format_func=lambda i, room=moving: wall_label(room, i), key='snap_own_wall')
+            corners = {False: f"H{target_wall+1} – start av veggen",
+                       True: f"H{(target_wall+1)%len(target['input']['pts'])+1} – slutt av veggen"}
+            from_end = st.selectbox("Mål fra utvendig hjørne", [False, True],
+                format_func=corners.get, key='snap_from_end')
+            distance = st.number_input("Avstand fra hjørne (mm)", min_value=0., max_value=1000000.,
+                step=100., format='%.0f', key='snap_distance',
+                help='Fra valgt utvendig hjørne til nærmeste utvendige hjørne på rommet som flyttes, målt langs veggen.')
+            highlight = (target_id, target_wall, from_end)
+            st.caption('Velg «Plasser rom» for å bruke avstanden. Rommet flyttes langs den valgte veggen.')
+            if st.button('Plasser rom', key='snap_apply', use_container_width=True):
+                try:
+                    position = snap_room(moving, own_wall, target, target_wall, distance, from_end)
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    moving['position_mm'] = position
+                    moving['placement'] = dict(target_id=target_id, wall=own_wall,
+                        target_wall=target_wall, from_end=from_end, distance_mm=distance)
+                    st.session_state['pending_position'] = (moving_id, position)
+                    st.rerun()
+        else:
+            st.caption('Legg til et rom til for å plassere rom mot hverandre.')
+        with st.expander('Manuell plassering'):
+            for room in rooms:
+                rid = room['id']
+                st.markdown(f"**{labels[rid]}**")
+                c1,c2 = st.columns(2)
+                x = c1.number_input('Venstre / høyre (mm)',value=float(room['position_mm'][0]),
+                    min_value=-1000000.,max_value=1000000.,step=100.,format='%.0f',key=f'pos_{rid}_x')
+                y = c2.number_input('Opp / ned (mm)',value=float(room['position_mm'][1]),
+                    min_value=-1000000.,max_value=1000000.,step=100.,format='%.0f',key=f'pos_{rid}_y')
+                if [x,y] != room['position_mm']:
+                    room.pop('placement', None)
+                room['position_mm'] = [x,y]
+        with st.expander('Fellesvegger'):
+            st.caption('Velg veggene som skal utelates etter at rommene er plassert. Fryseromsvegger beholdes som fellesvegger.')
+            for room in rooms:
+                rid = room['id']
+                lengths = wall_lengths(room['input']['pts'])
+                st.markdown(f"**{labels[rid]}**")
+                room['excluded_walls'] = st.multiselect('Vegger som skal utelates', list(range(len(lengths))),
+                    default=room['excluded_walls'], format_func=lambda i: f'Vegg {i+1}',key=f'omit_{rid}')
+            matches = freezer_shared_walls(rooms)
+            if matches:
+                for cool,wall,freezer,fw in matches:
+                    st.write(f"{labels[cool]} Vegg {wall+1} → {labels[freezer]} Vegg {fw+1}")
+                if st.button('Bruk fryseromsvegger som fellesvegger',key='apply_shared_walls'):
+                    affected = []
+                    for cool,wall,_,_ in matches:
+                        room = next(r for r in rooms if r['id']==cool)
+                        room['excluded_walls'] = sorted(set(room['excluded_walls']+[wall]))
+                        affected.append(cool)
+                    st.session_state['pending_wall_controls'] = affected
+                    st.rerun()
+    with drawing:
+        fig = assembly_plan(rooms, highlight=highlight)
+        st.pyplot(fig)
+        # Export the same measured positions, without the editor's selection marker.
+        plt.close(fig)
+        fig = assembly_plan(rooms)
+        pdf = figur_som_pdf(fig, 'Plantegning')
+        plt.close(fig)
+        st.download_button('Last ned sammenstilling PDF',pdf,'sammenstilling.pdf','application/pdf')
     show_roof = st.checkbox("Vis gjennomsiktig tak i samlet 3D",value=True,key="assembly_roof_transparent")
     combined = go.Figure()
     materials, cuts = [],[]
