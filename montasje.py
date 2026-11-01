@@ -11,7 +11,7 @@ def tegn_plantegning(inp: Any, result: dict, bakgrunn=None, apninger=None):
     info = lag_tegningsinfo(inp, result, "Plantegning")
     return stramo_plan(inp.pts, inp.hoyde_m, inp.panelbredde_m,
                        inp.dorer, info, bakgrunn, apninger=apninger,
-                       wall_thickness=PANEL_DB[inp.panel_key]["t"] / 1000, excluded_walls=inp.excluded_walls)
+                       wall_thickness=PANEL_DB[inp.panel_key]["t"] / 1000, excluded_walls=inp.excluded_walls, shared_walls=inp.shared_walls)
 
 
 def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", apninger=None):
@@ -24,7 +24,7 @@ def tegn_snitt(inp: Any, result: dict, vegg_idx: int = 0, seksjon: str = "A-A", 
 def tegn_veggoppstaltt(inp: Any, result: dict, vegg_idx: int = 0, apninger=None):
     info = lag_tegningsinfo(inp, result, f"Veggoppstalt – Vegg {vegg_idx+1}")
     return tegn_veggoppstalt(inp.pts, inp.hoyde_m, inp.panelbredde_m,
-                              inp.dorer, info, vegg_idx, apninger=apninger, rom_type=inp.rom_type, excluded_walls=getattr(inp,"excluded_walls",()), wall_thickness=PANEL_DB[inp.panel_key]["t"]/1000)
+                              inp.dorer, info, vegg_idx, apninger=apninger, rom_type=inp.rom_type, excluded_walls=getattr(inp,"excluded_walls",()), shared_walls=getattr(inp,"shared_walls",()), wall_thickness=PANEL_DB[inp.panel_key]["t"]/1000)
 
 
 def tegn_taktegning(inp: Any, result: dict):
@@ -43,7 +43,7 @@ def tegn_produksjonsfigurer(inp: Any, result: dict, bare_tilpassede: bool = Fals
         rom_type=inp.rom_type,
         info=info,
         bare_tilpassede=bare_tilpassede,
-        excluded_walls=getattr(inp,"excluded_walls",()),
+        excluded_walls=getattr(inp,"excluded_walls",()), shared_walls=getattr(inp,"shared_walls",()),
         dorer=getattr(inp, "dorer", []),
         apninger=getattr(inp, "apninger", []),
     )
@@ -53,7 +53,7 @@ def tegn_3d_modell(inp: Any, azimuth: int = -55, elevation: int = 28, apninger=N
     return tegn_3d_med_panelbredde(inp.pts, inp.hoyde_m, inp.dorer,
                                     inp.panel_key, inp.rom_type,
                                     inp.panelbredde_m, azimuth, elevation,
-                                    apninger=apninger, excluded_walls=getattr(inp, "excluded_walls", ()))
+                                    apninger=apninger, excluded_walls=getattr(inp, "excluded_walls", ()), shared_walls=getattr(inp,"shared_walls",()))
 
 
 def lag_tegningsinfo(inp: Any, result: dict, ttype: str) -> dict:

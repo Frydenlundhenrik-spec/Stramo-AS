@@ -44,25 +44,25 @@ def check():
     project=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
     assert {match[1] for match in freezer_shared_walls(project['rooms'])}=={3,4}
     assert np.allclose(wall_outer_face_span(shapes[0],0,.1),(-.1,4.01))
-    assert np.allclose(wall_outer_face_span(shapes[0],0,.1,[1]),(-.1,3.91))
-    assert np.allclose(wall_outer_face_span(shapes[0],0,.1,[1,3]),(0,3.91))
+    assert np.allclose(wall_outer_face_span(shapes[0],0,.1,[1]),(-.1,4.01))
+    assert np.allclose(wall_outer_face_span(shapes[0],0,.1,[1,3]),(-.1,4.01))
     settings=ifcopenshell.geom.settings();settings.set(settings.USE_WORLD_COORDS,True)
     all_walls=[]
     summary=[]
     for room in project['rooms']:
         inp=world_input(room);thickness=PANEL_DB[inp.panel_key]['t']/1000
         result=beregn_prosjekt(inp)
-        layout=wall_panel_layout(inp.pts,1100,thickness,inp.excluded_walls)
+        layout=wall_panel_layout(inp.pts,1100,thickness,inp.excluded_walls,inp.shared_walls)
         cuts=result['df_kapp'].drop_duplicates('Elementnavn')
         for panel in layout:
             row=cuts[cuts.Elementnavn==panel['name']].iloc[0]
             assert int(row.Bredde_mm)==panel['width_mm']
         for i in range(len(inp.pts)):
             if i not in inp.excluded_walls:
-                lo,hi=wall_span(inp.pts,i,thickness,inp.excluded_walls)
+                lo,hi=wall_span(inp.pts,i,thickness,inp.excluded_walls,inp.shared_walls)
                 assert sum(p['width_mm'] for p in layout if p['wall']==i)==round((hi-lo)*1000)
         model=ifcopenshell.file.from_string(gen_ifc(inp.pts,inp.hoyde_m,inp.navn,inp.panel_key,
-            inp.dorer,inp.rom_type,inp.panelbredde_m,excluded_walls=inp.excluded_walls).decode())
+            inp.dorer,inp.rom_type,inp.panelbredde_m,excluded_walls=inp.excluded_walls,shared_walls=inp.shared_walls).decode())
         assert len(model.by_type('IfcDoor'))==2
         def opening_area(index):
             return sum(DOR_DB[d[0]]['bw']*DOR_DB[d[0]]['bh']/1e6*d[1]
@@ -72,7 +72,7 @@ def check():
             shape=ifcopenshell.geom.create_shape(settings,wall)
             vertices=np.array(shape.geometry.verts).reshape(-1,3)
             footprint=MultiPoint(vertices[:,:2]).convex_hull
-            expected=Polygon(wall_polygon(inp.pts,index,thickness,inp.excluded_walls))
+            expected=Polygon(wall_polygon(inp.pts,index,thickness,inp.excluded_walls,inp.shared_walls))
             assert footprint.symmetric_difference(expected).area<1e-8
             assert np.isclose(ifcopenshell.util.shape.get_volume(shape.geometry),
                               expected.area*inp.hoyde_m-opening_area(index)*thickness)
@@ -82,17 +82,17 @@ def check():
             if trace.name.startswith('Vegg ') and '– panel' in trace.name:
                 i=int(trace.name.split()[1])-1
                 actual=MultiPoint(np.column_stack([trace.x,trace.y])).convex_hull
-                assert actual.symmetric_difference(Polygon(wall_polygon(inp.pts,i,thickness,inp.excluded_walls))).area<1e-8
+                assert actual.symmetric_difference(Polygon(wall_polygon(inp.pts,i,thickness,inp.excluded_walls,inp.shared_walls))).area<1e-8
                 direction=np.asarray(inp.pts[(i+1)%len(inp.pts)])-inp.pts[i]
                 direction/=np.linalg.norm(direction)
                 projected=np.column_stack([np.column_stack([trace.x,trace.y])@direction,trace.z])
                 triangles=projected[np.column_stack([trace.i,trace.j,trace.k])]
                 a=triangles[:,1]-triangles[:,0];b=triangles[:,2]-triangles[:,0]
                 area=np.abs(a[:,0]*b[:,1]-a[:,1]*b[:,0]).sum()/2
-                lo,hi=wall_span(inp.pts,i,thickness,inp.excluded_walls)
+                lo,hi=wall_span(inp.pts,i,thickness,inp.excluded_walls,inp.shared_walls)
                 assert np.isclose(area,2*((hi-lo)*inp.hoyde_m-opening_area(i)))
         summary.append({'room':inp.navn,'wall_panels':len(layout),'physical_wall_lengths_mm':[
-            round((wall_span(inp.pts,i,thickness,inp.excluded_walls)[1]-wall_span(inp.pts,i,thickness,inp.excluded_walls)[0])*1000)
+            round((wall_span(inp.pts,i,thickness,inp.excluded_walls,inp.shared_walls)[1]-wall_span(inp.pts,i,thickness,inp.excluded_walls,inp.shared_walls)[0])*1000)
             for i in range(len(inp.pts)) if i not in inp.excluded_walls]})
     assert abs(sum(w.area for w in all_walls)-unary_union(all_walls).area)<1e-8
     print('PASS: Tasty plan/3D/IFC footprints identical, zero cross-room wall overlaps, four door openings cut through actual meshes/IFC, cut widths agree')

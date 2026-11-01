@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon, LineString
 from shapely.ops import unary_union
-from construction import roof_outline, wall_span
+from construction import roof_outline, floor_outline, wall_span
 from database import PANEL_DB
 from drawing_2d import wall_panel_polygon, _panel_to_local, _edge_kind, _draw_one_panel
 from drawing_3d import _polygon_triangles, tegn_3d_med_panelbredde
@@ -40,8 +40,18 @@ for outline in (l_shape,u_shape,pentagon,collinear):
                 assert np.allclose(np.sum(edges*np.roll(edges,-1,axis=0),axis=1),0,atol=1e-8)
             assert Polygon(panel).is_valid
             omitted = ((index-1)%len(points),(index+1)%len(points))
-            open_panel = wall_panel_polygon(points,index,0,length,.1,excluded_walls=omitted)
-            assert np.allclose(open_panel[:2],np.asarray(points)[[index,(index+1)%len(points)]])
+            lo,hi = wall_span(points,index,.1,omitted)
+            open_panel = wall_panel_polygon(points,index,lo,hi,.1,excluded_walls=omitted)
+            a,b = np.asarray(points)[[index,(index+1)%len(points)]]
+            direction = (b-a)/np.linalg.norm(b-a)
+            outside = np.asarray(floor_outline(points,.1))[[index,(index+1)%len(points)]]
+            # Free ends, including re-entrant corners, follow the specified
+            # exterior endpoints rather than the now-omitted inner corners.
+            expected = (outside-a) @ direction
+            stations = (open_panel-a) @ direction
+            assert np.isclose(stations.min(),expected.min())
+            assert np.isclose(stations.max(),expected.max())
+            assert Polygon(open_panel).is_valid
 
 rooms = decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 for room in rooms:
@@ -49,7 +59,7 @@ for room in rooms:
     outline_points = roof_outline(inp.pts,PANEL_DB[inp.panel_key]['t']/1000,inp.rom_type)
     outline = Polygon(outline_points)
     fig = tegn_3d_med_panelbredde(inp.pts,inp.hoyde_m,inp.dorer,inp.panel_key,inp.rom_type,
-                                 inp.panelbredde_m,excluded_walls=inp.excluded_walls)
+                                 inp.panelbredde_m,excluded_walls=inp.excluded_walls,shared_walls=inp.shared_walls)
     roof_triangles = []
     for trace in fig.data:
         if trace.type == 'mesh3d' and re.match(r'T\d+ ',trace.name or '') and 'tykkelse' not in trace.name:

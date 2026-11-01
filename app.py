@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.10.30-r5")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.01-r1")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -682,7 +682,12 @@ with innhold:
                 st.session_state.pop(f"omit_{saved['id']}",None)
         st.session_state["last_valid_editor"] = current_room
 from dataclasses import replace
-inp = replace(inp, excluded_walls=tuple(current_room["excluded_walls"]))
+from project_file import sync_shared_walls
+sync_shared_walls(st.session_state["project_rooms"])
+current_room["input"]["shared_walls"] = next((r["input"].get("shared_walls", []) for r in st.session_state["project_rooms"] if r["id"] == current_room["id"]), [])
+if st.session_state.get("last_valid_editor"):
+    st.session_state["last_valid_editor"]["input"]["shared_walls"] = current_room["input"]["shared_walls"]
+inp = replace(inp, excluded_walls=tuple(current_room["excluded_walls"]), shared_walls=tuple(current_room["input"]["shared_walls"]))
 result = beregn_prosjekt(inp,pris_override=st.session_state["pris_override"])
 with legg_til_plass:
     add_room_button(current_room)
@@ -926,6 +931,7 @@ with innhold:
                 dorer_full, rom_type, pw_m,
                 apninger=apninger_list if apninger_list else None,
                 excluded_walls=inp.excluded_walls,
+                shared_walls=inp.shared_walls,
             )
             st.download_button(
                 "Last ned IFC", ifc_3d,

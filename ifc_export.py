@@ -46,6 +46,7 @@ def gen_ifc(
     panelbredde_m: float = 1.10,
     apninger=None,          # [(wall_idx, offset_m, width_m, height_m, sill_m, label), ...]
     excluded_walls=(),
+    shared_walls=(),
 ) -> bytes:
     """
     IFC2X3-eksport med korrekte vegger, U-kanal, tak/gulvpaneler og booleanske åpninger.
@@ -208,7 +209,7 @@ def gen_ifc(
         # Profil i lokal XY (2D, X=langs vegg, Y=tykkelse):
         # Y=0 er innvendig flate, Y=-tk er utvendig flate.
         # Hjørnetillegg og fradrag kommer fra den felles veggkonturen.
-        footprint = wall_polygon(pts_a,i,tk,excluded_walls)-p1v
+        footprint = wall_polygon(pts_a,i,tk,excluded_walls,shared_walls)-p1v
         corners_2d = [p2(float(q @ np.array([ca,sa])),float(q @ np.array([-sa,ca])))
                       for q in footprint]
         poly2d = E("IFCPOLYLINE", _refs(corners_2d + [corners_2d[0]]))
@@ -504,7 +505,7 @@ def gen_ifc(
         profile = np.array([[-f,0], [tk+f,0], [tk+f,UC_h], [tk,UC_h],
                             [tk,f], [0,f], [0,UC_h], [-f,UC_h]])
         profile[:, 1] *= -winding  # local Y points down for this outward-facing basis
-        lo,hi=wall_span(pts_a,i,tk,excluded_walls)
+        lo,hi=wall_span(pts_a,i,tk,excluded_walls,shared_walls)
         a=a+seg/length*lo
         channel_shape = extrude(polygon_profile_2d(profile), hi-lo)
         channel_pl = placement(f"#{storey_pl}", float(a[0]), float(a[1]), base if IS_FRYS else 0,

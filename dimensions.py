@@ -26,12 +26,12 @@ def corner_shift(inside, thickness, wall):
 
 
 def exterior_wall(inside, thickness, wall, excluded_walls=()):
-    """Outside measurement endpoints, stopping at free ends beside omitted walls."""
+    """Nominal outside room dimensions stay fixed when a wall is omitted."""
     a = np.asarray(inside[wall], dtype=float)
     direction = np.asarray(inside[(wall+1) % len(inside)]) - a
     direction /= np.linalg.norm(direction)
     inward = polygon_winding(inside) * np.array([-direction[1], direction[0]])
-    lo, hi = wall_outer_face_span(inside, wall, thickness, excluded_walls)
+    lo, hi = wall_outer_face_span(inside, wall, thickness)
     origin = a - inward * thickness
     return origin + direction * lo, origin + direction * hi
 

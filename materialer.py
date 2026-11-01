@@ -36,6 +36,7 @@ def materialliste(
     cut_list: pd.DataFrame | None = None,
     plywood_width_mm: int = 1500,
     plywood_length_mm: int = 3000,
+    shared_walls=(),
 ) -> pd.DataFrame:
     """
     Bygger fullstendig materialliste.
@@ -49,7 +50,7 @@ def materialliste(
 
     if cut_list is None:
         cut_list = lag_kappliste(pts_polygon, round(H*1000), round(pw_m*1000), rom_type,
-                                excluded_walls=tuple(excluded_walls), floor_panel_mm=pan["t"])
+                                excluded_walls=tuple(excluded_walls), floor_panel_mm=pan["t"], shared_walls=tuple(shared_walls))
     ordered = panel_order_rows(cut_list, round(H*1000), round(pw_m*1000))
 
     def ep(key: str, default: float) -> float:
@@ -134,7 +135,7 @@ def materialliste(
         UKAN_M  = 2.5
         from finishing import trim_order
         from construction import wall_span
-        spans = [wall_span(pts_polygon,i,pan['t']/1000,excluded_walls)
+        spans = [wall_span(pts_polygon,i,pan['t']/1000,excluded_walls,shared_walls)
                  for i in range(len(wls)) if i not in excluded_walls]
         stk_uk = trim_order(sum(hi-lo for lo,hi in spans))
         rows.append(dict(
@@ -145,7 +146,7 @@ def materialliste(
         ))
 
     # ── Hjørnebeslag ──────────────────────────────────────────────────────────
-    bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom")
+    bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom", shared_walls=shared_walls)
     # Beslag føres uten pris, også når eldre prosjektfiler har prisoverstyringer.
     rows.append(dict(
         Post="Innv. hjørnebeslag 50×50 mm",
@@ -161,7 +162,7 @@ def materialliste(
     ))
 
     from accessories import CATALOG, accessory_needs, order_quantities
-    needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls)
+    needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls,shared_walls)
     for key, count in order_quantities(needs).items():
         label, unit, default, _ = CATALOG[key]
         rows.append(dict(Post="Tilbehør beregnet", Type=label, Enhet=unit,

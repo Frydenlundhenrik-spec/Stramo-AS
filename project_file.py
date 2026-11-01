@@ -35,7 +35,7 @@ def _form_points(form):
 
 
 def make_room(inp, form, prices, background=None):
-    return dict(id=uuid.uuid4().hex, input=asdict(replace(inp, excluded_walls=())),
+    return dict(id=uuid.uuid4().hex, input=asdict(replace(inp, excluded_walls=(), shared_walls=())),
                 form=copy.deepcopy(form), prices=copy.deepcopy(prices),
                 position_mm=[0,0], excluded_walls=[], background=background)
 
@@ -164,6 +164,8 @@ def validate_room(room):
         raise ValueError("Dupliserte veggvalg.")
     for value in room["excluded_walls"]:
         integer(value,0,len(pts)-1)
+    for value in data.get("shared_walls", ()):
+        integer(value,0,len(pts)-1)
     placement = room.get('placement')
     if placement is not None:
         if not isinstance(placement, dict) or not isinstance(placement.get('target_id'), str):
@@ -219,6 +221,9 @@ def validate_project(project):
         raise ValueError("Utkastets rom-ID stemmer ikke med det aktive rommet. Prosjektet er ikke åpnet.")
     if project.get("active_id") is None and project["draft"]["id"] in ids:
         raise ValueError("Utkastet er et lagret rom, men aktiv rom-ID mangler.")
+    sync_shared_walls(project["rooms"])
+    project["draft"]["input"]["shared_walls"] = next(
+        (r["input"]["shared_walls"] for r in project["rooms"] if r["id"] == project.get("active_id")), [])
     return project
 
 
@@ -304,14 +309,38 @@ def placement_points(room, target, wall, target_wall, from_end=False):
 
 def freezer_shared_walls(rooms):
     """Only propose whole cooler walls fully covered by a retained freezer wall."""
+    return _wall_contacts(rooms, freezer_only=True)
+
+
+def sync_shared_walls(rooms):
+    """Recompute physical contact from current placement; never trust saved hints.
+
+    A removed wall with no neighbour is open and its side panels reach the
+    outside outline. A covered wall instead butts against the retained panel.
+    The derived indices travel with each room so single-room exports agree
+    with the assembled model and order quantities.
+    """
+    for room in rooms:
+        room["input"]["shared_walls"] = []
+    for rid, wall, _, _ in _wall_contacts(rooms):
+        room = next(r for r in rooms if r["id"] == rid)
+        if wall in room["excluded_walls"] and wall not in room["input"]["shared_walls"]:
+            room["input"]["shared_walls"].append(wall)
+
+
+def _wall_contacts(rooms, freezer_only=False):
     matches = []
     for cool in rooms:
-        if cool["input"]["rom_type"] != "Kjølerom":
+        if freezer_only and cool["input"]["rom_type"] != "Kjølerom":
             continue
         for i in range(len(cool["input"]["pts"])):
+            if not freezer_only and i not in cool["excluded_walls"]:
+                continue
             a,b,n = wall_segment(cool,i)
             for freezer in rooms:
-                if freezer["input"]["rom_type"] != "Fryserom":
+                if freezer["id"] == cool["id"]:
+                    continue
+                if freezer_only and freezer["input"]["rom_type"] != "Fryserom":
                     continue
                 if freezer["input"]["hoyde_m"] < cool["input"]["hoyde_m"]:
                     continue
@@ -328,7 +357,7 @@ def freezer_shared_walls(rooms):
                     # Coverage follows the actual square-jointed wall, including omitted neighbours.
                     from construction import wall_outer_face_span
                     thickness = PANEL_DB[freezer["input"]["panel_key"]]["t"]/1000
-                    lo,hi=wall_outer_face_span(world_input(freezer).pts,j,thickness,freezer["excluded_walls"])
+                    lo,hi=wall_outer_face_span(world_input(freezer).pts,j,thickness,freezer["excluded_walls"],freezer["input"].get("shared_walls",()))
                     if min(projections)>=lo-.001 and max(projections)<=hi+.001:
                         matches.append((cool["id"],i,freezer["id"],j))
     return matches

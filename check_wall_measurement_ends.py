@@ -1,4 +1,4 @@
-"""Visible wall/door dimensions must terminate at actual freezer junctions."""
+"""Room dimensions keep their nominal exterior outline at shared junctions."""
 from copy import deepcopy
 from io import BytesIO
 from pathlib import Path
@@ -25,12 +25,12 @@ assert project_name('Tasty Fredrikstad') == 'Tasty Fredrikstad'
 assert project_name('Tasty - BILDETEST') == 'Tasty'
 
 freezer_outline = np.array(floor_outline(freezer.pts, .1))
-assert np.isclose(exterior_wall(cool.pts,.08,2,cool.excluded_walls)[1][0], freezer_outline[:,0].max())
-assert np.isclose(exterior_wall(cool.pts,.08,5,cool.excluded_walls)[0][1], freezer_outline[:,1].min())
-assert np.isclose(np.linalg.norm(np.subtract(*exterior_wall(cool.pts,.08,2,cool.excluded_walls))),6.33)
-assert np.isclose(np.linalg.norm(np.subtract(*exterior_wall(cool.pts,.08,5,cool.excluded_walls))),3.78)
+assert np.isclose(exterior_wall(cool.pts,.08,2,cool.excluded_walls)[1][0], freezer_outline[:,0].max()-.08)
+assert np.isclose(exterior_wall(cool.pts,.08,5,cool.excluded_walls)[0][1], freezer_outline[:,1].min()+.08)
+assert np.isclose(np.linalg.norm(np.subtract(*exterior_wall(cool.pts,.08,2,cool.excluded_walls))),6.41)
+assert np.isclose(np.linalg.norm(np.subtract(*exterior_wall(cool.pts,.08,5,cool.excluded_walls))),3.86)
 
-# Free wall endpoints must remain on the actual panel for rotations and mirrors.
+# Nominal exterior corners stay invariant; shared panels stop at the contact face.
 for turns in range(4):
     for mirrored in (False, True):
         pts = transform_polygon(cool.pts, turns, mirrored)
@@ -46,7 +46,7 @@ for turns in range(4):
 
 with patch('drawing_2d._dim_along_wall') as measure:
     fig = tegn_plantegning(cool,beregn_prosjekt(cool))
-    for wall,label in ((2,'6330 mm'),(5,'3780 mm')):
+    for wall,label in ((2,'6410 mm'),(5,'3860 mm')):
         call = next(c for c in measure.call_args_list if c.args[3] == label)
         a,b = exterior_wall(cool.pts,.08,wall,cool.excluded_walls)
         assert np.allclose(call.args[1],a) and np.allclose(call.args[2],b)
@@ -56,10 +56,10 @@ fig = tegn_plantegning(cool,beregn_prosjekt(cool))
 pdf = figur_som_pdf(fig)
 plt.close(fig)
 text = '\n'.join(p.extract_text() for p in PdfReader(BytesIO(pdf)).pages)
-assert '6330 mm' in text and '3780 mm' in text and 'bildetest' not in text.lower()
+assert '6410 mm' in text and '3860 mm' in text and 'bildetest' not in text.lower()
 assert 'Vegg 1' in text and 'V1' in text  # wall name and physical element ID are different
 for kind in ('kalkulasjon','bestilling','bestilling_tilbehor'):
     text = '\n'.join(p.extract_text() for p in PdfReader(BytesIO(cutting_pdf(rooms,kind))).pages)
     assert 'bildetest' not in text.lower(), kind
 assert not project_materials(rooms).Produkt.str.contains('bildetest').any()
-print('PASS: wall and door endpoints match actual junctions, rotations/mirrors, PDF and clean names')
+print('PASS: invariant outside dimensions, door stations, rotations/mirrors, PDF and clean names')

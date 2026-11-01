@@ -47,6 +47,7 @@ def lag_kappliste(
     apninger: tuple = (),
     excluded_walls: tuple = (),
     floor_panel_mm: int = 100,
+    shared_walls: tuple = (),
 ) -> pd.DataFrame:
     """
     Kappliste for vegg, tak og gulv.
@@ -79,7 +80,7 @@ def lag_kappliste(
                 cuts.append((sill_mm, top_mm))
         return cuts
 
-    for panel in wall_panel_layout(pts,pw_mm,floor_panel_mm/1000,excluded_walls):
+    for panel in wall_panel_layout(pts,pw_mm,floor_panel_mm/1000,excluded_walls,shared_walls):
         cuts = _cuts_for_panel(panel['wall'],panel['start_mm'],panel['width_mm'])
         for typ,b,h,merk in _panel_utsparing_deler(panel['kind'],panel['width_mm'],H_mm,cuts):
             rader.append(dict(Elementnavn=panel['name'], Vegg=f"Vegg {panel['wall']+1}", Type=typ,

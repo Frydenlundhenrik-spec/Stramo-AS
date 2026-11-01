@@ -30,7 +30,7 @@ def check_quantities(room):
         assert np.isclose(panels.loc[panels.Leveringslengde_mm.eq(length), 'Mengde'].sum(), orders.Bestill_m2.sum())
     screw_row = materials.loc[materials.Type.str.startswith('22 mm hvite skruer')].iloc[0]
     raw_screws = fixing_screw_count(inp.pts,inp.hoyde_m,inp.rom_type,
-                                  PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls)
+                                  PANEL_DB[inp.panel_key]['t']/1000,inp.excluded_walls,inp.shared_walls)
     assert screw_row.Mengde == math.ceil(raw_screws/500)
     assert screw_row.Enhet == 'eske à 500'
     assert '22 mm hvite skruer' in result['missing_prices'] and not result['pricing_complete']
@@ -83,7 +83,7 @@ settings.set(settings.USE_WORLD_COORDS,True)
 for room in rooms:
     i=world_input(room)
     model=ifcopenshell.file.from_string(gen_ifc(i.pts,i.hoyde_m,i.navn,i.panel_key,i.dorer,
-        i.rom_type,i.panelbredde_m,excluded_walls=i.excluded_walls).decode())
+        i.rom_type,i.panelbredde_m,excluded_walls=i.excluded_walls,shared_walls=i.shared_walls).decode())
     roof_bounds=[]; floor_bounds=[]
     for product in model.by_type('IfcProduct'):
         if not product.Representation: continue

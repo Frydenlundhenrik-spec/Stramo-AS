@@ -268,7 +268,7 @@ def classify_corners(pts: Sequence[Point]) -> tuple[int, int]:
             n_ut += 1
     return n_inn, n_ut
 
-def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thickness=0.0, inner_height=None, floor_angles=False) -> dict:
+def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thickness=0.0, inner_height=None, floor_angles=False, shared_walls=()) -> dict:
     """Beregner lm og antall 2,5 m-stenger for innvendig/utvendig L-beslag."""
     if H <= 0:
         raise ValueError("Romhøyde må være større enn 0.")
@@ -277,12 +277,14 @@ def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thicknes
     from finishing import trim_cuts
     corners = [i for i in range(len(pts)) if i not in excluded and (i-1)%len(pts) not in excluded]
     n_inn = n_ut = len(corners)
-    runs = [(f"V{i+1} tak",length) for i,length in enumerate(wall_lengths(pts)) if i not in excluded]
+    from construction import wall_finish_segment
+    def runs_for(outside):
+        return [(f"V{i+1} tak", float(np.linalg.norm(np.subtract(*wall_finish_segment(
+                    pts,i,thickness,excluded_walls,shared_walls,outside=outside)))))
+                for i in range(len(pts)) if i not in excluded]
+    runs, outer_runs = runs_for(False), runs_for(True)
     perim = sum(length for _,length in runs)
-    from construction import floor_outline
     inner_height = H if inner_height is None else inner_height
-    outer = floor_outline(pts,thickness) if thickness else pts
-    outer_runs = [(f"V{i+1} tak",length) for i,length in enumerate(wall_lengths(outer)) if i not in excluded]
     floor_runs = [(label.replace("tak","gulv"),length) for label,length in runs] if floor_angles else []
     outer_floor_runs = [(label.replace("tak","gulv"),length) for label,length in outer_runs] if floor_angles else []
     cuts = trim_cuts([(f"H{i+1} vegg",inner_height) for i in corners]+runs+floor_runs)

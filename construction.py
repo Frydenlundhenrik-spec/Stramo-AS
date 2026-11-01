@@ -6,12 +6,13 @@ FLOOR_BOARD = 0.012
 BATTEN_HEIGHT = 0.022
 
 
-def wall_polygon(pts, index, thickness, excluded_walls=()):
+def wall_polygon(pts, index, thickness, excluded_walls=(), shared_walls=()):
     """Wall outside the clear-room polygon; square butt joints at 90 degrees.
 
     The following wall owns a convex corner. At a concave corner the
     preceding wall stops short. Oblique corners retain their mitred joint.
-    Omitted neighbours never extend a free wall end.
+    Free ends reach the unchanged outside outline. A real shared wall stops
+    the end at its contact face instead, avoiding overlapping room panels.
     """
     import numpy as np
     from geometry import polygon_winding
@@ -25,6 +26,14 @@ def wall_polygon(pts, index, thickness, excluded_walls=()):
     ao, bo = a-inward*thickness, b-inward*thickness
     for at_start, neighbour in ((True, (index-1)%n), (False, (index+1)%n)):
         if neighbour in excluded_walls:
+            if neighbour not in shared_walls:
+                corner = outer[index if at_start else (index+1)%n]
+                if at_start:
+                    ai += direction * ((corner-ao) @ direction)
+                    ao = corner
+                else:
+                    bi += direction * ((corner-bo) @ direction)
+                    bo = corner
             continue
         v = (a-p[neighbour]) if at_start else (p[(index+2)%n]-b)
         v /= np.linalg.norm(v)
@@ -44,26 +53,44 @@ def wall_polygon(pts, index, thickness, excluded_walls=()):
     return np.array([ai, bi, bo, ao])
 
 
-def wall_span(pts, index, thickness, excluded_walls=()):
+def wall_span(pts, index, thickness, excluded_walls=(), shared_walls=()):
     import numpy as np
     a, b = np.asarray(pts[index]), np.asarray(pts[(index+1)%len(pts)])
     direction = (b-a)/np.linalg.norm(b-a)
-    distances = (wall_polygon(pts,index,thickness,excluded_walls)-a) @ direction
+    distances = (wall_polygon(pts,index,thickness,excluded_walls,shared_walls)-a) @ direction
     return float(distances.min()), float(distances.max())
 
 
-def wall_outer_face_span(pts, index, thickness, excluded_walls=()):
+def wall_outer_face_span(pts, index, thickness, excluded_walls=(), shared_walls=()):
     """Exterior face coverage includes the end face of the adjoining corner panel."""
     import numpy as np
     a,b=np.asarray(pts[index]),np.asarray(pts[(index+1)%len(pts)])
     direction=(b-a)/np.linalg.norm(b-a)
     outline=np.asarray(floor_outline(pts,thickness))
-    start=a if (index-1)%len(pts) in excluded_walls else outline[index]
-    end=b if (index+1)%len(pts) in excluded_walls else outline[(index+1)%len(pts)]
+    start=a if (index-1)%len(pts) in shared_walls else outline[index]
+    end=b if (index+1)%len(pts) in shared_walls else outline[(index+1)%len(pts)]
     return float((start-a)@direction),float((end-a)@direction)
 
 
-def wall_panel_layout(pts, width_mm, thickness, excluded_walls=()):
+def wall_finish_segment(pts, index, thickness, excluded_walls=(), shared_walls=(), outside=False):
+    """Installed horizontal trim endpoints, also at free/shared wall ends."""
+    import numpy as np
+    from geometry import polygon_winding
+    a, b = np.asarray(pts[index], dtype=float), np.asarray(pts[(index+1)%len(pts)], dtype=float)
+    direction = (b-a)/np.linalg.norm(b-a)
+    if outside:
+        lo, hi = wall_outer_face_span(pts,index,thickness,excluded_walls,shared_walls)
+        origin = a - polygon_winding(pts)*np.array([-direction[1],direction[0]])*thickness
+        return origin+direction*lo, origin+direction*hi
+    outer = floor_outline(pts,thickness)
+    if (index-1)%len(pts) in excluded_walls and (index-1)%len(pts) not in shared_walls:
+        a = a + direction*((np.asarray(outer[index])-a) @ direction)
+    if (index+1)%len(pts) in excluded_walls and (index+1)%len(pts) not in shared_walls:
+        b = b + direction*((np.asarray(outer[(index+1)%len(pts)])-b) @ direction)
+    return a, b
+
+
+def wall_panel_layout(pts, width_mm, thickness, excluded_walls=(), shared_walls=()):
     """One physical panel layout shared by cuts, drawings and 3D seams.
 
     Start/end are measured from the unchanged clear-room corner, so door
@@ -74,7 +101,7 @@ def wall_panel_layout(pts, width_mm, thickness, excluded_walls=()):
         if index in excluded_walls:
             rest = 0
             continue
-        lo, hi = wall_span(pts,index,thickness,excluded_walls)
+        lo, hi = wall_span(pts,index,thickness,excluded_walls,shared_walls)
         cursor, end = round(lo*1000), round(hi*1000)
         while cursor < end:
             from_rest = rest > 0
@@ -88,12 +115,12 @@ def wall_panel_layout(pts, width_mm, thickness, excluded_walls=()):
     return rows
 
 
-def wall_panel_polygon(pts, index, start_m, end_m, thickness, excluded_walls=()):
+def wall_panel_polygon(pts, index, start_m, end_m, thickness, excluded_walls=(), shared_walls=()):
     """Clip the common wall footprint to one panel interval."""
     import numpy as np
     a, b = np.asarray(pts[index]), np.asarray(pts[(index+1)%len(pts)])
     direction = (b-a)/np.linalg.norm(b-a)
-    polygon = list(wall_polygon(pts,index,thickness,excluded_walls))
+    polygon = list(wall_polygon(pts,index,thickness,excluded_walls,shared_walls))
     for bound, sign in ((start_m,1),(end_m,-1)):
         clipped = []
         for u,v in zip(polygon,polygon[1:]+polygon[:1]):
@@ -146,20 +173,20 @@ def roof_outline(pts, thickness, room_type):
     return floor_outline(pts, thickness)
 
 
-def fixing_screw_count(pts, height, room_type, thickness, excluded_walls=()):
+def fixing_screw_count(pts, height, room_type, thickness, excluded_walls=(), shared_walls=()):
     """Count both rows on every installed trim piece, including roof and U-channel."""
     import re
     from geometry import beslag_beregning
     from finishing import trim_cuts
     clear = height - floor_depth(room_type)
     bb = beslag_beregning(pts, height, excluded_walls, thickness, clear,
-                         floor_angles=room_type == "Fryserom")
+                         floor_angles=room_type == "Fryserom", shared_walls=shared_walls)
     pieces = bb["kapp_inn"] + bb["kapp_ut"]
     if room_type != "Fryserom":
         runs = []
         for i in range(len(pts)):
             if i not in excluded_walls:
-                lo, hi = wall_span(pts, i, thickness, excluded_walls)
+                lo, hi = wall_span(pts, i, thickness, excluded_walls,shared_walls)
                 runs.append((f"Vegg {i+1} U-kanal", hi-lo))
         pieces += trim_cuts(runs)
     return sum(screws_per_trim_piece(int(mm)) for row in pieces

@@ -308,7 +308,7 @@ def finishing_ui(rooms):
     trim_totals, board_totals = [], []
     for room in rooms:
         inp = world_input(room)
-        bb = beslag_beregning(inp.pts,inp.hoyde_m,inp.excluded_walls,PANEL_DB[inp.panel_key]["t"]/1000,inp.hoyde_m-floor_depth(inp.rom_type), floor_angles=inp.rom_type=="Fryserom")
+        bb = beslag_beregning(inp.pts,inp.hoyde_m,inp.excluded_walls,PANEL_DB[inp.panel_key]["t"]/1000,inp.hoyde_m-floor_depth(inp.rom_type), floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls)
         name = inp.navn or inp.rom_type
         st.write(f"{name}: innvendig 50×50: {bb['stk_inn']} stenger; utvendig 50×150: {bb['stk_ut']} stenger. Alle stenger er 2500 mm, inkludert 10 % svinn/kapp og avrunding opp.")
         for label,key in (("Innvendig 50×50","kapp_inn"),("Utvendig 50×150","kapp_ut")):
@@ -392,9 +392,9 @@ def assembly_plan(rooms, highlight=None):
         if len(rooms)==1:
             plt.close(fig)
             return stramo_plan(inp.pts,inp.hoyde_m,inp.panelbredde_m,inp.dorer,info,
-                               apninger=inp.apninger,wall_thickness=thickness,excluded_walls=inp.excluded_walls)
+                               apninger=inp.apninger,wall_thickness=thickness,shared_walls=inp.shared_walls,excluded_walls=inp.excluded_walls)
         stramo_plan(inp.pts,inp.hoyde_m,inp.panelbredde_m,inp.dorer,info,
-                    apninger=inp.apninger,wall_thickness=thickness,excluded_walls=inp.excluded_walls,ax=ax,
+                    apninger=inp.apninger,wall_thickness=thickness,shared_walls=inp.shared_walls,excluded_walls=inp.excluded_walls,ax=ax,
                     dimension_obstacles=[p for i,p in enumerate(room_paths) if i!=room_index])
         pts=np.asarray(inp.pts)
         bounds.extend(floor_outline(pts,thickness))
@@ -554,6 +554,8 @@ def assembly_ui():
                         affected.append(cool)
                     st.session_state['pending_wall_controls'] = affected
                     st.rerun()
+    from project_file import sync_shared_walls
+    sync_shared_walls(rooms)
     with drawing:
         fig = assembly_plan(rooms, highlight=highlight)
         st.pyplot(fig)
@@ -598,7 +600,7 @@ def assembly_ui():
         for i,room in enumerate(rooms):
             inp = world_input(room)
             archive.writestr(f"rom-{i+1}.ifc",gen_ifc(inp.pts,inp.hoyde_m,inp.navn,inp.panel_key,
-                inp.dorer,inp.rom_type,inp.panelbredde_m,apninger=inp.apninger,excluded_walls=inp.excluded_walls))
+                inp.dorer,inp.rom_type,inp.panelbredde_m,apninger=inp.apninger,shared_walls=inp.shared_walls,excluded_walls=inp.excluded_walls))
     st.download_button("Last ned IFC-filer per rom (ZIP)",bundle.getvalue(),"rom-ifc.zip","application/zip")
     st.caption("IFC-filene har samme koordinatsystem og inneholder veggene som er valgt i sammenstillingen.")
 

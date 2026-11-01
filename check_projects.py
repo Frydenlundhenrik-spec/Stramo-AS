@@ -11,7 +11,7 @@ import ifcopenshell.geom
 from database import PANEL_DB
 from kalkulasjon import ProjectInput, beregn_prosjekt
 from project_file import (make_room, validate_room, encode_project, decode_project,
-                          world_input, snap_room, freezer_shared_walls, form_points)
+                          world_input, snap_room, freezer_shared_walls, form_points, sync_shared_walls)
 from project_ui import assembly_plan
 from montasje import tegn_3d_modell
 from ifc_export import gen_ifc
@@ -35,6 +35,7 @@ def check():
     cooler["excluded_walls"] = [3]
     for r in rooms:
         validate_room(r)
+    sync_shared_walls(rooms)
     after = beregn_prosjekt(world_input(cooler))
     assert "Vegg 4" not in set(after["df_mat"].Post)
     assert "Dør" not in set(after["df_mat"].Post)
@@ -47,7 +48,7 @@ def check():
     settings.set(settings.USE_WORLD_COORDS,True)
     inp = world_input(cooler)
     model = ifcopenshell.file.from_string(gen_ifc(inp.pts,inp.hoyde_m,inp.navn,inp.panel_key,
-        inp.dorer,inp.rom_type,inp.panelbredde_m,excluded_walls=inp.excluded_walls).decode())
+        inp.dorer,inp.rom_type,inp.panelbredde_m,excluded_walls=inp.excluded_walls,shared_walls=inp.shared_walls).decode())
     assert len(model.by_type("IfcWall"))==3
     assert len(model.by_type("IfcBuildingElementProxy"))==3
     assert not model.by_type("IfcDoor")

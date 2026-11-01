@@ -267,7 +267,7 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
 
 # ══ PLANTEGNING ══════════════════════════════════════════════════════════════
 
-def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_thickness=0.09, excluded_walls=(), ax=None, dimension_obstacles=()):
+def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_thickness=0.09, excluded_walls=(), ax=None, dimension_obstacles=(), shared_walls=()):
     """
     Detaljert plantegning:
     • Vegger med element-oppdeling og nummerering
@@ -301,10 +301,10 @@ def stramo_plan(pts, H, pw_m, dorer, info, bakgrunn=None, apninger=None, wall_th
     WT = wall_thickness
 
     # All views use the same physical panel spans and corner joints.
-    for panel in wall_panel_layout(pts,round(pw_m*1000),WT,excluded_walls):
+    for panel in wall_panel_layout(pts,round(pw_m*1000),WT,excluded_walls,shared_walls):
         i=panel['wall']
         outline=wall_panel_polygon(pts,i,panel['start_mm']/1000,
-            (panel['start_mm']+panel['width_mm'])/1000,WT,excluded_walls)
+            (panel['start_mm']+panel['width_mm'])/1000,WT,excluded_walls,shared_walls)
         ax.add_patch(MplPolygon(outline,closed=True,facecolor=WALL_FILL,
                                 edgecolor='black',hatch='////',linewidth=1.1,zorder=4))
         direction=(pts_a[(i+1)%nn]-pts_a[i])/wls[i]
@@ -684,7 +684,7 @@ def _global_start_el_nr(wls, pw_m, vegg_idx, excluded_walls=()):
     return el_nr, rest_mm
 
 
-def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=None, rom_type="Kjølerom", excluded_walls=(), wall_thickness=.08):
+def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=None, rom_type="Kjølerom", excluded_walls=(), wall_thickness=.08, shared_walls=()):
     """Veggoppstalt per vegg med elementoppdeling, dørmål og høyde-mål."""
     floor_offset = floor_depth(rom_type)
     wls   = wall_lengths(pts)
@@ -697,10 +697,10 @@ def tegn_veggoppstalt(pts, H, pw_m, dorer, info, vegg_idx: int = 0, apninger=Non
     fig, ax = plt.subplots(figsize=(max(10, L*2.8), 7))
     fig.patch.set_facecolor("white"); ax.set_facecolor("white")
 
-    lo,hi=wall_span(pts,vegg_idx,wall_thickness,excluded_walls)
+    lo,hi=wall_span(pts,vegg_idx,wall_thickness,excluded_walls,shared_walls)
     el_positions=[(p['start_mm']/1000,p['width_mm']/1000,p['name'],
                    'hel' if p['kind']=='Hel' else 'kapp')
-                  for p in wall_panel_layout(pts,pw_mm,wall_thickness,excluded_walls)
+                  for p in wall_panel_layout(pts,pw_mm,wall_thickness,excluded_walls,shared_walls)
                   if p['wall']==vegg_idx]
     ax.add_patch(mpatches.Rectangle((lo,0),hi-lo,H,facecolor=WALL_FILL,
                                     edgecolor=WALL_EDGE,linewidth=1.5,zorder=1))
@@ -1199,6 +1199,7 @@ def stramo_produksjonstegninger(
     dorer: list | None = None,
     apninger: list | None = None,
     excluded_walls=(),
+    shared_walls=(),
 ) -> list[plt.Figure]:
     """
     Genererer ett figur-objekt per side med produksjonstegninger.
@@ -1220,7 +1221,7 @@ def stramo_produksjonstegninger(
     gulv_p = generate_roof_floor_panels(floor_outline(pts, PANEL_DB[panel_key]["t"]/1000), pw_mm, prefix="G",  label="Gulv") if is_frys else []
 
     vegg_p=[]
-    for panel in wall_panel_layout(pts,pw_mm,PANEL_DB[panel_key]['t']/1000,excluded_walls):
+    for panel in wall_panel_layout(pts,pw_mm,PANEL_DB[panel_key]['t']/1000,excluded_walls,shared_walls):
         _make_vegg(vegg_p,int(panel['name'][1:]),panel['wall'],panel['width_mm'],
                    round(H*1000),pw_mm,x_start_mm=panel['start_mm'],
                    rest=panel['kind']=='Rest fra forrige')

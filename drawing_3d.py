@@ -176,7 +176,7 @@ def tegn_3d(pts, H, dorer, panel_key, rom_type, azimuth=-55, elevation=28):
 
 
 def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, azimuth=-55, elevation=28,
-                             apninger=None, excluded_walls=()):
+                             apninger=None, excluded_walls=(), shared_walls=()):
     """
     Interaktiv 3D-modell med samme panelmotor som kapplisten.
     Tak-/gulvpanelene klippes mot polygonet, slik at avskåret hjørne vises riktig.
@@ -218,14 +218,14 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
             _add_vertical_faces(fig, pa, wall_base(rom_type,panel_key), finished_floor(rom_type, panel_key), name="Fiberplate tykkelse", color="#d4a96a")
 
     # Vegger
-    layout=wall_panel_layout(pts,round(panelbredde_m*1000),WT,excluded_walls)
+    layout=wall_panel_layout(pts,round(panelbredde_m*1000),WT,excluded_walls,shared_walls)
     for i in range(nn):
         if i in excluded_walls:
             continue
         p1,p2=pts_a[i],pts_a[(i+1)%nn]
         direction=(p2-p1)/np.linalg.norm(p2-p1)
         inward=winding*np.array([-direction[1],direction[0]])
-        footprint=wall_polygon(pts,i,WT,excluded_walls)
+        footprint=wall_polygon(pts,i,WT,excluded_walls,shared_walls)
         distances=(footprint-p1)@direction
         lo,hi=float(distances.min()),float(distances.max())
         holes=[]
@@ -245,7 +245,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         zs=sorted({0.,H,*[max(0.,min(H,z)) for hole in holes for z in hole[2:]]})
         batch=_QuadBatch(f"Vegg {i+1} – panel",_wall_color(i),opacity=.96)
         for left,right in zip(xs,xs[1:]):
-            poly=wall_panel_polygon(pts,i,left,right,WT,excluded_walls)
+            poly=wall_panel_polygon(pts,i,left,right,WT,excluded_walls,shared_walls)
             for bottom,top in zip(zs,zs[1:]):
                 if any(x0<(left+right)/2<x1 and b<(bottom+top)/2<t for x0,x1,b,t in holes):
                     continue
@@ -292,21 +292,24 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         dx_n = (p2 - p1) / (float(np.linalg.norm(p2 - p1)) + 1e-9)
         perp = winding * np.array([-dx_n[1], dx_n[0]])   # innadrettet (CCW polygon)
 
+        from construction import wall_finish_segment
+        inner_a, inner_b = wall_finish_segment(pts,i,WT,excluded_walls,shared_walls)
+        outer_a, outer_b = wall_finish_segment(pts,i,WT,excluded_walls,shared_walls,outside=True)
         # U-kanal (gulv→vegg): U-profil med to oppbrettede sider
         if IS_FRYS:
-            _add_l_flange_run(innv_b,p1,p2,perp,z_knekk=z0,leg_v=INNV_LEG,leg_h=INNV_LEG,vert_up=True,horiz_inn=True)
-            _add_l_flange_run(utv_b,p1-perp*WT,p2-perp*WT,perp,z_knekk=z0,leg_v=UTV_LEG_H,leg_h=UTV_LEG_UT,vert_up=False,horiz_inn=False)
+            _add_l_flange_run(innv_b,inner_a,inner_b,perp,z_knekk=z0,leg_v=INNV_LEG,leg_h=INNV_LEG,vert_up=True,horiz_inn=True)
+            _add_l_flange_run(utv_b,outer_a,outer_b,perp,z_knekk=z0,leg_v=UTV_LEG_H,leg_h=UTV_LEG_UT,vert_up=False,horiz_inn=False)
         else:
             from construction import wall_span
-            lo,hi=wall_span(pts,i,WT,excluded_walls)
+            lo,hi=wall_span(pts,i,WT,excluded_walls,shared_walls)
             _add_u_kanal(ukanal_b,p1+dx_n*lo+perp*CHANNEL_FLANGE,p1+dx_n*hi+perp*CHANNEL_FLANGE,-perp,UKAN_W,UKAN_H,base=0)
 
         # Innv. hjørnebeslag – vinkeljern i innvendig vegg/tak-hjørne
-        _add_l_flange_run(innv_b, p1, p2, perp, z_knekk=z1, leg_v=INNV_LEG, leg_h=INNV_LEG,
+        _add_l_flange_run(innv_b, inner_a, inner_b, perp, z_knekk=z1, leg_v=INNV_LEG, leg_h=INNV_LEG,
                           vert_up=False, horiz_inn=True)
 
         # Utv. hjørnebeslag – fasadeblikk utenpå vegg/tak-hjørne
-        _add_l_flange_run(utv_b, p1, p2, perp, z_knekk=z1, leg_v=UTV_LEG_H, leg_h=UTV_LEG_UT,
+        _add_l_flange_run(utv_b, outer_a, outer_b, perp, z_knekk=z1, leg_v=UTV_LEG_H, leg_h=UTV_LEG_UT,
                           vert_up=True, horiz_inn=False)
 
     # Vertikale hjørnestolper – innv. i vanlige (konvekse) hjørner,
