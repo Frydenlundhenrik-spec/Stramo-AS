@@ -72,10 +72,15 @@ text = '\n'.join(p.extract_text() for p in PdfReader(BytesIO(order_pdf)).pages)
 assert 'Bestillingsliste elementer' in text and 'PIR 80 mm' in text and 'PIR 100 mm' in text
 assert 'Elementliste\n' not in text
 
-# The separate order PDF contains all non-panel products and no element pages.
+# Order lists are followed by profile drawings on separate pages, for the same rooms.
 for selection in (rooms, rooms[:1], rooms[1:]):
     accessory_pdf = PdfReader(BytesIO(cutting_pdf(selection, 'bestilling_tilbehor')))
-    assert len(accessory_pdf.pages) == 1
+    profile_pdf = PdfReader(BytesIO(cutting_pdf(selection, 'beslagprofiler')))
+    assert len(accessory_pdf.pages) == 1 + len(profile_pdf.pages)
+    assert 'Beslagsliste' not in accessory_pdf.pages[0].extract_text()
+    for number, (page, profile) in enumerate(zip(accessory_pdf.pages[1:], profile_pdf.pages), 2):
+        # Content and quantities agree; only the continuous page number changes.
+        assert page.extract_text().replace(f'Side {number}', 'Side N') == profile.extract_text().replace(f'Side {number-1}', 'Side N')
     text = '\n'.join(p.extract_text() for p in accessory_pdf.pages)
     assert 'Bestillingsliste – beslag, dører og tilbehør' in text
     assert all(label in text for label in ('Beslag', 'Dører', 'Tilbehør', '22 mm hvite skruer'))
@@ -95,6 +100,8 @@ app.radio(key='ed_module').set_value('Bestilling').run()
 assert not app.exception, [e.message for e in app.exception]
 assert any(b.key == 'panel_order_pdf' for b in app.get('download_button'))
 assert any(b.key == 'accessory_order_pdf' for b in app.get('download_button'))
+assert any(b.key == 'cutpdf_profiles' for b in app.get('download_button'))
+assert any(e.label == 'Detaljert beslagsliste med profiltegninger' for e in app.expander)
 assert any('Beslag' in d.value.columns for d in app.dataframe)
 doors = next(d.value for d in app.dataframe if 'Dører' in d.value.columns)
 assert len(doors) == 4 and doors.Antall.sum() == 4
@@ -109,10 +116,14 @@ assert frame.iloc[-1]['Bestilling (stk)'] == 35
 assert 'PIR 80 mm' not in frame.Panel.values and 'PIR 100 mm' in frame.Panel.values
 doors = next(d.value for d in app.dataframe if 'Dører' in d.value.columns)
 assert len(doors) == 2 and doors['Dører'].str.startswith('Fryseromsdør').all()
+assert any('Innvendig gulvbeslag 30 × 50' in m.value for m in app.markdown)
+assert not any('U-kanal 80' in m.value for m in app.markdown)
 app.selectbox(key='order_room_choice').set_value(rooms[0]['id']).run()
 assert not app.exception, [e.message for e in app.exception]
 accessories = next(d.value for d in app.dataframe if 'Tilbehør' in d.value.columns)
 assert 'Alarm' not in accessories['Tilbehør'].values
+assert not any('Innvendig gulvbeslag 30 × 50' in m.value for m in app.markdown)
+assert any('U-kanal 80' in m.value for m in app.markdown)
 app.radio(key='ed_module').set_value('Kalkulasjon').run()
 assert not app.exception, [e.message for e in app.exception]
 assert any('Leveringslengde (mm)' in d.value.columns for d in app.dataframe)

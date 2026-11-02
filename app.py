@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r1")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r2")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -945,7 +945,7 @@ with innhold:
 
     elif modul == "Bestilling":
         from purchase_summary import panel_summary_ui
-        from cutlist_pdf import cutting_pdf, material_downloads
+        from cutlist_pdf import cutting_pdf, material_downloads, profile_downloads
         order_rooms = [current_room if r["id"] == current_room["id"] else r
                        for r in st.session_state["project_rooms"]]
         if not any(r["id"] == current_room["id"] for r in order_rooms):
@@ -963,6 +963,7 @@ with innhold:
             cutting_pdf(order_rooms, "bestilling"), "bestillingsliste-elementer.pdf",
             "application/pdf", key="panel_order_pdf")
         material_downloads(order_rooms, include_elements=False)
+        profile_downloads(order_rooms)
 
     elif modul == "Elementer":
         st.subheader("Elementer")

@@ -199,7 +199,7 @@ def cutting_pdf(rooms, kind="alle"):
         section("Kappfordeling – elementer")
         story.append(para("Råelementene er hele bestillingselementer. Elementnumrene viser delene på tegningene. 3 mm sagspor mellom delene; rom, bruksområde og leveringslengde holdes adskilt.",note))
         table(panel_cutting_plan(rooms))
-    if kind in ("alle","beslag","beslagprofiler"):
+    if kind in ("alle","beslag","beslagprofiler","bestilling_tilbehor"):
         from beslag_profiles import profile_rows, profile_cards
         section("Beslagsliste")
         profiles=profile_rows(project_materials(rooms))
@@ -243,10 +243,9 @@ def cutting_pdf(rooms, kind="alle"):
     return out.getvalue()
 
 
-def pdf_downloads(rooms):
+def profile_downloads(rooms):
     import streamlit as st
     if not rooms:return
-    st.subheader("Kapplister som PDF")
     from beslag_profiles import profile_rows, profile_png
     with st.expander("Detaljert beslagsliste med profiltegninger"):
         profiles=profile_rows(project_materials(rooms))
@@ -258,6 +257,13 @@ def pdf_downloads(rooms):
             right.markdown(f'**{r["name"]}**\n\n**{r["qty"]} stk × 2500 mm = {r["lm"]:g} LM**\n\n0,6 mm stål · RAL 9010')
         st.markdown(f'**TOTAL BESTILLING: {sum(r["qty"] for r in profiles)} stk · {sum(r["lm"] for r in profiles):g} LM**')
         st.download_button("Detaljert beslagsliste – PDF",cutting_pdf(rooms,"beslagprofiler"),"beslagsliste-profiler.pdf","application/pdf",key="cutpdf_profiles")
+
+
+def pdf_downloads(rooms):
+    import streamlit as st
+    if not rooms:return
+    st.subheader("Kapplister som PDF")
+    profile_downloads(rooms)
     for kind,label in (("alle","Alle kapplister samlet"),("elementer","Elementkapplister"),("kappfordeling","Kappfordeling elementer"),("finer","Gulvplatekapplister")):
         if kind=="finer" and not any(r["input"]["rom_type"]=="Fryserom" for r in rooms):continue
         st.download_button(label+" – PDF",cutting_pdf(rooms,kind),f"kapplister-{kind}.pdf","application/pdf",key=f"cutpdf_{kind}")
