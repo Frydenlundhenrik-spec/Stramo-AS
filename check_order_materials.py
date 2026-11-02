@@ -116,13 +116,13 @@ assert frame.iloc[-1]['Bestilling (stk)'] == 35
 assert 'PIR 80 mm' not in frame.Panel.values and 'PIR 100 mm' in frame.Panel.values
 doors = next(d.value for d in app.dataframe if 'Dører' in d.value.columns)
 assert len(doors) == 2 and doors['Dører'].str.startswith('Fryseromsdør').all()
-assert any('Innvendig gulvbeslag 30 × 50' in m.value for m in app.markdown)
+assert any('Gulvvinkel fryserom 30 × 50' in m.value for m in app.markdown)
 assert not any('U-kanal 80' in m.value for m in app.markdown)
 app.selectbox(key='order_room_choice').set_value(rooms[0]['id']).run()
 assert not app.exception, [e.message for e in app.exception]
 accessories = next(d.value for d in app.dataframe if 'Tilbehør' in d.value.columns)
 assert 'Alarm' not in accessories['Tilbehør'].values
-assert not any('Innvendig gulvbeslag 30 × 50' in m.value for m in app.markdown)
+assert not any('Gulvvinkel fryserom 30 × 50' in m.value for m in app.markdown)
 assert any('U-kanal 80' in m.value for m in app.markdown)
 app.radio(key='ed_module').set_value('Kalkulasjon').run()
 assert not app.exception, [e.message for e in app.exception]

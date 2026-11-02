@@ -13,8 +13,8 @@ def profile_rows(materials):
             kind, width, name = "inner", 50, "Innvendig vinkel 50 × 50 mm"
         elif r.Produkt.startswith("Utvendig 50×150"):
             kind, width, name = "outer", 150, "Utvendig vinkel 50 × 150 mm"
-        elif r.Produkt.startswith("Innvendig gulvbeslag 30×50"):
-            kind, width, name = "floor", 30, "Innvendig gulvbeslag 30 × 50 mm"
+        elif r.Produkt.startswith("Gulvvinkel fryserom 30×50"):
+            kind, width, name = "floor", 30, "Gulvvinkel fryserom 30 × 50 mm"
         elif r.Produkt.startswith("Åpningsbeslag 50×80×15"):
             kind, width, name = "opening", 80, "Åpningsbeslag 50 × 80 × 15 mm"
         elif r.Produkt.startswith("U-kanal"):
@@ -42,20 +42,19 @@ def profile_png(kind, width):
         ax.text(x, y, "10 mm", fontsize=10, ha="center", va="center", color=ink,
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
     if kind == "floor":
-        # 50 mm against the wall, 30 mm over the finished floor board.
-        # Both returns fold behind the lacquered, room-facing surface.
-        line([-1.2, -1.2, 0, 0, 30, 30, 20], [40, 50, 50, 0, 0, -1.2, -1.2])
-        dimension((-22, 0), (-22, 50), 50)
-        dimension((0, -16), (30, -16), 30, (0, -13))
-        ax.plot([-25, 0], [0, 0], color=ink, lw=.5)
-        ax.plot([-25, 0], [50, 50], color=ink, lw=.5)
+        # 30 mm flange points left, with a straight free edge.
+        # Only the 50 mm wall flange retains its 10 mm return.
+        line([-1.2, -1.2, 0, 0, -30], [40, 50, 50, 0, 0])
+        dimension((-52, 0), (-52, 50), 50)
+        dimension((-30, -16), (0, -16), 30, (0, -13))
+        ax.plot([-55, -30], [0, 0], color=ink, lw=.5)
+        ax.plot([-55, 0], [50, 50], color=ink, lw=.5)
         ax.plot([0, 0], [0, -27], color=ink, lw=.5)
-        ax.plot([30, 30], [0, -27], color=ink, lw=.5)
+        ax.plot([-30, -30], [0, -27], color=ink, lw=.5)
         hem(0, 63)
-        hem(52, -7)
         ax.annotate("RAL 9010\nlakkert side", (0, 25), (63, 47), fontsize=10,
                     ha="center", va="center", arrowprops=dict(arrowstyle="->", color=ink))
-        ax.set_xlim(-55, 115)
+        ax.set_xlim(-85, 115)
     elif kind == "opening":
         # Asymmetric U: 50 mm outside, 80 mm reveal, 15 mm inside.
         line([1.2, 1.2, 0, 0, 80, 80], [40, 50, 50, 0, 0, 15])

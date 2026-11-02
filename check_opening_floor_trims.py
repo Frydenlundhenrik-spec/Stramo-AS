@@ -11,7 +11,7 @@ from kalkulasjon import beregn_prosjekt
 from finishing import TRIM_PROFILES, opening_trim_runs
 from construction import fixing_screw_count, wall_base, finished_floor
 from cutlist_pdf import project_materials, cutting_pdf
-from beslag_profiles import profile_rows
+from beslag_profiles import profile_rows, profile_png
 from drawing_3d import tegn_3d_med_panelbredde
 from transport import packages
 
@@ -30,9 +30,23 @@ assert math.isclose(omitted['lm_gulv_tot'],5.6)  # exposed ends extend to the un
 assert math.isclose(wall_base('Fryserom', freezer.panel_key),.122)
 assert math.isclose(finished_floor('Fryserom', freezer.panel_key),.134)
 fig = tegn_3d_med_panelbredde(freezer.pts,2.4,[],freezer.panel_key,freezer.rom_type,1.1)
-angle = next(trace for trace in fig.data if trace.name.startswith('Innv. gulvbeslag'))
+angle = next(trace for trace in fig.data if trace.name.startswith('Gulvvinkel fryserom'))
 assert np.allclose([min(angle.z),max(angle.z)],[.134,.184])
-assert any(math.isclose(v,.03) for v in angle.y)
+assert math.isclose(min(angle.y),-.03)
+
+# The profile drawing has a left-facing 30 mm flange with no return at its tip.
+from unittest.mock import patch
+import matplotlib.pyplot as plt
+profile_png.cache_clear()
+with patch('matplotlib.pyplot.close'):
+    profile_png('floor',30)
+    profile_figure = plt.gcf()
+    ax = profile_figure.axes[0]
+    outline = ax.lines[0].get_xydata()
+    assert np.allclose(outline[-2:],[(0,0),(-30,0)])
+    assert max(outline[:,0]) == 0
+    assert sum(t.get_text()=='10 mm' for t in ax.texts) == 1
+plt.close(profile_figure)
 
 # 1000 x 1855 opening: two jambs, sill and header = 5710 mm, three 2500 mm bars.
 opening = (0,.2,1.0,1.855,.2,'Glassfront')
@@ -65,11 +79,13 @@ for room in rooms:
         assert mat.loc[mat.Produkt.str.startswith(product),'Løpemeter'].sum()==2.5*count
 profiles=profile_rows(project_materials(rooms))
 assert {r['kind'] for r in profiles}=={'inner','outer','channel','floor','opening'}
-for kind in ('beslagprofiler','materialer','alle'):
+assert next(r for r in profiles if r['kind']=='floor')['name']=='Gulvvinkel fryserom 30 × 50 mm'
+for kind in ('beslagprofiler','materialer','alle','bestilling_tilbehor'):
     data=cutting_pdf(rooms,kind)
     text='\n'.join(page.extract_text() for page in PdfReader(io.BytesIO(data)).pages)
     for value in ('30','50','80','15'):
         assert value in text
+    assert 'Gulvvinkel fryserom' in text and 'Innvendig gulvbeslag' not in text
     Path(f'output/pdf/kontroll-nye-beslag-{kind}.pdf').write_bytes(data)
 colli=packages(rooms)
 assert colli.Innhold.str.contains('30×50').any()

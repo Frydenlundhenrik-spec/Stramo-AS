@@ -282,7 +282,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
     # flens – ellers blir det fort 40+ ekstra traces å laste i nettleseren.
     ukanal_b = _QuadBatch(f"U-kanal {round(WT*1000)} mm", "#315b7d", showlegend=True)
     innv_b   = _QuadBatch("Innv. hjørnebeslag 50×50", "#1f77b4", showlegend=True)
-    floor_b  = _QuadBatch("Innv. gulvbeslag 30×50 (50 mot vegg)", "#1f77b4", showlegend=True)
+    floor_b  = _QuadBatch("Gulvvinkel fryserom 30×50 (50 mot vegg)", "#1f77b4", showlegend=True)
     utv_b    = _QuadBatch("Utv. hjørnebeslag 50×150", "#e67e22", showlegend=True)
 
     for i in range(nn):
@@ -297,7 +297,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         outer_a, outer_b = wall_finish_segment(pts,i,WT,excluded_walls,shared_walls,outside=True)
         # U-kanal (gulv→vegg): U-profil med to oppbrettede sider
         if IS_FRYS:
-            _add_l_flange_run(floor_b,inner_a,inner_b,perp,z_knekk=finished_floor(rom_type,panel_key),leg_v=.050,leg_h=.030,vert_up=True,horiz_inn=True,gap=0)
+            _add_l_flange_run(floor_b,inner_a,inner_b,perp,z_knekk=finished_floor(rom_type,panel_key),leg_v=.050,leg_h=.030,vert_up=True,horiz_inn=False,gap=0)
             _add_l_flange_run(utv_b,outer_a,outer_b,perp,z_knekk=z0,leg_v=UTV_LEG_H,leg_h=UTV_LEG_UT,vert_up=False,horiz_inn=False)
         else:
             from construction import wall_span

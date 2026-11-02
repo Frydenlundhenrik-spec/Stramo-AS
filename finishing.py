@@ -9,7 +9,7 @@ from panel_engine import clip_polygon_between_x, polygon_area
 TRIM_PROFILES = (
     ("Innvendig 50×50 mm", "Innv. hjørnebeslag 50×50 mm", "inn"),
     ("Utvendig 50×150 mm", "Utv. hjørnebeslag 50×150 mm", "ut"),
-    ("Innvendig gulvbeslag 30×50 mm", "Innv. gulvbeslag 30×50 mm", "gulv"),
+    ("Gulvvinkel fryserom 30×50 mm", "Gulvvinkel fryserom 30×50 mm", "gulv"),
     ("Åpningsbeslag 50×80×15 mm", "Åpningsbeslag 50×80×15 mm", "apning"),
 )
 
