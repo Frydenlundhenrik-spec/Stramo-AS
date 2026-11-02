@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r4")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r5")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -552,28 +552,26 @@ with inndata_kol:
         apninger_list = []   # [(wall_idx, offset_m, width_m, height_m, sill_m, label), ...]
         for ai in range(n_ap):
             st.caption(f"Åpning {ai+1}")
-            ca1, ca2, ca3 = st.columns([2, 1, 1])
+            ap_label = st.text_input("Navn", value=f"Utsparing {ai+1}",
+                                     key=f"ap_lbl{ai}")
+            ca1, ca2 = st.columns(2)
             with ca1:
-                ap_label = st.text_input(f"Navn", value=f"Utsparing {ai+1}",
-                                         key=f"ap_lbl{ai}")
-            with ca2:
                 ap_wall = int(st.number_input("Vegg nr", min_value=1,
                                               max_value=wls_count, value=1, step=1,
                                               key=f"ap_w{ai}")) - 1
-            with ca3:
+            with ca2:
                 ap_sill = st.number_input("Fra gulv (mm)", min_value=0,
                                           max_value=3000, value=100, step=50,
                                           key=f"ap_sill{ai}")
-            cb1, cb2, cb3 = st.columns(3)
+            ap_offset_mm = st.number_input("Avstand fra utvendig hjørne (mm)", min_value=0,
+                                            value=100, step=50,
+                                            key=f"ap_off{ai}",
+                                            help=f"Fra utvendig H{ap_wall+1} langs Vegg {ap_wall+1} til kanten av åpningen.")
+            cb1, cb2 = st.columns(2)
             with cb1:
-                ap_offset_mm = st.number_input("Avstand fra utvendig hjørne (mm)", min_value=0,
-                                                value=100, step=50,
-                                                key=f"ap_off{ai}",
-                                                help=f"Fra utvendig H{ap_wall+1} langs Vegg {ap_wall+1} til kanten av åpningen.")
-            with cb2:
                 ap_w_mm = st.number_input("Bredde (mm)", min_value=100,
                                           value=1000, step=50, key=f"ap_bw{ai}")
-            with cb3:
+            with cb2:
                 ap_h_mm = st.number_input("Høyde (mm)", min_value=100, max_value=3000,
                                           value=1855, step=50, key=f"ap_bh{ai}")
             apninger_list.append((
