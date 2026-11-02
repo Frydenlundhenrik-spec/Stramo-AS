@@ -58,7 +58,7 @@ trims=materials[materials.Gruppe.eq('Beslag')]
 trim_cargo=f[~f.Innhold.str.startswith('PIR')]
 assert set(trim_cargo.Innhold)==set(trims.Produkt)
 assert trim_cargo.Antall.sum()==trims.Stk.sum()==94
-assert f.Vekt_kg.isna().sum()==len(trim_cargo)==3
+assert f.Vekt_kg.isna().sum()==len(trim_cargo)==4  # separate inner floor-angle product
 assert not f.Innhold.str.contains('dør|Gulvplate|skruer|Trykkventil|Terskel',case=False).any()
 manual=deepcopy(rooms)
 for room in manual:

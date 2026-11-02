@@ -2,7 +2,7 @@ from pathlib import Path
 from collections import defaultdict
 import re
 from pypdf import PdfReader
-from finishing import grouped_trim_bars,trim_cuts
+from finishing import grouped_trim_bars,trim_cuts,TRIM_PROFILES
 from project_file import decode_project,world_input
 from kalkulasjon import beregn_prosjekt
 from cutlist_pdf import cutting_pdf,project_materials
@@ -15,10 +15,11 @@ rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())
 rows=[]
 for room in rooms:
     bb=beregn_prosjekt(world_input(room))['beslag']
-    for profile,key in [('50x50','kapp_inn'),('50x150','kapp_ut')]:
+    for profile,_,suffix in TRIM_PROFILES:
+        key=f'kapp_{suffix}'
         rows.extend(dict(Profil=profile,**r) for r in bb[key])
 grouped=grouped_trim_bars(rows)
-for profile in ('50x50','50x150'):
+for profile in {r['Profil'] for r in rows}:
     old=[r for r in rows if r['Profil']==profile];new=[r for r in grouped if r['Profil']==profile]
     full=sum(r['Kapp'].startswith('2500 mm (') and r['Rest_mm']==0 for r in old)
     combined=[r for r in new if r['Kapp_pr_stang']=='2500 mm']
@@ -30,8 +31,8 @@ data=cutting_pdf(rooms,'beslag')
 Path('output/pdf/kontroll-grupperte-beslag.pdf').write_bytes(data)
 pdf=PdfReader('output/pdf/kontroll-grupperte-beslag.pdf')
 text='\n'.join(p.extract_text() for p in pdf.pages)
-assert len(pdf.pages)==1
+assert len(pdf.pages)==2
 assert 'like lengder samlet' not in text and 'Antall stenger' not in text
 assert 'TOTAL BESTILLING' in text and '94 stk' in text and '235 LM' in text
 assert project_materials(rooms).query("Gruppe == 'Elementer'").Stk.sum()==70
-print('PASS: internal trim cuts conserved; detailed cut pages removed; one profile page retains 94 bars and 235 LM')
+print('PASS: internal trim cuts conserved; separate floor profile; 94 bars and 235 LM')

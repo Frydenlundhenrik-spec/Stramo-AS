@@ -122,14 +122,13 @@ def _add_u_kanal(batch: _QuadBatch, p1, p2, perp, width: float, height: float, b
 
 
 def _add_l_flange_run(batch: _QuadBatch, p1, p2, perp, *, z_knekk: float, leg_v: float, leg_h: float,
-                       vert_up: bool, horiz_inn: bool) -> None:
+                       vert_up: bool, horiz_inn: bool, gap: float = 0.005) -> None:
     """
     Vinkeljern (L-profil) langs en rett strekning p1-p2: én vertikal flens og
     én horisontal flens som møtes i et knekk ved z_knekk. `vert_up` styrer om
     den vertikale flensen går opp eller ned fra knekken, `horiz_inn` om den
     horisontale flensen går innover (positiv perp) eller utover.
     """
-    gap = 0.005  # liten avstand fra vegglinja, kun for å unngå z-fighting
     side = 1 if horiz_inn else -1
     p1o, p2o = p1 + perp * gap * side, p2 + perp * gap * side
     z_top = z_knekk + leg_v if vert_up else z_knekk
@@ -283,6 +282,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
     # flens – ellers blir det fort 40+ ekstra traces å laste i nettleseren.
     ukanal_b = _QuadBatch(f"U-kanal {round(WT*1000)} mm", "#315b7d", showlegend=True)
     innv_b   = _QuadBatch("Innv. hjørnebeslag 50×50", "#1f77b4", showlegend=True)
+    floor_b  = _QuadBatch("Innv. gulvbeslag 30×50 (50 mot vegg)", "#1f77b4", showlegend=True)
     utv_b    = _QuadBatch("Utv. hjørnebeslag 50×150", "#e67e22", showlegend=True)
 
     for i in range(nn):
@@ -297,7 +297,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         outer_a, outer_b = wall_finish_segment(pts,i,WT,excluded_walls,shared_walls,outside=True)
         # U-kanal (gulv→vegg): U-profil med to oppbrettede sider
         if IS_FRYS:
-            _add_l_flange_run(innv_b,inner_a,inner_b,perp,z_knekk=z0,leg_v=INNV_LEG,leg_h=INNV_LEG,vert_up=True,horiz_inn=True)
+            _add_l_flange_run(floor_b,inner_a,inner_b,perp,z_knekk=finished_floor(rom_type,panel_key),leg_v=.050,leg_h=.030,vert_up=True,horiz_inn=True,gap=0)
             _add_l_flange_run(utv_b,outer_a,outer_b,perp,z_knekk=z0,leg_v=UTV_LEG_H,leg_h=UTV_LEG_UT,vert_up=False,horiz_inn=False)
         else:
             from construction import wall_span
@@ -332,6 +332,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
 
     ukanal_b.flush(fig)
     innv_b.flush(fig)
+    floor_b.flush(fig)
     utv_b.flush(fig)
 
     # Dører – plassert på riktig vegg med offset
@@ -373,6 +374,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
                 cursor += dw + 0.20
 
     # Åpninger / klassfronter – hvit fyll + cyan ramme
+    opening_b = _QuadBatch("Åpningsbeslag 50×80×15 mm", "#315b7d", showlegend=True)
     if apninger:
         for ap in apninger:
             ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap
@@ -394,6 +396,20 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
                       [s_a[1], e_a[1], e_a[1], s_a[1], s_a[1]],
                       [z_bot, z_bot, z_top, z_top, z_bot],
                       name=f"{ap_lbl} – ramme", color="#00aacc", width=4)
+            from finishing import opening_trim_runs
+            if opening_trim_runs([ap], WT, excluded_walls):
+                outward = winding*np.array([da[1], -da[0]])
+                outer_s, outer_e = s_a+outward*WT, e_a+outward*WT
+                # Reveal and the two unequal flanges, on all four opening edges.
+                for point, outer_point, direction in ((s_a, outer_s, -da), (e_a, outer_e, da)):
+                    opening_b.quad(point, outer_point, z_bot, z_top)
+                    opening_b.quad(point, point+direction*.015, z_bot, z_top)
+                    opening_b.quad(outer_point, outer_point+direction*.050, z_bot, z_top)
+                for z, sign in ((z_bot, -1), (z_top, 1)):
+                    opening_b.quad_horisontal(s_a, e_a, outward, 0, WT, z)
+                    opening_b.quad(s_a, e_a, z, z+sign*.015)
+                    opening_b.quad(outer_s, outer_e, z, z+sign*.050)
+    opening_b.flush(fig)
 
     xs, ys = pts_a[:, 0], pts_a[:, 1]
     xmn, xmx, ymn, ymx = xs.min(), xs.max(), ys.min(), ys.max()

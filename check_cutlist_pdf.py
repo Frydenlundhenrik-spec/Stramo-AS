@@ -21,7 +21,7 @@ for kind in ('alle','elementer','beslag','finer','materialer'):
     reader=PdfReader(BytesIO(data));text='\n'.join(p.extract_text() for p in reader.pages)
     assert ('TOTAL BESTILLING' if kind=='beslag' else 'SUM') in text and len(text)>300
     assert 'like lengder samlet' not in text
-    if kind=='beslag':assert len(reader.pages)==1
+    if kind=='beslag':assert len(reader.pages)==2  # floor angle has its own profile card
     if kind=='finer':
         assert len(reader.pages)==1
         assert 'Gulvplater – totalsummer' in text and '31,5' in text

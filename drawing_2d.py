@@ -867,6 +867,11 @@ def _snitt_konstruksjon(ax, L, H, WT, rom_type, pw_m, dorer,
     inn_y0 = UC + (SPL if IS_FRYS else 0)
     rect(0, inn_y0, L, H-(inn_y0-UC), CWHITE, ec="#aaa", lw=0.4, zo=2)
     rect(-WT, UC+H, L+2*WT, TAK, CPANEL, hatch="////", zo=3)
+    if IS_FRYS:
+        # Inside floor angle rests on the 12 mm board, not beneath the wall.
+        for x, direction in ((0, 1), (L, -1)):
+            ax.plot([x, x, x+direction*.030], [inn_y0+.050, inn_y0, inn_y0],
+                    color=CUKAN, lw=1.5, zorder=6)
 
     n_vegg_el = math.ceil(H / pw_m)
     for pi in range(1, n_vegg_el):

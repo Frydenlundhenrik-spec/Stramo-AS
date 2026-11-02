@@ -37,6 +37,7 @@ def materialliste(
     plywood_width_mm: int = 1500,
     plywood_length_mm: int = 3000,
     shared_walls=(),
+    apninger=(),
 ) -> pd.DataFrame:
     """
     Bygger fullstendig materialliste.
@@ -50,7 +51,7 @@ def materialliste(
 
     if cut_list is None:
         cut_list = lag_kappliste(pts_polygon, round(H*1000), round(pw_m*1000), rom_type,
-                                excluded_walls=tuple(excluded_walls), floor_panel_mm=pan["t"], shared_walls=tuple(shared_walls))
+                                excluded_walls=tuple(excluded_walls), floor_panel_mm=pan["t"], shared_walls=tuple(shared_walls), apninger=tuple(apninger or ()))
     ordered = panel_order_rows(cut_list, round(H*1000), round(pw_m*1000))
 
     def ep(key: str, default: float) -> float:
@@ -146,23 +147,18 @@ def materialliste(
         ))
 
     # ── Hjørnebeslag ──────────────────────────────────────────────────────────
-    bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom", shared_walls=shared_walls)
+    bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom", shared_walls=shared_walls, apninger=apninger)
     # Beslag føres uten pris, også når eldre prosjektfiler har prisoverstyringer.
-    rows.append(dict(
-        Post="Innv. hjørnebeslag 50×50 mm",
-        Type="Innvendig 50×50 mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-        Enhet="stk", Mengde=bb["stk_inn"], **_kr(math.nan, bb["stk_inn"]),
-        NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8,
-    ))
-    rows.append(dict(
-        Post="Utv. hjørnebeslag 50×150 mm",
-        Type="Utvendig 50×150 mm · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-        Enhet="stk", Mengde=bb["stk_ut"], **_kr(math.nan, bb["stk_ut"]),
-        NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8,
-    ))
+    from finishing import TRIM_PROFILES
+    for product, post, key in TRIM_PROFILES:
+        count = bb[f"stk_{key}"]
+        if count:
+            rows.append(dict(Post=post, Type=product+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
+                Enhet="stk", Mengde=count, **_kr(math.nan, count),
+                NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8))
 
     from accessories import CATALOG, accessory_needs, order_quantities
-    needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls,shared_walls)
+    needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls,shared_walls,apninger)
     for key, count in order_quantities(needs).items():
         label, unit, default, _ = CATALOG[key]
         rows.append(dict(Post="Tilbehør beregnet", Type=label, Enhet=unit,

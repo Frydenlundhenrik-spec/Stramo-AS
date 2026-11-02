@@ -5,6 +5,28 @@ import numpy as np
 from panel_engine import clip_polygon_between_x, polygon_area
 
 
+# Product, calculation row and quantity/cut-list suffix. Shared by all exports.
+TRIM_PROFILES = (
+    ("Innvendig 50×50 mm", "Innv. hjørnebeslag 50×50 mm", "inn"),
+    ("Utvendig 50×150 mm", "Utv. hjørnebeslag 50×150 mm", "ut"),
+    ("Innvendig gulvbeslag 30×50 mm", "Innv. gulvbeslag 30×50 mm", "gulv"),
+    ("Åpningsbeslag 50×80×15 mm", "Åpningsbeslag 50×80×15 mm", "apning"),
+)
+
+
+def opening_trim_runs(openings, thickness, excluded_walls=()):
+    """The specified 80 mm profile surrounds all four sides of 1855 mm openings."""
+    if not math.isclose(thickness, .080, abs_tol=1e-6):
+        return []
+    runs = []
+    for number, (wall, offset, width, height, sill, label) in enumerate(openings or (), 1):
+        if wall in excluded_walls or not math.isclose(height, 1.855, abs_tol=1e-6):
+            continue
+        for edge, length in (("venstre", height), ("høyre", height), ("over", width), ("under", width)):
+            runs.append((f"Åpning {number} vegg {wall+1} {edge}", length))
+    return runs
+
+
 def trim_order(net_m):
     """Beslag only: add 10 percent once, then round up to whole 2500 mm bars."""
     return math.ceil(net_m * 1.10 / 2.5 - 1e-10)

@@ -89,15 +89,16 @@ def beregn_prosjekt(
         shared_walls=inp.shared_walls,
         plywood_width_mm=inp.plywood_width_mm,
         plywood_length_mm=inp.plywood_length_mm,
+        apninger=inp.apninger,
     )
     sam    = kappliste_sammendrag(df_kapp)
-    beslag = beslag_beregning(inp.pts, inp.hoyde_m, inp.excluded_walls, panel["t"]/1000, clear_height, floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls)
+    beslag = beslag_beregning(inp.pts, inp.hoyde_m, inp.excluded_walls, panel["t"]/1000, clear_height, floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls, apninger=inp.apninger)
     ordered = panel_order_rows(df_kapp, round(inp.hoyde_m*1000), round(inp.panelbredde_m*1000))
     ant_veggpanel = int(ordered.Vegg.str.startswith("Vegg ").sum())
     missing_prices = df_mat.loc[df_mat.Type.str.contains("PRIS MANGLER", regex=False), "Type"].str.replace(" – PRIS MANGLER", "", regex=False).tolist()
     from accessories import accessory_needs
     needs = accessory_needs(inp.pts, inp.hoyde_m, inp.rom_type, panel["t"]/1000,
-                            dorer_mat, df_kapp, inp.excluded_walls, inp.shared_walls)
+                            dorer_mat, df_kapp, inp.excluded_walls, inp.shared_walls, inp.apninger)
 
     return {
         "ov":           ov,

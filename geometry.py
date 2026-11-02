@@ -268,13 +268,13 @@ def classify_corners(pts: Sequence[Point]) -> tuple[int, int]:
             n_ut += 1
     return n_inn, n_ut
 
-def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thickness=0.0, inner_height=None, floor_angles=False, shared_walls=()) -> dict:
+def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thickness=0.0, inner_height=None, floor_angles=False, shared_walls=(), apninger=()) -> dict:
     """Beregner lm og antall 2,5 m-stenger for innvendig/utvendig L-beslag."""
     if H <= 0:
         raise ValueError("Romhøyde må være større enn 0.")
     STANG_M = 2.5
     excluded = set(excluded_walls)
-    from finishing import trim_cuts
+    from finishing import trim_cuts, opening_trim_runs
     corners = [i for i in range(len(pts)) if i not in excluded and (i-1)%len(pts) not in excluded]
     n_inn = n_ut = len(corners)
     from construction import wall_finish_segment
@@ -287,11 +287,14 @@ def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thicknes
     inner_height = H if inner_height is None else inner_height
     floor_runs = [(label.replace("tak","gulv"),length) for label,length in runs] if floor_angles else []
     outer_floor_runs = [(label.replace("tak","gulv"),length) for label,length in outer_runs] if floor_angles else []
-    cuts = trim_cuts([(f"H{i+1} vegg",inner_height) for i in corners]+runs+floor_runs)
+    cuts = trim_cuts([(f"H{i+1} vegg",inner_height) for i in corners]+runs)
+    opening_runs = opening_trim_runs(apninger, thickness, excluded_walls)
     outer_cuts = trim_cuts([(f"H{i+1} vegg",H) for i in corners]+outer_runs+outer_floor_runs)
     lm_inn_hjorne, lm_ut_hjorne = len(corners)*inner_height, len(corners)*H
     lm_inn_tak, lm_ut_tak = perim, sum(length for _,length in outer_runs)
-    lm_inn_tot, lm_ut_tot = lm_inn_hjorne+lm_inn_tak+sum(v for _,v in floor_runs), lm_ut_hjorne+lm_ut_tak+sum(v for _,v in outer_floor_runs)
+    lm_inn_tot, lm_ut_tot = lm_inn_hjorne+lm_inn_tak, lm_ut_hjorne+lm_ut_tak+sum(v for _,v in outer_floor_runs)
+    lm_gulv = sum(v for _,v in floor_runs)
+    lm_apning = sum(v for _,v in opening_runs)
     from finishing import trim_order
     stk_inn, stk_ut = trim_order(lm_inn_tot),trim_order(lm_ut_tot)
     return dict(
@@ -300,4 +303,6 @@ def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thicknes
         lm_inn_tot=round(lm_inn_tot, 2), stk_inn=stk_inn,
         lm_ut_hjorne=round(lm_ut_hjorne, 2), lm_ut_tak=round(lm_ut_tak, 2),
         lm_ut_tot=round(lm_ut_tot, 2), stk_ut=stk_ut,
+        kapp_gulv=trim_cuts(floor_runs), lm_gulv_tot=round(lm_gulv, 2), stk_gulv=trim_order(lm_gulv),
+        kapp_apning=trim_cuts(opening_runs), lm_apning_tot=round(lm_apning, 2), stk_apning=trim_order(lm_apning),
     )

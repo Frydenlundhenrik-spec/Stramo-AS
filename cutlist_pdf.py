@@ -13,7 +13,7 @@ from kalkulasjon import beregn_prosjekt
 from materialer import materialliste_med_sum
 from database import PANEL_DB
 from construction import fixing_screw_count
-from finishing import plywood_cuts, trim_order, board_count
+from finishing import plywood_cuts, trim_order, board_count, TRIM_PROFILES
 from purchase_summary import with_totals, grouped_panels, grouped_cuts, panel_cutting_plan
 
 
@@ -37,6 +37,8 @@ def project_materials(rooms):
         inp=world_input(room);form=room["form"]
         result=beregn_prosjekt(inp,pris_override=room.get("prices",{}))
         for _,r in result["df_mat"].iterrows():
+            if r.Post in {post for _, post, _ in TRIM_PROFILES}:
+                continue
             if r.Post.startswith(("Panel", "Vegg ","Tak (panel)","Gulv", "Tilbehør beregnet", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
             group="Beslag" if r.Post.startswith("U-kanal") else ("Dører" if r.Post=="Dør" else "Tilbehør")
             product=r.Type.removesuffix(" – PRIS MANGLER")
@@ -46,9 +48,10 @@ def project_materials(rooms):
             rows.append(dict(Gruppe=group,Produkt=product,Stk=None if product=="Varmekabel pr. m" else r.Mengde,
                 Løpemeter=r.Mengde*2.5 if r.Post.startswith("U-kanal") else (r.Mengde if r.Type=="Varmekabel pr. m" else None)))
         bb=result["beslag"]
-        for label,key in (("Innvendig 50×50 mm","kapp_inn"),("Utvendig 50×150 mm","kapp_ut")):
-            net=sum(2500-r["Rest_mm"] for r in bb[key])/1000
-            qty=trim_order(net)
+        for label,post,key in TRIM_PROFILES:
+            qty=bb[f"stk_{key}"]
+            if not qty:
+                continue
             rows.append(dict(Gruppe="Beslag",Produkt=label+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",Stk=qty,Løpemeter=qty*2.5))
         if inp.rom_type=="Fryserom":
             w,l=form.get("plywood_width_mm",1500),form.get("plywood_length_mm",3000)

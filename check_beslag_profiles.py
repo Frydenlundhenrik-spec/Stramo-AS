@@ -14,7 +14,7 @@ from PIL import Image
 
 # Dimension labels are embedded in the profile raster, not repeated as PDF prose.
 original_text,original_annotate=Axes.text,Axes.annotate
-for kind,width in (('inner',50),('outer',150),('channel',80)):
+for kind,width in (('inner',50),('outer',150),('channel',80),('floor',30),('opening',80)):
     labels=[];annotations=[]
     def record_text(self,x,y,label,*args,**kwargs):
         labels.append(str(label))
@@ -25,25 +25,25 @@ for kind,width in (('inner',50),('outer',150),('channel',80)):
     profile_png.cache_clear()
     with patch.object(Axes,'text',record_text),patch.object(Axes,'annotate',record_annotation):
         png=profile_png(kind,width)
-    assert labels.count('10 mm')==2 and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
+    assert labels.count('10 mm')==(1 if kind=='opening' else 2) and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
     assert f'{width} mm' in labels and '50 mm' in labels
     assert Image.open(io.BytesIO(png)).size==(960,500)
 
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 combined=profile_rows(project_materials(rooms))
-assert sum(r['qty'] for r in combined)==94
-assert sum(r['lm'] for r in combined)==235
+assert {r['kind'] for r in combined}=={'inner','outer','floor','channel'}
+assert sum(r['qty'] for r in combined)==94 and sum(r['lm'] for r in combined)==235
 for name,selection in [('prosjekt',rooms),('kjolerom',rooms[:1]),('fryserom',rooms[1:])]:
     rows=profile_rows(project_materials(selection))
     assert all(r['lm']==r['qty']*2.5 for r in rows)
     assert any(r['kind']=='channel' for r in rows)==(name!='fryserom')
     data=cutting_pdf(selection,'beslagprofiler')
     doc=PdfReader(io.BytesIO(data))
-    assert len(doc.pages)==1,(name,len(doc.pages))
-    text=doc.pages[0].extract_text()
+    assert len(doc.pages) <= 2,(name,len(doc.pages))
+    text='\n'.join(page.extract_text() for page in doc.pages)
     for value in ('RAL 9010','0,6 mm','2500 mm','TOTAL BESTILLING','138','Stramo AS','Side 1'):
         assert value in text,(name,value)
-    assert len(doc.pages[0].images)>=len(rows)
+    assert sum(len(page.images) for page in doc.pages)>=len(rows)
     assert 'ombrett' not in text and 'MÅLTEGNINGER OG BESTILLING' not in text
     assert 'løpemeter' not in text and 'LM' in text
     for r in rows:

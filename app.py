@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.01-r1")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r1")
 
 topp = st.container()
 def _bytt_inndatapanel():

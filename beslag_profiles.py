@@ -13,6 +13,10 @@ def profile_rows(materials):
             kind, width, name = "inner", 50, "Innvendig vinkel 50 × 50 mm"
         elif r.Produkt.startswith("Utvendig 50×150"):
             kind, width, name = "outer", 150, "Utvendig vinkel 50 × 150 mm"
+        elif r.Produkt.startswith("Innvendig gulvbeslag 30×50"):
+            kind, width, name = "floor", 30, "Innvendig gulvbeslag 30 × 50 mm"
+        elif r.Produkt.startswith("Åpningsbeslag 50×80×15"):
+            kind, width, name = "opening", 80, "Åpningsbeslag 50 × 80 × 15 mm"
         elif r.Produkt.startswith("U-kanal"):
             kind, width = "channel", int(re.search(r"U-kanal (\d+)", r.Produkt)[1])
             name = f"U-kanal {width} mm"
@@ -29,15 +33,46 @@ def profile_png(kind, width):
     ink = "#18374c"
     def line(xs, ys):
         ax.plot(xs, ys, color=ink, linewidth=2)
-    def dimension(a, b, label):
+    def dimension(a, b, label, label_offset=(0, 0)):
         ax.annotate("", b, a, arrowprops=dict(arrowstyle="<->", color=ink, lw=1.2, shrinkA=0, shrinkB=0))
         x, y = (a[0]+b[0])/2, (a[1]+b[1])/2
-        ax.text(x, y, f"{label} mm", ha="center", va="center", fontsize=12, fontweight="bold",
+        ax.text(x+label_offset[0], y+label_offset[1], f"{label} mm", ha="center", va="center", fontsize=12, fontweight="bold",
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
     def hem(x, y):
         ax.text(x, y, "10 mm", fontsize=10, ha="center", va="center", color=ink,
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
-    if kind == "inner":
+    if kind == "floor":
+        # 50 mm against the wall, 30 mm over the finished floor board.
+        # Both returns fold behind the lacquered, room-facing surface.
+        line([-1.2, -1.2, 0, 0, 30, 30, 20], [40, 50, 50, 0, 0, -1.2, -1.2])
+        dimension((-22, 0), (-22, 50), 50)
+        dimension((0, -16), (30, -16), 30, (0, -13))
+        ax.plot([-25, 0], [0, 0], color=ink, lw=.5)
+        ax.plot([-25, 0], [50, 50], color=ink, lw=.5)
+        ax.plot([0, 0], [0, -27], color=ink, lw=.5)
+        ax.plot([30, 30], [0, -27], color=ink, lw=.5)
+        hem(0, 63)
+        hem(52, -7)
+        ax.annotate("RAL 9010\nlakkert side", (0, 25), (63, 47), fontsize=10,
+                    ha="center", va="center", arrowprops=dict(arrowstyle="->", color=ink))
+        ax.set_xlim(-55, 115)
+    elif kind == "opening":
+        # Asymmetric U: 50 mm outside, 80 mm reveal, 15 mm inside.
+        line([1.2, 1.2, 0, 0, 80, 80], [40, 50, 50, 0, 0, 15])
+        dimension((-22, 0), (-22, 50), 50)
+        dimension((0, -15), (80, -15), 80)
+        dimension((103, 0), (103, 15), 15, (28, 0))
+        for y in (0, 50):
+            ax.plot([-27, 0], [y, y], color=ink, lw=.5)
+        for y in (0, 15):
+            ax.plot([80, 115], [y, y], color=ink, lw=.5)
+        for x in (0, 80):
+            ax.plot([x, x], [0, -20], color=ink, lw=.5)
+        hem(2, 63)
+        ax.annotate("RAL 9010 · lakkert side", (52, 0), (70, -36), fontsize=10,
+                    ha="center", va="center", arrowprops=dict(arrowstyle="->", color=ink))
+        ax.set_xlim(-55, 165)
+    elif kind == "inner":
         # Inside angle: finish on the concave face; returns fold to the back.
         line([10, 0, 0, 50, 50, 51.2, 51.2], [51.2, 51.2, 50, 50, 0, 0, 10])
         dimension((0, 78), (50, 78), 50)
@@ -80,7 +115,7 @@ def profile_png(kind, width):
                     arrowprops=dict(arrowstyle="->", color=ink,
                                     connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
         ax.set_xlim(-36, width+88)
-    ax.set_ylim(-35, 94)
+    ax.set_ylim(-48 if kind == "opening" else -35, 94)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.subplots_adjust(left=.01, right=.99, top=.98, bottom=.02)
@@ -112,6 +147,8 @@ def profile_cards(rows, normal, heading, available_width):
         ]))
         text = [Paragraph(r["name"], title), quantities, Spacer(1,7),
                 Paragraph('0,6 mm stål · RAL 9010', detail)]
+        if r["kind"] == "floor":
+            text.append(Paragraph('50 mm mot vegg · 30 mm mot gulv', detail))
         card = Table([[Image(io.BytesIO(profile_png(r["kind"], r["width"])), width=252, height=252*2.5/4.8), text]],
                      colWidths=[270, available_width-270])
         card.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "MIDDLE"),

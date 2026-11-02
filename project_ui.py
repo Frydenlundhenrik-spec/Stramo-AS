@@ -297,7 +297,7 @@ def project_download(current):
 
 def finishing_ui(rooms):
     from geometry import beslag_beregning
-    from finishing import plywood_cuts, plywood_plan, trim_order, grouped_trim_bars, board_count
+    from finishing import plywood_cuts, plywood_plan, trim_order, grouped_trim_bars, board_count, TRIM_PROFILES
     from construction import floor_depth
     if st.button("Beregn beslag og gulvplate-kappliste",key="calculate_finishing"):
         st.session_state["show_finishing"] = True
@@ -308,10 +308,15 @@ def finishing_ui(rooms):
     trim_totals, board_totals = [], []
     for room in rooms:
         inp = world_input(room)
-        bb = beslag_beregning(inp.pts,inp.hoyde_m,inp.excluded_walls,PANEL_DB[inp.panel_key]["t"]/1000,inp.hoyde_m-floor_depth(inp.rom_type), floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls)
+        bb = beslag_beregning(inp.pts,inp.hoyde_m,inp.excluded_walls,PANEL_DB[inp.panel_key]["t"]/1000,inp.hoyde_m-floor_depth(inp.rom_type), floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls, apninger=inp.apninger)
         name = inp.navn or inp.rom_type
-        st.write(f"{name}: innvendig 50×50: {bb['stk_inn']} stenger; utvendig 50×150: {bb['stk_ut']} stenger. Alle stenger er 2500 mm, inkludert 10 % svinn/kapp og avrunding opp.")
-        for label,key in (("Innvendig 50×50","kapp_inn"),("Utvendig 50×150","kapp_ut")):
+        counts = "; ".join(f"{label.removesuffix(' mm').lower()}: {bb[f'stk_{key}']} stenger"
+                           for label, _, key in TRIM_PROFILES if bb[f"stk_{key}"])
+        st.write(f"{name}: {counts}. Alle stenger er 2500 mm, inkludert 10 % svinn/kapp og avrunding opp.")
+        for label, _, suffix in TRIM_PROFILES:
+            key = f"kapp_{suffix}"
+            if not bb[key]:
+                continue
             trim_rows.extend(dict(Rom=name,Profil=label,**r) for r in bb[key])
             import math
             waste = 10

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import ifcopenshell
 import ifcopenshell.geom
 from geometry import l_polygon, poly_area
-from construction import finished_floor, floor_depth, door_keys, wall_base, floor_outline
+from construction import finished_floor, floor_depth, door_keys, wall_base, floor_outline, wall_span
 from database import DOR_DB, PANEL_DB
 from kalkulasjon import ProjectInput, beregn_prosjekt
 from montasje import tegn_snitt, tegn_taktegning, tegn_3d_modell, tegn_veggoppstaltt
@@ -42,11 +42,14 @@ def run():
                 assert channels.empty == (room == 'Fryserom')
                 if room == 'Kjølerom':
                     assert str(width) in channels.iloc[0].Post
-                    assert channels.iloc[0].Mengde == math.ceil(result['ov']['P']*1.1/2.5-1e-10)
+                    spans=[wall_span(pts,i,width/1000) for i in range(len(pts))]
+                    assert channels.iloc[0].Mengde == math.ceil(sum(hi-lo for lo,hi in spans)*1.1/2.5-1e-10)
                 floor_rows = mat[mat.Post.str.startswith("Gulv")]
-                assert len(floor_rows) >= (2 if room == "Fryserom" else 0)
+                # Insulated panels are now grouped on order dimensions under Panel.
+                assert len(floor_rows) == (1 if room == "Fryserom" else 0)
                 if room == "Fryserom":
-                    assert floor_rows.iloc[0]["Mengde"] >= poly_area(floor_outline(pts,width/1000))-.01
+                    assert floor_rows.iloc[0]["Mengde"] >= poly_area(pts)-.01
+                    assert result['beslag']['stk_gulv'] > 0
                 data = gen_ifc(pts,2.5,"Kontroll",panel,inp.dorer,room,1.1)
                 model = ifcopenshell.file.from_string(data.decode("utf-8"))
                 floors = [s for s in model.by_type("IfcSlab") if __import__('re').match(r'^G\d',s.Name or '')]

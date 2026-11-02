@@ -9,7 +9,7 @@ from project_file import decode_project,world_input
 from purchase_summary import panel_summary,grouped_panels,grouped_cuts,estimated_panel_weight
 from cutlist_pdf import project_materials,cutting_pdf
 from kalkulasjon import beregn_prosjekt
-from finishing import trim_order,plywood_cuts,board_count
+from finishing import trim_order,plywood_cuts,board_count,TRIM_PROFILES
 from geometry import wall_lengths
 from construction import wall_span
 from database import PANEL_DB
@@ -29,12 +29,16 @@ pd.testing.assert_frame_equal(project_materials(rooms),project_materials(old))
 for room in rooms:
     inp=world_input(room);result=beregn_prosjekt(inp);bb=result['beslag']
     mat=project_materials([room]);calc=result['df_mat']
-    for label,key,post in [('Innvendig','kapp_inn','Innv.'),('Utvendig','kapp_ut','Utv.')]:
+    for label,post,suffix in TRIM_PROFILES:
+        key=f'kapp_{suffix}'
+        if not bb[key]:
+            assert not calc.Post.eq(post).any()
+            continue
         net=sum(2500-r['Rest_mm'] for r in bb[key])/1000
         wanted=math.ceil(net*1.1/2.5-1e-10)
         row=mat[mat.Produkt.str.startswith(label)].iloc[0]
         assert row.Stk==wanted and row.Løpemeter==wanted*2.5
-        assert calc[calc.Post.str.startswith(post)].Mengde.sum()==wanted
+        assert calc[calc.Post.eq(post)].Mengde.sum()==wanted
     if inp.rom_type=='Fryserom':
         f=room['form'];width,length=f.get('plywood_width_mm',1500),f.get('plywood_length_mm',3000)
         assert (width,length)==(1500,3000)

@@ -15,12 +15,12 @@ CATALOG = {
 }
 
 
-def accessory_needs(pts, height, room_type, thickness, doors, cut_list, excluded_walls=(), shared_walls=()):
+def accessory_needs(pts, height, room_type, thickness, doors, cut_list, excluded_walls=(), shared_walls=(), apninger=()):
     """Only installed faces count; board area is the clear interior footprint."""
     freezer = room_type == "Fryserom"
     panels = cut_list[cut_list.Elementnavn.str.startswith(("V", "T", "G"))]
     area = float(panels.Areal_m2.sum())
-    needs = dict(skruer_eske=fixing_screw_count(pts, height, room_type, thickness, excluded_walls,shared_walls),
+    needs = dict(skruer_eske=fixing_screw_count(pts, height, room_type, thickness, excluded_walls,shared_walls,apninger),
                  silikon_hvit=area/(5 if freezer else 15))
     if freezer:
         corners = 0
