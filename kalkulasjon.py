@@ -43,7 +43,8 @@ def beregn_prosjekt(
     """Samler alle mengder, kalkulasjoner og nøkkeltall for prosjektet."""
     clear_height = inp.hoyde_m - floor_depth(inp.rom_type)
     validate_polygon(inp.pts)
-    validate_wall_openings(inp.pts, clear_height, inp.dorer, inp.apninger or ())
+    validate_wall_openings(inp.pts, clear_height, inp.dorer, inp.apninger or (),
+                           thickness=PANEL_DB[inp.panel_key]["t"]/1000)
     for door in inp.dorer:
         if door[1] <= 0:
             continue

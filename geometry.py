@@ -179,23 +179,29 @@ def validate_polygon(pts: Sequence[Point]) -> None:
         raise ValueError("Polygonet har null eller negativt areal.")
 
 
-def validate_wall_openings(pts, clear_height, doors, openings=()):
+def validate_wall_openings(pts, clear_height, doors, openings=(), thickness=0.0):
     """Validate opening rectangles in each wall, measured from finished floor.
 
     Legacy two-field doors carry quantities only, so their placement cannot be
     checked. The editor and project files supply the full wall/offset fields.
+    Offsets are stored from the inside corner, but custom openings may extend
+    to the outside corners when the wall thickness is supplied.
     """
     from database import DOR_DB
     lengths = wall_lengths(pts)
     rectangles = []
 
-    def add(wall, offset, width, height, sill, label):
+    def add(wall, offset, width, height, sill, label, exterior=False):
         if not isinstance(wall, int) or isinstance(wall, bool) or not 0 <= wall < len(lengths):
             raise ValueError(f"{label}: Ugyldig veggnummer.")
         if not all(isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
                    for v in (offset, width, height, sill)):
             raise ValueError(f"{label}: Ugyldige mål.")
-        if offset < 0 or width <= 0 or offset+width > lengths[wall]+EPS:
+        lo, hi = 0.0, lengths[wall]
+        if exterior and thickness:
+            from construction import wall_outer_face_span
+            lo, hi = wall_outer_face_span(pts, wall, thickness)
+        if offset < lo-EPS or width <= 0 or offset+width > hi+EPS:
             raise ValueError(f"{label} ligger utenfor veggen.")
         if sill < 0 or height <= 0 or sill+height > clear_height+EPS:
             raise ValueError(f"{label} må ligge mellom ferdig gulv og underkant tak.")
@@ -220,7 +226,7 @@ def validate_wall_openings(pts, clear_height, doors, openings=()):
     for i, opening in enumerate(openings or []):
         if len(opening) != 6:
             raise ValueError("Ugyldig åpning.")
-        add(*opening[:5], f"Åpning {i+1}")
+        add(*opening[:5], f"Åpning {i+1}", exterior=True)
 
 def poly_area_raw(pts: Sequence[Point]) -> float:
     a = np.array(pts, dtype=float)

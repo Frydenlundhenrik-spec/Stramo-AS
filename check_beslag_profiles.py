@@ -25,7 +25,7 @@ for kind,width in (('inner',50),('outer',150),('channel',80),('floor',30),('open
     profile_png.cache_clear()
     with patch.object(Axes,'text',record_text),patch.object(Axes,'annotate',record_annotation):
         png=profile_png(kind,width)
-    assert labels.count('10 mm')==(1 if kind=='opening' else 2) and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
+    assert labels.count('10 mm')==(1 if kind in ('opening','floor') else 2) and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
     assert f'{width} mm' in labels and '50 mm' in labels
     assert Image.open(io.BytesIO(png)).size==(960,500)
 

@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r3")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.02-r4")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -562,20 +562,20 @@ with inndata_kol:
                                               key=f"ap_w{ai}")) - 1
             with ca3:
                 ap_sill = st.number_input("Fra gulv (mm)", min_value=0,
-                                          max_value=3000, value=0, step=50,
+                                          max_value=3000, value=100, step=50,
                                           key=f"ap_sill{ai}")
             cb1, cb2, cb3 = st.columns(3)
             with cb1:
-                ap_offset_mm = st.number_input("Avstand fra utvendig hjørne (mm)", min_value=50,
-                                                max_value=10000, value=300, step=50,
+                ap_offset_mm = st.number_input("Avstand fra utvendig hjørne (mm)", min_value=0,
+                                                value=100, step=50,
                                                 key=f"ap_off{ai}",
                                                 help=f"Fra utvendig H{ap_wall+1} langs Vegg {ap_wall+1} til kanten av åpningen.")
             with cb2:
-                ap_w_mm = st.number_input("Bredde (mm)", min_value=100, max_value=5000,
+                ap_w_mm = st.number_input("Bredde (mm)", min_value=100,
                                           value=1000, step=50, key=f"ap_bw{ai}")
             with cb3:
                 ap_h_mm = st.number_input("Høyde (mm)", min_value=100, max_value=3000,
-                                          value=1800, step=50, key=f"ap_bh{ai}")
+                                          value=1855, step=50, key=f"ap_bh{ai}")
             apninger_list.append((
                 int(ap_wall), float(ap_offset_mm) / 1000.0, float(ap_w_mm) / 1000.0,
                 float(ap_h_mm) / 1000.0, float(ap_sill) / 1000.0,

@@ -247,7 +247,9 @@ def gen_ifc(
         p2v = pts_a[(wall_idx + 1) % nn]
         seg  = p2v - p1v
         L    = float(np.linalg.norm(seg))
-        if L < 1e-6 or offset_m + width_m > L + 0.01:
+        from construction import wall_outer_face_span
+        lo, hi = (0., L) if is_door else wall_outer_face_span(pts_a, wall_idx, tk)
+        if L < 1e-6 or offset_m < lo-1e-6 or offset_m + width_m > hi + 1e-6:
             return None, None
 
         ca, sa = seg[0]/L, seg[1]/L
