@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from pypdf import PdfReader
 from reportlab.lib.pagesizes import A4
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Point, Polygon
 from shapely.ops import unary_union
 
 from dimensions import inside_from_outside
@@ -40,7 +40,23 @@ for pts, span in ((triangle, [1, 0]), (pentagon, [0, 1])):
             rows = cutlist[cutlist["Vegg"] == "Tak"]
             assert list(zip(rows.Elementnavn,rows.Bredde_mm,rows.Høyde_mm)) == [(p.name,p.width_mm,p.span_mm) for p in panels]
             if pts is triangle:
-                assert len(panels) == len(blanks) == 9 and panels[-1].width_mm == 200
+                assert len(blanks) == 9
+                assert [p.name for p in panels] == [f"T{i}" for i in range(1,10)]
+                assert [p.width_mm for p in panels] == [1100] * 8 + [200]
+                back = panels[0]
+                assert (back.name, back.span_mm) == ("T1", 4000)
+                assert Polygon(back.polygon).buffer(1e-8).covers(LineString(exterior[:2]))
+                assert Polygon(panels[-1].polygon).buffer(1e-8).covers(Point(exterior[2]))
+            else:
+                assert panels[0].width_mm == 1100 and panels[-1].width_mm == 300
+                assert Polygon(panels[0].polygon).buffer(1e-8).covers(LineString(exterior[[4,0]]))
+
+# Roofs always start with a full width. Only floors allow an initial remainder.
+rectangle = [(0, 0), (4, 0), (4, 3), (0, 3)]
+for prefix in ("T", "G"):
+    for end, widths in (("start", [700, 1100, 1100, 1100]), ("end", [1100, 1100, 1100, 700])):
+        expected = [1100, 1100, 1100, 700] if prefix == "T" else widths
+        assert [p.width_mm for p in generate_roof_floor_panels(rectangle, 1100, prefix, cut_position=end)] == expected
 
 room = Polygon(triangle)
 info = dict(navn="Skråtak – utskriftskontroll", ttype="Taktegning", pnr="Kontroll",
@@ -59,7 +75,7 @@ for n,page in enumerate(doc.pages):
     text = page.extract_text()
     assert f"Side {n+1} av 2" in text
     if not n:
-        for token in ("Råelement før kapp","9 elementer","0 hele","9 kapp","T9","9000 mm","T01"):
+        for token in ("Råelement før kapp","9 elementer","0 hele","9 kapp","T1","T9 · 200 mm","9000 mm","T01"):
             assert token in text, token
 plt.close("all")
 print("PASS: clipped roofs, rotation and mirror invariance, roof cut list, blanks and A4 PDF")

@@ -76,8 +76,8 @@ def _panel_axes(pts: np.ndarray, prefix: str) -> tuple[np.ndarray, np.ndarray]:
                 candidates = np.flatnonzero(both if both.sum() >= 2 else right | np.roll(right, -1))
                 shortest = min(candidates, key=lambda i: round(float(lengths[i]), 9))
                 span = unit[shortest]
-                # Number strips toward the back wall, including after mirroring.
-                across = winding * np.array([span[1], -span[0]])
+                # Point into the room so T1 starts at the back wall, even after mirroring.
+                across = winding * np.array([-span[1], span[0]])
                 return across, span
     return main_axis_from_longest_wall(pts)
 
@@ -154,13 +154,15 @@ def generate_roof_floor_panels(
     - Panelbredden er samme som veggelementene.
     - Ved skråtak er spennet parallelt med korteste rettvinklede bakvegg.
     - Hvert panel klippes mot rompolygonet, slik at skrå hjørner får riktig kappform.
-    - Kapp kan ligge først eller sist. Start/slutt trenger ikke være like store.
+    - På skråtak legges full elementbredde fra bakveggen og restbredden ved spissen.
     """
     if panel_width_mm <= 0:
         raise ValueError('Elementbredde må være større enn 0')
 
     pts_np = _ordered_points_np(pts)
     x_axis, y_axis = _panel_axes(pts_np, prefix)
+    if prefix == 'T':
+        cut_position = 'end'  # Start with a full roof strip; only the last may be narrower.
     origin = pts_np[0]
     local = world_to_local(pts_np, origin, x_axis, y_axis)
 

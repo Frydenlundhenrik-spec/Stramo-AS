@@ -567,6 +567,16 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
             point = Polygon(poly_w).representative_point()
             cx,cy=point.x,point.y
             narrow=p.width_mm<350
+            if p.blank and narrow and p.span_mm < 350:
+                # A small triangular tip cannot contain its own width label.
+                above = cy >= (ys.min()+ys.max())/2
+                left = cx >= (xs.min()+xs.max())/2
+                ax.annotate(f"{p.name} · {p.width_mm} mm", xy=(cx, cy),
+                            xytext=(-7 if left else 7, 34 if above else -34), textcoords="offset points",
+                            ha="right" if left else "left", va="center", fontsize=8, fontweight="bold",
+                            color=TOTAL_DIM_COL, zorder=5, bbox=dict(fc="white", ec="none", pad=0.7),
+                            arrowprops=dict(arrowstyle="-", color=TOTAL_DIM_COL, lw=.7))
+                continue
             direction,_=main_axis_from_longest_wall(p.polygon)
             angle=math.degrees(math.atan2(direction[1],direction[0])) if narrow else 0
             if angle>90:angle-=180
