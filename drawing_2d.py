@@ -1275,7 +1275,7 @@ def stramo_produksjonstegninger(
     from dataclasses import replace
     grouped = {}; standard_counts = {}; compact = []
     for cat,p,wi,xs in alle:
-        local = _panel_to_local(p.polygon)
+        local = _panel_to_local(p.cut_polygon or p.polygon)
         cuts = _cutouts_for_panel(cat,wi,xs,p.width_mm,p.span_mm)
         standard = len(local)==4 and p.width_mm==pw_mm and "hel" in p.kind.lower() and not cuts
         if standard:
@@ -1318,7 +1318,7 @@ def stramo_produksjonstegninger(
             ax = axes_flat[cell]
             # Wall cut-outs use X across the panel and Y up from its base.
             # Keep that coordinate frame rather than rotating only the outline.
-            local = np.asarray(p.polygon) if cat == "Vegg" else _panel_to_local(p.polygon)
+            local = np.asarray(p.polygon) if cat == "Vegg" else _panel_to_local(p.cut_polygon or p.polygon)
             cuts = _cutouts_for_panel(cat, wi, xs, p.width_mm, p.span_mm)
             _draw_one_panel(ax, local, p, panel_key, num, category=cat, cutouts=cuts)
             ax.set_title(f"  {cat}: {p.name}  –  {standard_counts.get(p.name,1)} stk  [nr. {num}]",

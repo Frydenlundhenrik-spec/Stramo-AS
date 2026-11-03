@@ -8,6 +8,8 @@ import numpy as np
 
 Point = tuple[float, float]
 
+ROOF_REMAINDER_LIMIT_MM = 30
+
 @dataclass(frozen=True)
 class RoofFloorPanel:
     name: str
@@ -18,6 +20,7 @@ class RoofFloorPanel:
     polygon: list[Point]
     note: str
     blank: tuple[Point, ...] = ()  # rectangular envelope before the roof profile cut
+    cut_polygon: list[Point] | None = None  # nominal cut shape when the roof layout distributes a remainder
 
 
 def _signed_area(pts: np.ndarray) -> float:
@@ -155,6 +158,7 @@ def generate_roof_floor_panels(
     - Ved skråtak er spennet parallelt med korteste rettvinklede bakvegg.
     - Hvert panel klippes mot rompolygonet, slik at skrå hjørner får riktig kappform.
     - På skråtak legges full elementbredde fra bakveggen og restbredden ved spissen.
+    - Restbredder under 30 mm fordeles over taket og gir ingen egen bestillingspost.
     """
     if panel_width_mm <= 0:
         raise ValueError('Elementbredde må være større enn 0')
@@ -168,7 +172,22 @@ def generate_roof_floor_panels(
 
     x_min = float(local[:, 0].min())
     x_max = float(local[:, 0].max())
-    total_mm = int(round((x_max - x_min) * 1000))
+    extent_mm = (x_max - x_min) * 1000
+    total_mm = int(round(extent_mm))
+    full_count = total_mm // panel_width_mm
+    # Compare before rounding to whole mm. Discard float noise from rotation.
+    remainder = round(extent_mm - full_count * panel_width_mm, 6)
+    distribute = prefix == 'T' and full_count > 0 and 0 < remainder < ROOF_REMAINDER_LIMIT_MM
+    layout_x_axis = x_axis
+    if distribute:
+        # Clip in nominal material coordinates. Map the resulting strips back
+        # over the full footprint for plan/3D/IFC, anchored at the first wall.
+        total_mm = full_count * panel_width_mm
+        layout_scale = extent_mm / total_mm
+        origin = origin + x_min * x_axis
+        local[:, 0] = (local[:, 0] - x_min) / layout_scale
+        x_min, x_max = 0.0, total_mm / 1000.0
+        layout_x_axis = layout_scale * x_axis
     n = int(math.ceil(total_mm / panel_width_mm))
     rest_mm = total_mm % panel_width_mm
 
@@ -188,12 +207,12 @@ def generate_roof_floor_panels(
         clipped_local = clip_polygon_between_x(local, x0, x1)
         if len(clipped_local) < 3:
             continue
-        world = local_to_world(clipped_local, origin, x_axis, y_axis)
+        world = local_to_world(clipped_local, origin, layout_x_axis, y_axis)
         ymin, ymax = clipped_local[:, 1].min(), clipped_local[:, 1].max()
         blank = ()
         if prefix == "T" and (x1 - x0) * (ymax - ymin) - polygon_area(clipped_local) > 1e-8:
             blank = tuple(local_to_world([(x0, ymin), (x1, ymin), (x1, ymax), (x0, ymax)],
-                                         origin, x_axis, y_axis))
+                                         origin, layout_x_axis, y_axis))
         span_mm = int(round((clipped_local[:, 1].max() - clipped_local[:, 1].min()) * 1000))
         area_m2 = round(polygon_area(clipped_local), 3)
         if width_mm == panel_width_mm and abs(area_m2-width_mm*span_mm/1e6)<.002:
@@ -222,5 +241,6 @@ def generate_roof_floor_panels(
             polygon=world,
             note=note,
             blank=blank,
+            cut_polygon=local_to_world(clipped_local, origin, x_axis, y_axis) if distribute else None,
         ))
     return panels
