@@ -5,7 +5,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 
-DEFAULT_ORIGIN = "https://stramo-flyt-time-avvik.candid-pine-4284.chatgpt.site"
+DEFAULT_ORIGIN = "https://stramo-time-avvik-ks.candid-pine-4284.chatgpt.site"
 
 
 class LoginError(Exception):
