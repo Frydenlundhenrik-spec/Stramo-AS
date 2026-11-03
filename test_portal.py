@@ -31,6 +31,21 @@ class PortalTests(unittest.TestCase):
 
     def text(self, app):return ' '.join(str(x.value) for x in list(app.title)+list(app.subheader)+list(app.markdown))
 
+    def test_each_session_lands_on_its_own_profile(self):
+        names={'h-session':'Henrik Frydenlund','m-session':'Morten Strand'}
+        def api(action,payload=None,token=None):
+            if action=='session':
+                return {'name':names[token], 'email':'test@example.invalid', 'expires_at':(time.time()+3600)*1000}
+            return self.api(action,payload,token)
+        with patch.object(portal_client,'request',side_effect=api):
+            app=AppTest.from_string(SCRIPT)
+            for token,name in names.items():
+                app.session_state['portal_token']=token
+                app.run()
+                self.assertFalse(app.exception)
+                self.assertEqual([h.value for h in app.title],[name])
+                self.assertIn('Timeregistrering',self.text(app))
+
     def test_public_page_and_direct_destination_do_not_expose_apps(self):
         with patch.object(portal_client,'request',side_effect=self.api):
             app=AppTest.from_string(SCRIPT).run()
@@ -44,7 +59,7 @@ class PortalTests(unittest.TestCase):
             app.text_input(key='login_email').set_value('test@example.invalid')
             app.text_input(key='login_password').set_value('Wrong test password')
             app.text_input(key='login_code').set_value('123456')
-            app.button[-2].click().run()
+            next(b for b in app.button if b.label=='Logg inn').click().run()
             self.assertNotIn('PROTECTED ROOM APP',self.text(app))
 
     def test_enrollment_requires_phone_then_shows_both_apps(self):
@@ -56,14 +71,14 @@ class PortalTests(unittest.TestCase):
             app.text_input(key='activation_invite').set_value('private-test-invite')
             app.text_input(key='activation_password').set_value('Long test password')
             app.text_input(key='activation_repeat').set_value('Long test password')
-            app.button[-1].click().run()
+            next(b for b in app.button if b.label=='Fortsett til telefonen').click().run()
             self.assertNotIn('Timeregistrering',self.text(app))
             self.assertIn('portal_enrollment',app.session_state)
             app.text_input(key='activation_code').set_value('000000')
-            app.button[1].click().run()
+            next(b for b in app.button if b.label=='Bekreft og logg inn').click().run()
             self.assertNotIn('Timeregistrering',self.text(app))
             app.text_input(key='activation_code').set_value('123456')
-            app.button[1].click().run()
+            next(b for b in app.button if b.label=='Bekreft og logg inn').click().run()
             self.assertFalse(app.exception,[e.message for e in app.exception])
             self.assertIn('Timeregistrering',self.text(app))
             self.assertIn('Kalkulasjon',self.text(app))

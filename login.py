@@ -149,7 +149,7 @@ def require_login():
     if st.session_state.get('portal_destination') == 'cold':
         with st.sidebar.container(key='portal_account'):
             st.caption('Innlogget som ' + user['name'])
-            if st.button('← Mine apper', key='portal_home', use_container_width=True):
+            if st.button('← Min profil', key='portal_home', use_container_width=True):
                 st.session_state.pop('portal_destination', None)
                 st.rerun()
             if st.button('Logg ut', key='portal_logout', use_container_width=True):
@@ -173,7 +173,9 @@ def require_login():
       </style>''', unsafe_allow_html=True)
     with st.container(key='portal_chooser'):
         _logo()
-        st.title('Velkommen, ' + user['name'].split()[0], anchor=False)
+        st.caption('MIN PROFIL')
+        st.title(user['name'], anchor=False)
+        st.caption('Velg appen du vil åpne.')
         with st.container(border=True, key='portal_cold_card'):
             st.subheader('Kalkulasjon', anchor=False)
             if st.button('Åpne kalkulasjon', key='open_cold', use_container_width=True, type='primary'):
