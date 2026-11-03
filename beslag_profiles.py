@@ -2,6 +2,7 @@
 import io
 import re
 from functools import lru_cache
+from finishing import GLASS_FRONT_TRIM
 
 
 def profile_rows(materials):
@@ -15,8 +16,8 @@ def profile_rows(materials):
             kind, width, name = "outer", 150, "Utvendig vinkel 50 × 150 mm"
         elif r.Produkt.startswith("Gulvvinkel fryserom 30×50"):
             kind, width, name = "floor", 30, "Gulvvinkel fryserom 30 × 50 mm"
-        elif r.Produkt.startswith("Åpningsbeslag 50×80×15"):
-            kind, width, name = "opening", 80, "Åpningsbeslag 50 × 80 × 15 mm"
+        elif r.Produkt.startswith(GLASS_FRONT_TRIM):
+            kind, width, name = "opening", 80, GLASS_FRONT_TRIM.replace("×", " × ")
         elif r.Produkt.startswith("U-kanal"):
             kind, width = "channel", int(re.search(r"U-kanal (\d+)", r.Produkt)[1])
             name = f"U-kanal {width} mm"
@@ -89,31 +90,40 @@ def profile_png(kind, width):
                     arrowprops=dict(arrowstyle="->", color=ink, connectionstyle="angle,angleA=0,angleB=90,rad=3"))
         ax.set_xlim(-65, 110)
     else:
+        side_gap = 34 if kind == "channel" else 22
         if kind == "channel":
             line([2, 2, 0, 0, width, width, width-2, width-2],
                  [40, 50, 50, 0, 0, 50, 50, 40])
-            dimension((-14, 0), (-14, 50), 50)
+            dimension((-side_gap, 0), (-side_gap, 50), 50)
+            for y in (0, 50):
+                ax.plot([-side_gap-4, 0], [y, y], color=ink, lw=.5)
             line([0, 8, 8], [8, 8, 0])
             ax.text(11, 12, "90°", fontsize=9)
         else:
             line([10, 0, 0, width, width, width-2, width-2],
                  [2, 2, 0, 0, 50, 50, 40])
         dimension((0, -14), (width, -14), width)
-        dimension((width+22, 0), (width+22, 50), 50)
+        dimension((width+side_gap, 0), (width+side_gap, 50), 50)
         line([width-8, width-8, width], [0, 8, 8])
         ax.text(width-27, 14, "90°", fontsize=9)
         hem(width-10, 61)
         hem(10, 61 if kind == "channel" else 17)
         ax.plot([0,0],[0,-19],color=ink,lw=.5)
         ax.plot([width,width],[0,-19],color=ink,lw=.5)
-        ax.plot([width,width+26],[0,0],color=ink,lw=.5)
-        ax.plot([width,width+26],[50,50],color=ink,lw=.5)
-        ax.text(width+52, 76, "RAL 9010\nlakkert side", fontsize=10,
-                ha="center", va="center")
-        ax.annotate("", (width, 32), (width+52, 65),
-                    arrowprops=dict(arrowstyle="->", color=ink,
-                                    connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
-        ax.set_xlim(-36, width+88)
+        for y in (0, 50):
+            ax.plot([width, width+side_gap+4], [y, y], color=ink, lw=.5)
+        if kind == "channel":
+            ax.annotate("RAL 9010\nlakkert side", (width, 42), (width+21, 78),
+                        fontsize=10, ha="left", va="center",
+                        arrowprops=dict(arrowstyle="->", color=ink))
+            ax.set_xlim(-62, width+88)
+        else:
+            ax.text(width+52, 76, "RAL 9010\nlakkert side", fontsize=10,
+                    ha="center", va="center")
+            ax.annotate("", (width, 32), (width+52, 65),
+                        arrowprops=dict(arrowstyle="->", color=ink,
+                                        connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
+            ax.set_xlim(-36, width+88)
     ax.set_ylim(-48 if kind == "opening" else -35, 94)
     ax.set_aspect("equal")
     ax.axis("off")

@@ -62,7 +62,7 @@ plain = fixing_screw_count(cooler.pts,2.4,'Kjølerom',.08)
 # Jambs: 12 each; sill and header: 8 each; 40 additional screws.
 assert result['accessory_needs']['skruer_eske']==plain+40
 fig = tegn_3d_med_panelbredde(cooler.pts,2.4,[],cooler.panel_key,cooler.rom_type,1.1,apninger=[opening])
-surround = next(trace for trace in fig.data if trace.name=='Åpningsbeslag 50×80×15 mm')
+surround = next(trace for trace in fig.data if trace.name=='Beslag glassfront 50×80×15 mm')
 assert len(surround.x)==48  # four sides, three faces on each
 assert np.allclose([min(surround.y),max(surround.y)],[-.08,0])
 
@@ -86,6 +86,7 @@ for kind in ('beslagprofiler','materialer','alle','bestilling_tilbehor'):
     for value in ('30','50','80','15'):
         assert value in text
     assert 'Gulvvinkel fryserom' in text and 'Innvendig gulvbeslag' not in text
+    assert 'Beslag glassfront' in text
     Path(f'output/pdf/kontroll-nye-beslag-{kind}.pdf').write_bytes(data)
 colli=packages(rooms)
 assert colli.Innhold.str.contains('30×50').any()

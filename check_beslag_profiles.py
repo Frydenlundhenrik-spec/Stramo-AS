@@ -14,11 +14,14 @@ from PIL import Image
 
 # Dimension labels are embedded in the profile raster, not repeated as PDF prose.
 original_text,original_annotate=Axes.text,Axes.annotate
-for kind,width in (('inner',50),('outer',150),('channel',80),('floor',30),('opening',80)):
-    labels=[];annotations=[]
+for kind,width in (('inner',50),('outer',150),('channel',80),('channel',100),('channel',120),('channel',150),('floor',30),('opening',80)):
+    labels=[];annotations=[];side_labels=[]
     def record_text(self,x,y,label,*args,**kwargs):
         labels.append(str(label))
-        return original_text(self,x,y,label,*args,**kwargs)
+        artist = original_text(self,x,y,label,*args,**kwargs)
+        if kind == 'channel' and label == '50 mm':
+            side_labels.append(artist)
+        return artist
     def record_annotation(self,label,*args,**kwargs):
         annotations.append(str(label))
         return original_annotate(self,label,*args,**kwargs)
@@ -28,6 +31,16 @@ for kind,width in (('inner',50),('outer',150),('channel',80),('floor',30),('open
     assert labels.count('10 mm')==(1 if kind in ('opening','floor') else 2) and not any('omknekk' in label for label in labels) and not any('10 mm' in label for label in annotations)
     assert f'{width} mm' in labels and '50 mm' in labels
     assert Image.open(io.BytesIO(png)).size==(960,500)
+    if kind == 'channel':
+        left, right = sorted(side_labels, key=lambda a: a.get_position()[0])
+        ax = left.axes
+        # The label boxes retain the PNG render coordinates after savefig.
+        ax.figure.set_dpi(200)
+        left_box = left.get_bbox_patch().get_window_extent()
+        right_box = right.get_bbox_patch().get_window_extent()
+        x0, x1 = ax.transData.transform([(0, 25), (width, 25)])[:, 0]
+        assert 0 < left_box.x0 < left_box.x1 < x0 - 2
+        assert x1 + 2 < right_box.x0 < right_box.x1 < ax.figure.bbox.x1
 
 rooms=decode_project(Path('Tasty-Rom4-og-fryserom-med-dorer.json').read_bytes())['rooms']
 combined=profile_rows(project_materials(rooms))

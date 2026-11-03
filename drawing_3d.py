@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 
 from construction import CHANNEL_HEIGHT, CHANNEL_FLANGE, FLOOR_PIR, FLOOR_BOARD, BATTEN_HEIGHT, wall_base, floor_outline, finished_floor
 from database import PANEL_DB, DOR_DB
+from finishing import GLASS_FRONT_TRIM
 from geometry import polygon_winding
 from panel_engine import generate_roof_floor_panels
 
@@ -374,7 +375,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
                 cursor += dw + 0.20
 
     # Åpninger / klassfronter – hvit fyll + cyan ramme
-    opening_b = _QuadBatch("Åpningsbeslag 50×80×15 mm", "#315b7d", showlegend=True)
+    opening_b = _QuadBatch(GLASS_FRONT_TRIM, "#315b7d", showlegend=True)
     if apninger:
         for ap in apninger:
             ap_wall, ap_off, ap_w, ap_h, ap_sill, ap_lbl = ap

@@ -6,11 +6,12 @@ from panel_engine import clip_polygon_between_x, polygon_area
 
 
 # Product, calculation row and quantity/cut-list suffix. Shared by all exports.
+GLASS_FRONT_TRIM = "Beslag glassfront 50×80×15 mm"
 TRIM_PROFILES = (
     ("Innvendig 50×50 mm", "Innv. hjørnebeslag 50×50 mm", "inn"),
     ("Utvendig 50×150 mm", "Utv. hjørnebeslag 50×150 mm", "ut"),
     ("Gulvvinkel fryserom 30×50 mm", "Gulvvinkel fryserom 30×50 mm", "gulv"),
-    ("Åpningsbeslag 50×80×15 mm", "Åpningsbeslag 50×80×15 mm", "apning"),
+    (GLASS_FRONT_TRIM, GLASS_FRONT_TRIM, "apning"),
 )
 
 
