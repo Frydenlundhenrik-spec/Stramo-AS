@@ -17,6 +17,7 @@ class RoofFloorPanel:
     area_m2: float
     polygon: list[Point]
     note: str
+    blank: tuple[Point, ...] = ()  # rectangular envelope before the roof profile cut
 
 
 def _signed_area(pts: np.ndarray) -> float:
@@ -56,6 +57,29 @@ def main_axis_from_longest_wall(pts: Sequence[Point]) -> tuple[np.ndarray, np.nd
     x_axis = best_dir
     y_axis = np.array([-x_axis[1], x_axis[0]])
     return x_axis, y_axis
+
+
+def _panel_axes(pts: np.ndarray, prefix: str) -> tuple[np.ndarray, np.ndarray]:
+    if prefix == "T":
+        edges = np.roll(pts, -1, axis=0) - pts
+        lengths = np.linalg.norm(edges, axis=1)
+        if np.all(lengths > 1e-9):
+            unit = edges / lengths[:, None]
+            prev = np.roll(unit, 1, axis=0)
+            dot = np.abs((prev * unit).sum(axis=1))
+            winding = np.sign(_signed_area(pts))
+            right = (dot < 1e-8) & (winding*(prev[:, 0]*unit[:, 1] - prev[:, 1]*unit[:, 0]) > 0)
+            if right.any() and np.any((dot > 1e-8) & (dot < 1-1e-8)):
+                # On a clipped rectangle the two uninterrupted back walls have
+                # square corners at both ends. On a right triangle each has one.
+                both = right & np.roll(right, -1)
+                candidates = np.flatnonzero(both if both.sum() >= 2 else right | np.roll(right, -1))
+                shortest = min(candidates, key=lambda i: round(float(lengths[i]), 9))
+                span = unit[shortest]
+                # Number strips toward the back wall, including after mirroring.
+                across = winding * np.array([span[1], -span[0]])
+                return across, span
+    return main_axis_from_longest_wall(pts)
 
 
 def world_to_local(pts: Sequence[Point], origin: np.ndarray, x_axis: np.ndarray, y_axis: np.ndarray) -> np.ndarray:
@@ -128,7 +152,7 @@ def generate_roof_floor_panels(
 
     Prinsipp:
     - Panelbredden er samme som veggelementene.
-    - Panelene legges langs rommets hovedretning, funnet fra lengste vegg.
+    - Ved skråtak er spennet parallelt med korteste rettvinklede bakvegg.
     - Hvert panel klippes mot rompolygonet, slik at skrå hjørner får riktig kappform.
     - Kapp kan ligge først eller sist. Start/slutt trenger ikke være like store.
     """
@@ -136,15 +160,13 @@ def generate_roof_floor_panels(
         raise ValueError('Elementbredde må være større enn 0')
 
     pts_np = _ordered_points_np(pts)
-    x_axis, y_axis = main_axis_from_longest_wall(pts_np)
+    x_axis, y_axis = _panel_axes(pts_np, prefix)
     origin = pts_np[0]
     local = world_to_local(pts_np, origin, x_axis, y_axis)
 
     x_min = float(local[:, 0].min())
     x_max = float(local[:, 0].max())
     total_mm = int(round((x_max - x_min) * 1000))
-    panel_m = panel_width_mm / 1000.0
-    total_m = total_mm / 1000.0
     n = int(math.ceil(total_mm / panel_width_mm))
     rest_mm = total_mm % panel_width_mm
 
@@ -159,12 +181,17 @@ def generate_roof_floor_panels(
         if width_mm <= 0:
             continue
         x0 = cursor
-        x1 = min(cursor + width_mm / 1000.0, x_min + total_m)
+        x1 = x_max if idx == n else min(cursor + width_mm / 1000.0, x_max)
         cursor = x1
         clipped_local = clip_polygon_between_x(local, x0, x1)
         if len(clipped_local) < 3:
             continue
         world = local_to_world(clipped_local, origin, x_axis, y_axis)
+        ymin, ymax = clipped_local[:, 1].min(), clipped_local[:, 1].max()
+        blank = ()
+        if prefix == "T" and (x1 - x0) * (ymax - ymin) - polygon_area(clipped_local) > 1e-8:
+            blank = tuple(local_to_world([(x0, ymin), (x1, ymin), (x1, ymax), (x0, ymax)],
+                                         origin, x_axis, y_axis))
         span_mm = int(round((clipped_local[:, 1].max() - clipped_local[:, 1].min()) * 1000))
         area_m2 = round(polygon_area(clipped_local), 3)
         if width_mm == panel_width_mm and abs(area_m2-width_mm*span_mm/1e6)<.002:
@@ -192,5 +219,6 @@ def generate_roof_floor_panels(
             area_m2=area_m2,
             polygon=world,
             note=note,
+            blank=blank,
         ))
     return panels

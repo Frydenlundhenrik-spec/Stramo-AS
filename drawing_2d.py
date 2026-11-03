@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import Polygon as MplPolygon, Arc, FancyArrowPatch
 from matplotlib.path import Path
+from matplotlib.lines import Line2D
 import matplotlib.patheffects as pe
 from matplotlib.backends.backend_agg import RendererAgg
 from database import PANEL_DB, DOR_DB
@@ -232,7 +233,7 @@ def _title_block(ax, xmn, xmx, ymn, ymx, info, mg: float = 0.85):
     bw = 3.2; tx = xmx + mg; h = ymx - ymn
     ax.add_patch(mpatches.FancyBboxPatch(
         (tx, ymn), bw, h, boxstyle="square,pad=0",
-        facecolor="white", edgecolor="black", linewidth=1.0, zorder=20))
+        facecolor="white", edgecolor="black", linewidth=1.0, zorder=20, clip_on=False))
     # Every label and value stays inside its own field, including units.
     _tegn_logo(ax, tx + bw/2, ymn + h * 0.91, bw - 0.40, h * 0.12)
 
@@ -507,11 +508,10 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
     else:
         gulv_panels = []
 
-    fig, axes = plt.subplots(
-        1, 2 if is_frys else 1,
-        figsize=(18 if is_frys else 14, 10),
-        squeeze=False,
-    )
+    nplans = 2 if is_frys else 1
+    plot_width = np.clip(9 * (np.ptp(xs)+2.6)/(np.ptp(ys)+4.0), 5.2, 12)
+    fig_width = min(15., nplans*plot_width + 2.8)
+    fig, axes = plt.subplots(1, nplans, figsize=(fig_width, 10), squeeze=False)
     fig.patch.set_facecolor("white")
 
     def _draw_panel_plan(ax, panel_list, tittel, show_gulv=False):
@@ -526,11 +526,12 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
 
         # Indre åpning
         inn = []
+        winding = polygon_winding(pts_a)
         for i in range(nn):
             p1 = pts_a[i]; p2 = pts_a[(i+1)%nn]; pm = pts_a[(i-1)%nn]
             d1 = p2-p1; d1 /= np.linalg.norm(d1)+1e-9
             d0 = p1-pm; d0 /= np.linalg.norm(d0)+1e-9
-            n1 = polygon_winding(pts_a) * np.array([-d1[1], d1[0]]); n0 = polygon_winding(pts_a) * np.array([-d0[1], d0[0]])
+            n1 = winding * np.array([-d1[1], d1[0]]); n0 = winding * np.array([-d0[1], d0[0]])
             na = (n1+n0)/2; na /= np.linalg.norm(na)+1e-9
             inn.append(p1 + na*WT)
         ax.add_patch(MplPolygon(np.array(inn), closed=True, facecolor="white",
@@ -539,7 +540,12 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
         # ── Takpaneler ────────────────────────────────────────────────────────
         FILL_HEL  = "#e8e8e8"
         FILL_KAPP = "#cccccc"
-        FILL_REST = "#e8e8e8"
+        blanks = [np.asarray(p.blank) for p in panel_list if p.blank]
+        raw_extent = extent = np.vstack([pts_a, *blanks])
+        for blank in blanks:
+            # Below the opaque footprint so only the cut-away part is visible.
+            ax.add_patch(MplPolygon(blank, closed=True, fill=False, edgecolor=DIM_COL,
+                                     linewidth=1.1, linestyle=(0, (3, 2)), zorder=0.9))
 
         for p in panel_list:
             if not p.polygon or len(p.polygon) < 3:
@@ -588,8 +594,12 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
             full_height=np.isclose(abs(p2[1]-p1[1]),ymx-ymn) and np.isclose(p1[0],p2[0])
             if full_width or full_height:
                 continue  # already shown by the overall exterior dimension
-            _dim_along_wall(ax, pts_a[i], pts_a[(i+1)%nn],
-                            f"{wls[i]*1000:.0f} mm", offset=0.35, fs=10, total=True)
+            edge = p2-p1
+            outward = winding*np.array([edge[1],-edge[0]])/wls[i]
+            gap = max(0., float(np.max((raw_extent-p1) @ outward))) if blanks and np.max((pts_a-p1) @ outward) < 1e-8 else 0.
+            _dim_along_wall(ax, p1, p2, f"{wls[i]*1000:.0f} mm",
+                            offset=gap+.35, fs=10, winding=winding, total=True)
+            extent = np.vstack([extent, p1 + outward*(gap+.35), p2 + outward*(gap+.35)])
 
         # ── Vinkler ───────────────────────────────────────────────────────────
         # Sideetiketter er droppet her: takflaten er allerede full av
@@ -598,67 +608,33 @@ def stramo_tak(pts, H, pw_m, dorer, info, rom_type="Kjølerom", panel_key="PIR 8
         for i in range(nn):
             _corner_angle(ax, pts_a, i, radius=0.22, fs=8)
 
-        # ── Element-bredde kjede langs hoved-aksen ────────────────────────────
-        x_axis, _ = main_axis_from_longest_wall(pts)
-        _draw_panel_width_chain(ax, panels, x_axis, pts_a, ymn, DIM_OFF)
-
         # ── Legende ───────────────────────────────────────────────────────────
         leg = [
-            mpatches.Patch(facecolor=FILL_HEL,  edgecolor="#2980b9", label="Hel panel"),
-            mpatches.Patch(facecolor=FILL_KAPP, edgecolor=ORANGE,    label="Kapp/start"),
+            mpatches.Patch(facecolor=FILL_HEL,  edgecolor=WALL_EDGE, label="Helt element"),
+            mpatches.Patch(facecolor=FILL_KAPP, edgecolor=WALL_EDGE, label="Kapp"),
         ]
-        ax.legend(handles=leg, loc="upper left", fontsize=8, framealpha=0.9)
+        if blanks:
+            leg.append(Line2D([], [], color=DIM_COL, linestyle="--", label="Råelement før kapp"))
+        n_hel = sum("hel" in p.kind.lower() for p in panel_list)
+        ax.legend(handles=leg, loc="lower center", bbox_to_anchor=(.5, 1.0), ncol=len(leg),
+                  title=f"Totalt {len(panel_list)} elementer · {n_hel} hele · {len(panel_list)-n_hel} kapp",
+                  fontsize=8, title_fontsize=9)
 
         ax.text((xmn+xmx)/2, ymn - DIM_OFF - 1.0, tittel,
                 ha="center", va="top", fontsize=9, fontweight="bold", color=BLUE)
 
-        ax.set_xlim(xmn - DIM_OFF - 1.6, xmx + DIM_OFF + 0.8)
-        ax.set_ylim(ymn - DIM_OFF - 2.0, ymx + DIM_OFF + 1.2)
+        ax.set_xlim(extent[:, 0].min() - DIM_OFF - .5, extent[:, 0].max() + DIM_OFF + .8)
+        ax.set_ylim(extent[:, 1].min() - DIM_OFF - 2.0, extent[:, 1].max() + DIM_OFF + .8)
         ax.set_aspect("equal"); ax.axis("off")
-
-        # ── Statistikk-boks ───────────────────────────────────────────────────
-        n_hel  = sum(1 for p in panel_list if "hel" in p.kind.lower())
-        n_kapp = len(panel_list) - n_hel
-        ax.text(xmn - DIM_OFF - 1.4, ymx + 0.1,
-                f"Totalt {len(panel_list)} elementer\n{n_hel} hele · {n_kapp} kapp",
-                fontsize=8, color=BLUE, va="top", zorder=14,
-                bbox=dict(fc="white", ec=BLUE, pad=5, linewidth=0.8))
 
     _draw_panel_plan(axes[0][0], panels, f"TAKTEGNING – {DRAWING_SCALE}")
     if is_frys:
         _draw_panel_plan(axes[0][1], gulv_panels, f"GULV PIR – {DRAWING_SCALE}", show_gulv=True)
 
-    fig.tight_layout(rect=[0, 0, 0.79, 0.97], pad=0.5)
-    _tegn_fig_title_block(fig, info)
+    block_width = 2.1 / fig_width
+    fig.tight_layout(rect=[0, 0, 1-block_width-.05, 0.97], pad=0.5)
+    _tegn_fig_title_block(fig, info, x=1-block_width-.015, width=block_width)
     return fig
-
-
-def _draw_panel_width_chain(ax, panels, x_axis, pts_a, ymn, dim_off):
-    """Mål-kjede som viser bredden på hvert panel langs hoved-aksen."""
-    if not panels:
-        return
-    # Beregn kursorposisjoner langs x_axis
-    origin   = pts_a[0]
-    perp     = np.array([-x_axis[1], x_axis[0]])
-    y_chain  = ymn - dim_off - 0.90
-
-    # Finn y-posisjonen til mål-kjeden i verdenskoordinater
-    # Projiser ymn-punktet til lokal Y og bruk et globalt offset
-    base_pt  = np.array([xs_min := float(pts_a[:, 0].min()),
-                          float(pts_a[:, 1].min())])
-
-    # Vi tegner mål-kjeden rett under rommet
-    prev_world = None
-    cursor_m   = 0.0
-    for p in panels:
-        w_m = p.width_mm / 1000.0
-        # Startpunkt av panel i verden langs hoved-aksen
-        poly_w = np.array(p.polygon)
-        if len(poly_w) < 3:
-            cursor_m += w_m; continue
-        # Bruk midten av panelet
-        cx = float(np.mean(poly_w[:, 0])); cy = float(np.mean(poly_w[:, 1]))
-        cursor_m += w_m
 
 
 # ══ VEGGOPPSTALT ═════════════════════════════════════════════════════════════
