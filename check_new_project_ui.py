@@ -20,6 +20,7 @@ checked()
 assert len(app.session_state["project_rooms"]) == 1
 app.radio(key="ed_module").set_value("Oversikt").run()
 checked()
+app.selectbox(key="ed_shape").set_value("Femkant – avskåret hjørne").run()
 app.button(key="ov_new_project").click().run()
 checked()
 assert app.session_state["project_rooms"] == []
@@ -28,6 +29,8 @@ assert app.radio(key="ed_module").value == "Oversikt"
 assert app.text_input(key="ed_pnr").value == "1001"
 assert app.text_input(key="ed_name").value == ""
 assert app.radio(key="ed_room_type").value == "Kjølerom"
+form = app.session_state["last_valid_editor"]["form"]
+assert (form["kind"], form["length_mm"], form["width_mm"]) == ("Rektangel", 4000, 4000)
 assert app.number_input(key="ed_price_skruer_eske").value != 9.0
 faulthandler.cancel_dump_traceback_later()
 print("PASS: Nytt prosjekt clears rooms, prices and project fields and returns to a blank overview")

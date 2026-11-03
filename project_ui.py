@@ -21,6 +21,9 @@ from project_file import (make_room, encode_project, decode_project, validate_ro
                           world_input, snap_room, freezer_shared_walls, placement_points)
 
 
+NEW_ROOM_SIDE_MM = 4000
+
+
 def _editor_key(key):
     return (key.startswith("ed_") or key.startswith("l_side_") or key.startswith("door_price_")
             or key.startswith("ap_") or key in ("l_turns","l_mirrored","last_valid_l_polygon","n_apninger","pris_override")
@@ -40,6 +43,7 @@ def restore_editor(room):
         st.session_state.pop("last_valid_editor", None)
         st.session_state["active_room_id"] = None
         st.session_state["draft_id"] = uuid.uuid4().hex
+        st.session_state.update(ed_shape="Rektangel", ed_length=NEW_ROOM_SIDE_MM, ed_width=NEW_ROOM_SIDE_MM)
         return
     data = room["input"]
     form = copy.deepcopy(room["form"])
@@ -297,7 +301,7 @@ def project_download(current):
 
 def finishing_ui(rooms):
     from geometry import beslag_beregning
-    from finishing import plywood_cuts, plywood_plan, trim_order, grouped_trim_bars, board_count, TRIM_PROFILES
+    from finishing import plywood_cuts, plywood_plan, grouped_trim_bars, board_count, room_trim_profiles
     from construction import floor_depth
     if st.button("Beregn beslag og gulvplate-kappliste",key="calculate_finishing"):
         st.session_state["show_finishing"] = True
@@ -310,19 +314,16 @@ def finishing_ui(rooms):
         inp = world_input(room)
         bb = beslag_beregning(inp.pts,inp.hoyde_m,inp.excluded_walls,PANEL_DB[inp.panel_key]["t"]/1000,inp.hoyde_m-floor_depth(inp.rom_type), floor_angles=inp.rom_type=="Fryserom", shared_walls=inp.shared_walls, apninger=inp.apninger)
         name = inp.navn or inp.rom_type
-        counts = "; ".join(f"{label.removesuffix(' mm').lower()}: {bb[f'stk_{key}']} stenger"
-                           for label, _, key in TRIM_PROFILES if bb[f"stk_{key}"])
+        profiles = list(room_trim_profiles(bb))
+        counts = "; ".join(f"{p['product']}: {p['qty']} stenger" for p in profiles)
         st.write(f"{name}: {counts}. Alle stenger er 2500 mm, inkludert 10 % svinn/kapp og avrunding opp.")
-        for label, _, suffix in TRIM_PROFILES:
-            key = f"kapp_{suffix}"
-            if not bb[key]:
-                continue
-            trim_rows.extend(dict(Rom=name,Profil=label,**r) for r in bb[key])
-            import math
+        for profile in profiles:
+            label, cuts = profile["product"], profile["cuts"]
+            trim_rows.extend(dict(Rom=name,Profil=label,**r) for r in cuts)
             waste = 10
-            net = sum(2500-r["Rest_mm"] for r in bb[key])/1000
-            order = trim_order(net)
-            trim_totals.append(dict(Rom=name,Profil=label,Stang="SUM",Deler_stk=sum(r["Kapp"].count(" mm (") for r in bb[key]),
+            net = sum(2500-r["Rest_mm"] for r in cuts)/1000
+            order = profile["qty"]
+            trim_totals.append(dict(Rom=name,Profil=label,Stang="SUM",Deler_stk=sum(r["Kapp"].count(" mm (") for r in cuts),
                 Løpemeter=net,Kapp_prosent=waste,Lm_med_kapp=net*(1+waste/100),Bestill_stk=order,Bestill_lm=order*2.5))
         if inp.rom_type == "Fryserom":
             form = room["form"]

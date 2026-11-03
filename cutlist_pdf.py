@@ -13,7 +13,7 @@ from kalkulasjon import beregn_prosjekt
 from materialer import materialliste_med_sum
 from database import PANEL_DB
 from construction import fixing_screw_count
-from finishing import plywood_cuts, trim_order, board_count, TRIM_PROFILES
+from finishing import plywood_cuts, trim_order, board_count, room_trim_profiles
 from purchase_summary import with_totals, grouped_panels, grouped_cuts, panel_cutting_plan
 
 
@@ -29,6 +29,8 @@ def project_materials(rooms):
     """Group purchase quantities, keeping a separate line for each physical door."""
     rows=[]
     door_rows=[]
+    corner_specs = {}
+    corner_refs = {}
     for _,p in grouped_panels(rooms).iterrows():
         rows.append(dict(Gruppe="Elementer",Produkt=p.Panel,Høyde_mm=p.Leveringslengde_mm,
             Bredde_mm=p.Bredde_mm,Tykkelse_mm=p.Tykkelse_mm,Stk=p.Bestill_hele_elementer,
@@ -36,8 +38,10 @@ def project_materials(rooms):
     for room in rooms:
         inp=world_input(room);form=room["form"]
         result=beregn_prosjekt(inp,pris_override=room.get("prices",{}))
+        profiles = list(room_trim_profiles(result["beslag"]))
+        trim_posts = {p["post"] for p in profiles}
         for _,r in result["df_mat"].iterrows():
-            if r.Post in {post for _, post, _ in TRIM_PROFILES}:
+            if r.Post in trim_posts:
                 continue
             if r.Post.startswith(("Panel", "Vegg ","Tak (panel)","Gulv", "Tilbehør beregnet", "Innv. hjørnebeslag", "Utv. hjørnebeslag")):continue
             group="Beslag" if r.Post.startswith("U-kanal") else ("Dører" if r.Post=="Dør" else "Tilbehør")
@@ -47,12 +51,14 @@ def project_materials(rooms):
                 continue
             rows.append(dict(Gruppe=group,Produkt=product,Stk=None if product=="Varmekabel pr. m" else r.Mengde,
                 Løpemeter=r.Mengde*2.5 if r.Post.startswith("U-kanal") else (r.Mengde if r.Type=="Varmekabel pr. m" else None)))
-        bb=result["beslag"]
-        for label,post,key in TRIM_PROFILES:
-            qty=bb[f"stk_{key}"]
-            if not qty:
-                continue
-            rows.append(dict(Gruppe="Beslag",Produkt=label+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",Stk=qty,Løpemeter=qty*2.5))
+        for profile in profiles:
+            product = profile["product"]+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm"
+            qty = profile["qty"]
+            rows.append(dict(Gruppe="Beslag",Produkt=product,Stk=qty,Løpemeter=qty*2.5))
+            if "side" in profile:
+                corner_specs[product] = profile
+                refs = ", ".join(f"H{n}" for n in profile["corners"])
+                corner_refs.setdefault(product, []).append(f"{project_name(inp.navn) or inp.rom_type}: {refs}")
         if inp.rom_type=="Fryserom":
             w,l=form.get("plywood_width_mm",1500),form.get("plywood_length_mm",3000)
             qty=board_count(plywood_cuts(inp.pts,w,l))
@@ -71,6 +77,10 @@ def project_materials(rooms):
     grouped["Enhet"] = grouped.Produkt.map(units).fillna("stk")
     if door_rows:
         grouped = pd.concat([grouped, pd.DataFrame(door_rows)], ignore_index=True)
+    for column, key in (("Profil_side", "side"), ("Profilvinkel_grad", "angle"),
+                        ("Profil_inntrukket", "reentrant")):
+        grouped[column] = grouped.Produkt.map({name: spec[key] for name,spec in corner_specs.items()})
+    grouped["Profil_hjorner"] = grouped.Produkt.map({name: "; ".join(refs) for name,refs in corner_refs.items()})
     return grouped
 
 
@@ -253,8 +263,12 @@ def profile_downloads(rooms):
         st.caption("Valgte rom: "+", ".join(project_name(r["input"]["navn"]) for r in rooms))
         for r in profiles:
             left,right=st.columns([1,1])
-            left.image(profile_png(r["kind"],r["width"]))
+            left.image(profile_png(r["kind"], r["width"], r.get("angle")))
             right.markdown(f'**{r["name"]}**\n\n**{r["qty"]} stk × 2500 mm = {r["lm"]:g} LM**\n\n0,6 mm stål · RAL 9010')
+            if r.get("angles"):
+                right.markdown(r["angles"])
+            if r.get("corners"):
+                right.write("Hjørner: " + r["corners"])
         st.markdown(f'**TOTAL BESTILLING: {sum(r["qty"] for r in profiles)} stk · {sum(r["lm"] for r in profiles):g} LM**')
         st.download_button("Detaljert beslagsliste – PDF",cutting_pdf(rooms,"beslagprofiler"),"beslagsliste-profiler.pdf","application/pdf",key="cutpdf_profiles")
 

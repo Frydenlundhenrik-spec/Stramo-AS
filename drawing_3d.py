@@ -7,8 +7,8 @@ import plotly.graph_objects as go
 
 from construction import CHANNEL_HEIGHT, CHANNEL_FLANGE, FLOOR_PIR, FLOOR_BOARD, BATTEN_HEIGHT, wall_base, floor_outline, finished_floor
 from database import PANEL_DB, DOR_DB
-from finishing import GLASS_FRONT_TRIM
-from geometry import polygon_winding
+from finishing import GLASS_FRONT_TRIM, sloped_trim_name
+from geometry import corner_bend_degrees, polygon_winding
 from panel_engine import generate_roof_floor_panels
 
 
@@ -150,6 +150,16 @@ def _add_l_post(batch: _QuadBatch, corner, dir_a, dir_b, perp_a, perp_b, leg: fl
 
 def _wall_color(i: int) -> str:
     return ["#d7dde6", "#c7d0dc", "#e4e8ef", "#bcc8d6"][i % 4]
+
+
+def _add_oblique_post(batch, vertex, directions, face_normals, bottom, top):
+    """Two 100 mm flanges meeting at the actual corner, each returned 10 mm."""
+    for direction, face_normal in zip(directions, face_normals):
+        tip = vertex + .100 * direction
+        back = tip - .0006 * face_normal
+        batch.quad(vertex, tip, bottom, top)
+        batch.quad(tip, back, bottom, top)
+        batch.quad(back, back - .010 * direction, bottom, top)
 
 
 def _roof_hatching(fig, polygon, z):
@@ -313,8 +323,7 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         _add_l_flange_run(utv_b, outer_a, outer_b, perp, z_knekk=z1, leg_v=UTV_LEG_H, leg_h=UTV_LEG_UT,
                           vert_up=True, horiz_inn=False)
 
-    # Vertikale hjørnestolper – innv. i vanlige (konvekse) hjørner,
-    # utv. i eventuelle re-entrante (konkave) hjørner, som i materiallisten.
+    outer_corners = floor_outline(pts, WT)
     for i in range(nn):
         if i in excluded_walls or (i-1)%nn in excluded_walls:
             continue
@@ -326,7 +335,20 @@ def tegn_3d_med_panelbredde(pts, H, dorer, panel_key, rom_type, panelbredde_m, a
         dir_prev, dir_next = -v1 / L1, v2 / L2
         perp_prev = winding * np.array([-v1[1], v1[0]]) / L1
         perp_next = winding * np.array([-v2[1], v2[0]]) / L2
-        konveks = winding * (v1[0] * v2[1] - v1[1] * v2[0]) >= 0
+        bend = corner_bend_degrees(pts, i)
+        if bend == 0:
+            continue
+        if abs(bend) != 90:
+            directions = (dir_prev, dir_next)
+            for side, vertex, normals, bottom, color in (
+                ("inner", pc, (perp_prev, perp_next), finished_floor(rom_type, panel_key), "#1f77b4"),
+                ("outer", np.asarray(outer_corners[i]), (-perp_prev, -perp_next), z0, "#e67e22"),
+            ):
+                name = f"{sloped_trim_name(side, bend)} · H{i+1}"
+                batch = _QuadBatch(name, color, showlegend=True)
+                _add_oblique_post(batch, vertex, directions, normals, bottom, z1)
+                batch.flush(fig)
+            continue
         _add_l_post(innv_b, pc, dir_prev, dir_next, perp_prev, perp_next, INNV_LEG, z0, z1, offset=0.005)
         _add_l_post(utv_b, pc, dir_prev, dir_next, -perp_prev, -perp_next, UTV_LEG_UT, z0, z1, offset=WT)
 

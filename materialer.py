@@ -149,13 +149,12 @@ def materialliste(
     # ── Hjørnebeslag ──────────────────────────────────────────────────────────
     bb = beslag_beregning(pts_polygon, H, excluded_walls, pan["t"]/1000, H-floor_depth(rom_type), floor_angles=rom_type=="Fryserom", shared_walls=shared_walls, apninger=apninger)
     # Beslag føres uten pris, også når eldre prosjektfiler har prisoverstyringer.
-    from finishing import TRIM_PROFILES
-    for product, post, key in TRIM_PROFILES:
-        count = bb[f"stk_{key}"]
-        if count:
-            rows.append(dict(Post=post, Type=product+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
-                Enhet="stk", Mengde=count, **_kr(math.nan, count),
-                NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8))
+    from finishing import room_trim_profiles
+    for profile in room_trim_profiles(bb):
+        count = profile["qty"]
+        rows.append(dict(Post=profile["post"], Type=profile["product"]+" · 0,6 mm stål · RAL 9010 · lengde 2500 mm",
+            Enhet="stk", Mengde=count, **_kr(math.nan, count),
+            NS3420=_NS["beslag_h"], CO2_k=2.5 * 0.8))
 
     from accessories import CATALOG, accessory_needs, order_quantities
     needs = accessory_needs(pts_polygon, H, rom_type, pan["t"]/1000, dorer, cut_list, excluded_walls,shared_walls,apninger)

@@ -1,8 +1,9 @@
 """Dimensioned profile sketches shared by the screen and PDF order list."""
 import io
+import math
 import re
 from functools import lru_cache
-from finishing import GLASS_FRONT_TRIM
+from finishing import GLASS_FRONT_TRIM, format_trim_angle
 
 
 def profile_rows(materials):
@@ -10,7 +11,22 @@ def profile_rows(materials):
     for r in materials.itertuples():
         if r.Gruppe != "Beslag" or r.Stk <= 0:
             continue
-        if r.Produkt.startswith("Innvendig 50×50"):
+        details = {}
+        side = getattr(r, "Profil_side", None)
+        if side in ("inner", "outer"):
+            angle = float(r.Profilvinkel_grad)
+            concave_finish = (side == "inner") != bool(r.Profil_inntrukket)
+            kind = "skew_inner" if concave_finish else "skew_outer"
+            width = 100
+            name = ("Innvendig" if side == "inner" else "Utvendig") + " skråbeslag 100 × 100 mm"
+            if r.Profil_inntrukket:
+                name += " – inntrukket hjørne"
+            details = dict(angle=angle, angles=f"Ferdig vinkel {format_trim_angle(angle)} · "
+                           f"Knekk fra flat plate {format_trim_angle(180 - angle)}",
+                           corners=r.Profil_hjorner)
+            if angle == 0:
+                details["angles"] += " · Profil må avklares med verkstedet"
+        elif r.Produkt.startswith("Innvendig 50×50"):
             kind, width, name = "inner", 50, "Innvendig vinkel 50 × 50 mm"
         elif r.Produkt.startswith("Utvendig 50×150"):
             kind, width, name = "outer", 150, "Utvendig vinkel 50 × 150 mm"
@@ -23,12 +39,72 @@ def profile_rows(materials):
             name = f"U-kanal {width} mm"
         else:
             continue
-        rows.append(dict(kind=kind, width=width, name=name, qty=int(r.Stk), lm=float(r.Løpemeter)))
+        rows.append(dict(kind=kind, width=width, name=name, qty=int(r.Stk), lm=float(r.Løpemeter), **details))
     return rows
 
 
+def _skew_profile(ax, kind, width, angle, ink):
+    """Section through a vertical corner; arms are symmetric about the angle bisector."""
+    from matplotlib.patches import Arc
+    if angle == 0:
+        # Two coincident wings would be misleading as a production drawing.
+        for y, label, size in ((.76, "Ferdig vinkel 0°", 14), (.58, "Knekk fra flat plate 180°", 12),
+                               (.39, f"{width} × {width} mm · 10 mm omknekk", 11),
+                               (.22, "Profil må avklares med verkstedet", 10)):
+            ax.text(.5, y, label, transform=ax.transAxes, ha="center", va="center",
+                    fontsize=size, color=ink)
+        return
+    half = math.radians(angle / 2)
+    sine, cosine = math.sin(half), math.cos(half)
+    concave_finish = kind == "skew_inner"
+    for side in (-1, 1):
+        # Direction of the flange and its normal towards the convex face.
+        ux, uy = side * sine, cosine
+        nx, ny = side * cosine, -sine
+        tip = (width * ux, width * uy)
+        back = 1.2 if concave_finish else -1.2
+        fold = (tip[0] + back * nx, tip[1] + back * ny)
+        end = (fold[0] - 10 * ux, fold[1] - 10 * uy)
+        ax.plot([0, tip[0], fold[0], end[0]], [0, tip[1], fold[1], end[1]],
+                color=ink, lw=2)
+        # Dimension both flanges from their joint to their outer ends.
+        start = (23 * nx, 23 * ny)
+        stop = (tip[0] + start[0], tip[1] + start[1])
+        for x, y in ((0, 0), tip):
+            ax.plot([x, x + 27 * nx], [y, y + 27 * ny], color=ink, lw=.5)
+        ax.annotate("", stop, start, arrowprops=dict(arrowstyle="<->", color=ink, lw=1.2,
+                                                     shrinkA=0, shrinkB=0))
+        ax.text((start[0]+stop[0])/2, (start[1]+stop[1])/2, f"{width} mm",
+                rotation=side * (90 - angle / 2), rotation_mode="anchor",
+                fontsize=10, fontweight="bold", ha="center", va="center",
+                bbox=dict(facecolor="white", edgecolor="none", pad=1))
+        ax.text(tip[0] + side * 5, tip[1] + 10, "10 mm", fontsize=9, color=ink,
+                ha="right" if side < 0 else "left", va="bottom")
+    ax.add_patch(Arc((0, 0), 34, 34, theta1=90-angle/2, theta2=90+angle/2,
+                     color=ink, lw=1))
+    if angle >= 65:
+        ax.text(0, 28, format_trim_angle(angle), ha="center", va="center",
+                fontsize=10, fontweight="bold", color=ink)
+    else:
+        # A narrow wedge cannot contain a legible angle label.
+        ax.text(.02, .94, format_trim_angle(angle), transform=ax.transAxes,
+                ha="left", va="top", fontsize=10, fontweight="bold", color=ink)
+    # Call out the coated face from the gap between the arms or from below the joint.
+    if concave_finish:
+        target = (.60 * width * sine, .60 * width * cosine)
+        label = (.55 * width * sine, max(width * cosine + 30, 49))
+    else:
+        target = (0, 0)
+        label = (0, -44)
+    ax.annotate("RAL 9010 · lakkert side", target, label, fontsize=9,
+                ha="center", va="center",
+                arrowprops=dict(arrowstyle="->", color=ink, shrinkB=1))
+    ax.set_xlim(-148, 148)
+    ax.set_ylim(-57, max(width * cosine + 48, 67))
+
+
 @lru_cache(maxsize=24)
-def profile_png(kind, width):
+def profile_png(kind, width, angle=None):
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(4.8, 2.5))
     ink = "#18374c"
@@ -42,7 +118,9 @@ def profile_png(kind, width):
     def hem(x, y):
         ax.text(x, y, "10 mm", fontsize=10, ha="center", va="center", color=ink,
                 bbox=dict(facecolor="white", edgecolor="none", pad=1))
-    if kind == "floor":
+    if kind in ("skew_inner", "skew_outer"):
+        _skew_profile(ax, kind, width, angle, ink)
+    elif kind == "floor":
         # 30 mm flange points left, with a straight free edge.
         # Only the 50 mm wall flange retains its 10 mm return.
         line([-1.2, -1.2, 0, 0, -30], [40, 50, 50, 0, 0])
@@ -124,7 +202,8 @@ def profile_png(kind, width):
                         arrowprops=dict(arrowstyle="->", color=ink,
                                         connectionstyle="angle,angleA=-90,angleB=0,rad=3"))
             ax.set_xlim(-36, width+88)
-    ax.set_ylim(-48 if kind == "opening" else -35, 94)
+    if angle is None:
+        ax.set_ylim(-48 if kind == "opening" else -35, 94)
     ax.set_aspect("equal")
     ax.axis("off")
     fig.subplots_adjust(left=.01, right=.99, top=.98, bottom=.02)
@@ -135,6 +214,7 @@ def profile_png(kind, width):
 
 
 def profile_cards(rows, normal, heading, available_width):
+    from xml.sax.saxutils import escape
     from reportlab.platypus import Table, TableStyle, Image, Paragraph, Spacer
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
@@ -156,9 +236,13 @@ def profile_cards(rows, normal, heading, available_width):
         ]))
         text = [Paragraph(r["name"], title), quantities, Spacer(1,7),
                 Paragraph('0,6 mm stål · RAL 9010', detail)]
+        if r.get("angles"):
+            text.insert(1, Paragraph(r["angles"], heading))
+            if r["corners"]:
+                text.append(Paragraph(escape("Hjørner: " + r["corners"]), detail))
         if r["kind"] == "floor":
             text.append(Paragraph('50 mm mot vegg · 30 mm mot gulv', detail))
-        card = Table([[Image(io.BytesIO(profile_png(r["kind"], r["width"])), width=252, height=252*2.5/4.8), text]],
+        card = Table([[Image(io.BytesIO(profile_png(r["kind"], r["width"], r.get("angle"))), width=252, height=252*2.5/4.8), text]],
                      colWidths=[270, available_width-270])
         card.setStyle(TableStyle([("VALIGN", (0,0), (-1,-1), "MIDDLE"),
             ("BOX", (0,0), (-1,-1), .8, colors.HexColor("#526b78")),

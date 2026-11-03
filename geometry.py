@@ -274,15 +274,27 @@ def classify_corners(pts: Sequence[Point]) -> tuple[int, int]:
             n_ut += 1
     return n_inn, n_ut
 
+def corner_bend_degrees(pts: Sequence[Point], i: int) -> float:
+    """Bend from flat, positive at convex corners, independent of plan orientation."""
+    before = np.subtract(pts[i], pts[i-1])
+    after = np.subtract(pts[(i+1) % len(pts)], pts[i])
+    cross = before[0]*after[1] - before[1]*after[0]
+    turn = math.degrees(math.atan2(polygon_winding(pts)*cross, float(before @ after)))
+    # Rotation/reflection can shift an exact integer bend a few floating-point ulps.
+    nearest = round(turn)
+    return nearest if math.isclose(turn, nearest, rel_tol=0, abs_tol=1e-9) else turn
+
 def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thickness=0.0, inner_height=None, floor_angles=False, shared_walls=(), apninger=()) -> dict:
     """Beregner lm og antall 2,5 m-stenger for innvendig/utvendig L-beslag."""
     if H <= 0:
         raise ValueError("Romhøyde må være større enn 0.")
     STANG_M = 2.5
     excluded = set(excluded_walls)
-    from finishing import trim_cuts, opening_trim_runs
-    corners = [i for i in range(len(pts)) if i not in excluded and (i-1)%len(pts) not in excluded]
-    n_inn = n_ut = len(corners)
+    from finishing import trim_cuts, opening_trim_runs, sloped_corner_profiles
+    bends = [(i, corner_bend_degrees(pts, i)) for i in range(len(pts))
+             if i not in excluded and (i-1)%len(pts) not in excluded]
+    corners = [i for i, bend in bends if abs(bend) == 90]
+    n_inn = n_ut = sum(bend != 0 for _, bend in bends)
     from construction import wall_finish_segment
     def runs_for(outside):
         return [(f"V{i+1} tak", float(np.linalg.norm(np.subtract(*wall_finish_segment(
@@ -304,6 +316,7 @@ def beslag_beregning(pts: Sequence[Point], H: float, excluded_walls=(), thicknes
     from finishing import trim_order
     stk_inn, stk_ut = trim_order(lm_inn_tot),trim_order(lm_ut_tot)
     return dict(
+        special_profiles=sloped_corner_profiles(bends, inner_height, H),
         kapp_inn=cuts, kapp_ut=outer_cuts, n_inn=n_inn, n_ut=n_ut, perim=round(perim, 2),
         lm_inn_hjorne=round(lm_inn_hjorne, 2), lm_inn_tak=round(lm_inn_tak, 2),
         lm_inn_tot=round(lm_inn_tot, 2), stk_inn=stk_inn,

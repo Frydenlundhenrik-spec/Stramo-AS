@@ -50,6 +50,44 @@ def trim_cuts(lengths, stock_mm=2500):
     return [dict(Stang=i+1,Kapp=" + ".join(f"{n} mm ({s})" for s,n in bar),
                  Rest_mm=stock_mm-sum(n for _,n in bar)) for i,bar in enumerate(bars)]
 
+def format_trim_angle(degrees):
+    return f"{degrees:.2f}".rstrip("0").rstrip(".").replace(".", ",") + "°"
+
+
+def sloped_trim_name(side, bend_degrees):
+    face = {"inner": "Innvendig", "outer": "Utvendig"}[side]
+    turn = math.ceil(abs(bend_degrees))
+    product = (f"{face} skråbeslag 100×100 mm · ferdig vinkel {format_trim_angle(180-turn)}"
+               f" · knekk fra flat plate {format_trim_angle(turn)}")
+    return product + (" · inntrukket hjørne" if bend_degrees < 0 else "")
+
+
+def sloped_corner_profiles(bends, inner_height, outer_height):
+    corners_by_bend = {}
+    for corner, bend in bends:
+        if bend != 0 and abs(bend) != 90:
+            workshop_bend = math.ceil(abs(bend)) * (1 if bend > 0 else -1)
+            corners_by_bend.setdefault(workshop_bend, []).append(corner+1)
+    profiles = []
+    for bend, corners in corners_by_bend.items():
+        for side, height in (("inner", inner_height), ("outer", outer_height)):
+            name = sloped_trim_name(side, bend)
+            cuts = trim_cuts([(f"H{n} vegg", height) for n in corners])
+            # A long piece from each corner may need its own bar even if net LM fits fewer.
+            quantity = max(trim_order(len(corners)*height), len(cuts))
+            profiles.append(dict(product=name, post=name, qty=quantity, cuts=cuts,
+                                 side=side, angle=180-abs(bend),
+                                 reentrant=bend < 0, corners=corners))
+    return profiles
+
+
+def room_trim_profiles(bb):
+    """Ordered profile types and their cut pieces, shared by calculation and exports."""
+    for product, post, key in TRIM_PROFILES:
+        if bb[f"stk_{key}"]:
+            yield dict(product=product, post=post, qty=bb[f"stk_{key}"], cuts=bb[f"kapp_{key}"])
+    yield from bb["special_profiles"]
+
 
 def grouped_trim_bars(rows):
     """Combine identical cutting patterns per profile, including across rooms."""

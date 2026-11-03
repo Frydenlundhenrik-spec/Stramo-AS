@@ -23,7 +23,7 @@ def packages(rooms):
     for _,r in project_materials(rooms).iterrows():
         if r.Gruppe!='Beslag':continue
         n=int(r.Stk)
-        size=150 if '150' in r.Produkt else 100
+        size=150 if '150' in r.Produkt.split(' · ',1)[0] else 100
         side=math.ceil(math.sqrt(n))*size
         add(r.Produkt,n,2540,side,side+50)
     return pd.DataFrame(rows)

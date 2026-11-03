@@ -25,7 +25,7 @@ from montasje import (
 from ifc_export import gen_ifc
 from kappliste import panel_order_rows
 from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
-from project_ui import (prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui, finishing_ui)
+from project_ui import (NEW_ROOM_SIDE_MM, prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui, finishing_ui)
 from oversikt import oversikt_ui, kpi, kpi_rad, tall
 from html import escape as html_escape
 from branding import LOGO_PATH, logo_finnes, logo_data_uri, project_name
@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.03-r1")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.03-r2")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -342,7 +342,7 @@ with inndata_kol:
     thermal_data = thermal_inputs(rom_type)
     with st.expander(':material/square_foot: Romform og mål', expanded=True):
         st.caption("Rommål er utvendige mål. Døravstander måles fra utvendig hjørne til dørkant.")
-        form_valg = st.selectbox("Form", list(FORM_MALER.keys()), key="ed_shape",
+        form_valg = st.selectbox("Form", list(FORM_MALER), index=list(FORM_MALER).index("Rektangel"), key="ed_shape",
                                 format_func=lambda name: "Femkant med skråvegg" if name == "Femkant – avskåret hjørne" else name)
         st.caption(FORM_MALER[form_valg]["besk"])
         hk, bk = st.columns(2)
@@ -380,8 +380,8 @@ with inndata_kol:
                 st.caption("Forhåndsvisningen viser siste gyldige form. Kalkulasjon og eksport venter til målene stemmer.")
         elif form_valg == "Femkant – avskåret hjørne":
             if not all(f"ed_pentagon_side_{j}" in st.session_state for j in range(5)):
-                length = st.session_state.get("ed_length", 5850)
-                width = st.session_state.get("ed_width", 4450)
+                length = st.session_state.get("ed_length", NEW_ROOM_SIDE_MM)
+                width = st.session_state.get("ed_width", NEW_ROOM_SIDE_MM)
                 defaults = pentagon_sides(length, width,
                     st.session_state.get("ed_cut_x", min(1100, length/2)),
                     st.session_state.get("ed_cut_y", min(1100, width/2)))
@@ -417,9 +417,9 @@ with inndata_kol:
         elif form_valg != "Egendefinert polygon":
             c1, c2 = st.columns(2)
             with c1:
-                L_mm = st.number_input("Lengde (mm)", min_value=500, max_value=50000, value=5850, step=50, key="ed_length")
+                L_mm = st.number_input("Lengde (mm)", min_value=500, max_value=50000, value=NEW_ROOM_SIDE_MM, step=50, key="ed_length")
             with c2:
-                B_mm = st.number_input("Bredde (mm)", min_value=500, max_value=30000, value=4450, step=50, key="ed_width")
+                B_mm = st.number_input("Bredde (mm)", min_value=500, max_value=30000, value=NEW_ROOM_SIDE_MM, step=50, key="ed_width")
             L_inp = L_mm / 1000.0
             B_inp = B_mm / 1000.0
             pts = FORM_MALER[form_valg]["func"](L_inp, B_inp, 0.0, 0.0)

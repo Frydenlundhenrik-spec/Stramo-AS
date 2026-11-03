@@ -67,6 +67,8 @@ plt.close(fig)
 
 app = AppTest.from_file('app.py', default_timeout=90).run()
 app.button(key='new_cool_room').click().run()
+app.number_input(key='ed_length').set_value(5850)
+app.number_input(key='ed_width').set_value(4450).run()
 app.selectbox(key='ed_shape').set_value('Femkant – avskåret hjørne').run()
 app.number_input(key='ed_pentagon_side_1').set_value(1000.).run()
 app.number_input(key='ed_pentagon_side_3').set_value(1050.).run()

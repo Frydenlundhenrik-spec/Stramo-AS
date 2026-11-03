@@ -38,7 +38,7 @@ assert not any(item.key == "ed_pentagon_side_2" for item in app.number_input)
 assert next(item for item in app.text_input if item.label == "Vegg 3 – skråvegg (mm)").disabled
 assert not any(item.key == "ed_pentagon_adjust" for item in app.selectbox)
 assert all(app.number_input(key=f"ed_pentagon_side_{i}").proto.format == "%.0f" for i in (0,1,3,4))
-initial = [5850, 3350, math.hypot(1100, 1100), 4750, 4450]
+initial = [4000, 2900, math.hypot(1100, 1100), 2900, 4000]
 assert np.allclose(values(), initial)
 
 # Every straight wall is editable; the diagonal follows the resulting endpoints.

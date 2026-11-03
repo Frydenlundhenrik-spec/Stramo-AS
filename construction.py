@@ -177,11 +177,11 @@ def fixing_screw_count(pts, height, room_type, thickness, excluded_walls=(), sha
     """Count both rows on every installed trim piece, including roof and U-channel."""
     import re
     from geometry import beslag_beregning
-    from finishing import trim_cuts, TRIM_PROFILES
+    from finishing import trim_cuts, room_trim_profiles
     clear = height - floor_depth(room_type)
     bb = beslag_beregning(pts, height, excluded_walls, thickness, clear,
                          floor_angles=room_type == "Fryserom", shared_walls=shared_walls, apninger=apninger)
-    pieces = [piece for _, _, key in TRIM_PROFILES for piece in bb[f"kapp_{key}"]]
+    pieces = [piece for profile in room_trim_profiles(bb) for piece in profile["cuts"]]
     if room_type != "Fryserom":
         runs = []
         for i in range(len(pts)):
