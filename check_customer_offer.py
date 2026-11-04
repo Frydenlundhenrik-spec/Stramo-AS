@@ -54,6 +54,8 @@ with patch.object(st, "download_button", side_effect=capture):
     pages = [page.extract_text() for page in pdf.pages]
     text = " ".join(" ".join(pages).split())
     assert text.count("425 000,00 kr") == 1 and "04.12.2026" in pages[0]
+    assert "Takk for forespørselen." in pages[0] and "Med vennlig hilsen" in pages[0]
+    assert len(pdf.pages[0].images) == 2  # Stramo logo and this selection's 3D model.
     for term in ["Montasje i Østfold er inkludert", "eks. mva.", "gyldig i 30 dager", "PROSJEKT 138",
                  "Plantegning – alle valgte rom", "Beslagsliste", "Kappfordeling – elementer", "Materialliste – elementer"]:
         assert term in text, term
@@ -72,7 +74,10 @@ with patch.object(st, "download_button", side_effect=capture):
     assert app.number_input(key=key+"price").value != 425000
     app.multiselect(key=key+"attachments").set_value([])
     run_ok(app)
-    single = " ".join(page.extract_text() for page in PdfReader(io.BytesIO(downloads["offer"]())).pages)
+    single_pdf = PdfReader(io.BytesIO(downloads["offer"]()))
+    assert len(single_pdf.pages[0].images) == 2
+    assert {image.data for image in single_pdf.pages[0].images} != {image.data for image in pdf.pages[0].images}
+    single = " ".join(page.extract_text() for page in single_pdf.pages)
     assert "Fryseromsdør" in single and "Kjøleromsdør" not in single
     assert "Snitt A–A" not in single and "3D-bilde –" not in single
     app.session_state["pending_project"] = stored

@@ -7,7 +7,9 @@ from xml.sax.saxutils import escape
 from zoneinfo import ZoneInfo
 
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import streamlit as st
+from PIL import Image as RasterImage
 from pypdf import PdfReader, PdfWriter
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -31,10 +33,29 @@ MUTED = colors.HexColor("#526b78")
 LIME = colors.HexColor("#d5e600")
 
 
-def offer_cover(rooms, title, customer, issued, price, note, attachments):
+def cover_model_image(models):
+    """Small illustration of exactly the selected rooms, in their project positions."""
+    model = models[0] if len(models) == 1 else go.Figure(data=[t for m in models for t in m.data])
+    fig = static3d(model, "")
+    try:
+        fig.axes[0].set_axis_off()
+        raster = io.BytesIO()
+        fig.savefig(raster, format="png", dpi=110, transparent=True)
+        raster.seek(0)
+        with RasterImage.open(raster) as im:
+            cropped = im.crop(im.getchannel("A").getbbox())
+            data = io.BytesIO()
+            cropped.save(data, format="PNG")
+        data.seek(0)
+        return Image(data, width=194, height=116, kind="proportional", hAlign="CENTER")
+    finally:
+        plt.close(fig)
+
+
+def offer_cover(rooms, title, customer, issued, price, note, attachments, models):
     out = io.BytesIO()
-    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=42, rightMargin=42,
-                            topMargin=44, bottomMargin=44, title="Tilbud", author="Stramo AS")
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=48, rightMargin=48,
+                            topMargin=41, bottomMargin=40, title="Tilbud", author="Stramo AS")
     font, bold = _registrer_font()
 
     def paragraph(text, size=11, face=font, color=INK, after=8):
@@ -45,28 +66,35 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     date_text = issued.strftime("%d.%m.%Y")
     expiry = (issued + timedelta(days=30)).strftime("%d.%m.%Y")
     references = ", ".join(dict.fromkeys(r["input"]["pnr"] for r in rooms if r["input"]["pnr"]))
-    story = []
-    if logo_finnes():
-        story.append(Image(str(LOGO_PATH), width=86, height=86/logo_sideforhold(), hAlign="LEFT"))
-    story.extend([Spacer(1, 21), paragraph("TILBUD", 11, bold, MUTED),
-                  paragraph(title, 25, bold), paragraph(f"Tilbudsdato {date_text}" +
-                    (f"   |   Prosjekt {references}" if references else ""), 10, font, MUTED)])
+    width = doc.width - 12  # The document frame adds 6 pt of padding on either side.
+    logo = Image(str(LOGO_PATH), width=77, height=77/logo_sideforhold()) if logo_finnes() else ""
+    masthead = Table([[paragraph("TILBUD", 11, bold, MUTED, 0), logo]], colWidths=[width-77, 77])
+    masthead.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+                                 ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0)]))
+    story = [masthead, Spacer(1, 23), paragraph(title, 25, bold, after=11),
+             paragraph(f"Tilbudsdato {date_text}" +
+                       (f"   |   Prosjekt {references}" if references else ""), 10, font, MUTED),
+             Spacer(1, 15)]
     if customer:
         story.append(paragraph(f"Til {customer}", 13, bold))
-    story.extend([Spacer(1, 10), paragraph(
-        "Stramo AS tilbyr levering og montasje av rommene nedenfor. Materiallisten og tegningene i dette dokumentet beskriver leveransen.")])
+    story.append(paragraph("Takk for forespørselen. Vi har gleden av å tilby levering og montasje som beskrevet i dette tilbudet."))
+    room_lines = [paragraph("Dette inngår i tilbudet", 12, bold, after=10)]
     for room in rooms:
         inp = world_input(room)
-        story.append(paragraph(f"{inp.navn or inp.rom_type} · {inp.rom_type} · {inp.panel_key}", 10, after=3))
-    story.append(Spacer(1, 15))
+        room_lines.extend([paragraph(inp.navn or inp.rom_type, 10, bold, after=1),
+                           paragraph(f"{inp.rom_type} · {inp.panel_key}", 10, font, MUTED, after=7)])
+    scope = Table([[room_lines, cover_model_image(models)]], colWidths=[width-210, 210], splitInRow=1)
+    scope.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"), ("LEFTPADDING",(0,0),(-1,-1),0),
+                               ("RIGHTPADDING",(0,0),(-1,-1),8)]))
+    story.extend([Spacer(1, 12), scope, Spacer(1, 19)])
     price_box = Table([[paragraph("Samlet tilbudspris eks. mva.", 11, bold, colors.white, 0)],
-                       [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[doc.width])
+                       [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width])
     price_box.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),INK), ("LINEBEFORE",(0,0),(0,-1),3,LIME),
         ("LEFTPADDING",(0,0),(-1,-1),14), ("TOPPADDING",(0,0),(-1,0),10),
         ("BOTTOMPADDING",(0,-1),(-1,-1),11)]))
-    story.extend([price_box, Spacer(1, 13), paragraph("Montasje i Østfold er inkludert i tilbudsprisen."),
-                  paragraph(f"Tilbudet er gyldig i 30 dager fra tilbudsdato, til og med {expiry}.")])
+    story.extend([price_box, Spacer(1, 14), paragraph("Montasje i Østfold er inkludert i tilbudsprisen.", after=3),
+                  paragraph(f"Tilbudet er gyldig i 30 dager fra tilbudsdato, til og med {expiry}.", after=10)])
     if note.strip():
         story.extend([paragraph("Presiseringer", 12, bold), paragraph(note.strip(), 10)])
     story.extend([Spacer(1, 13), paragraph("Vedlegg", 12, bold),
@@ -95,13 +123,14 @@ def offer_pdf(rooms, title, customer, issued, price, note="", attachments=OFFER_
         finally:
             plt.close(fig)
 
-    add_pdf(offer_cover(rooms, title, customer, issued, price, note, attachments), "Tilbudsbrev")
+    inputs = [world_input(room) for room in rooms]
+    models = [tegn_3d_modell(inp, apninger=inp.apninger) for inp in inputs]
+    add_pdf(offer_cover(rooms, title, customer, issued, price, note, attachments, models), "Tilbudsbrev")
     add_pdf(cutting_pdf(rooms, "tilbud", include_cutting_plan="Kappfordeling" in attachments),
             "Materialliste og beslagstegninger")
     if "Plantegning" in attachments and len(rooms) > 1:
         add_drawing(assembly_plan(rooms), "Plantegning – alle valgte rom")
-    for room in rooms:
-        inp = world_input(room)
+    for room, inp, model in zip(rooms, inputs, models):
         result = beregn_prosjekt(inp, pris_override=room.get("prices", {}))
         name = inp.navn or inp.rom_type
         if "Plantegning" in attachments:
@@ -115,7 +144,6 @@ def offer_pdf(rooms, title, customer, issued, price, note="", attachments=OFFER_
             add_drawing(tegn_snitt(inp, result, wall, "A–A", inp.apninger),
                         f"Snitt A–A · Vegg {wall+1} – {name}")
         if "3D-bilde" in attachments:
-            model = tegn_3d_modell(inp, apninger=inp.apninger)
             add_drawing(static3d(model, name), f"3D-bilde – {name}")
 
     # Continuous numbering in each attachment's existing footer.
