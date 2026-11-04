@@ -149,8 +149,9 @@ def _apply_project(project):
     st.session_state["project_rooms"] = project["rooms"]
     st.session_state["active_room_id"] = project.get("active_id")
     for key in list(st.session_state):
-        if str(key).startswith(("pos_","omit_","snap_")) or key in ("saved_room_choice", "room_picker"):
+        if str(key).startswith(("pos_","omit_","snap_","offer_")) or key in ("saved_room_choice", "room_picker"):
             del st.session_state[key]
+    st.session_state["offer_drafts"] = copy.deepcopy(project.get("offers", {}))
     st.session_state["project_opened"] = True
 
 
@@ -290,7 +291,9 @@ def project_download(current):
     rooms = st.session_state["project_rooms"]
     current = next((r for r in rooms if r["id"] == st.session_state.get("active_room_id")), current)
     try:
-        data = encode_project(rooms, current, st.session_state.get("active_room_id"))
+        scopes = {"Alle rom", current["id"], *(r["id"] for r in rooms)}
+        offers = {k:v for k,v in st.session_state.get("offer_drafts", {}).items() if k in scopes}
+        data = encode_project(rooms, current, st.session_state.get("active_room_id"), offers)
     except ValueError as exc:
         st.error(f"Prosjektet kan ikke lagres før feilen er rettet: {exc}")
         return

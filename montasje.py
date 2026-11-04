@@ -76,12 +76,12 @@ def figur_som_png(fig, dpi: int = 180) -> bytes:
     return fig2png(fig, dpi=dpi)
 
 
-def figur_som_pdf(fig, title="Tegninger") -> bytes:
+def figur_som_pdf(fig, title="Tegninger", *, show_page_number=True) -> bytes:
     import io
     from drawing_pdf import drawing_pdf
     buf = io.BytesIO()
     fig.savefig(buf, format="pdf", bbox_inches="tight")
-    return drawing_pdf(buf.getvalue(),title)
+    return drawing_pdf(buf.getvalue(),title,show_page_number=show_page_number)
 
 
 def figurer_som_samlet_pdf(figs: list) -> bytes:

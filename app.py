@@ -24,7 +24,7 @@ from montasje import (
 )
 from ifc_export import gen_ifc
 from kappliste import panel_order_rows
-from export_pdf import lag_enkel_pdf, lag_tilbuds_pdf
+from export_pdf import lag_enkel_pdf
 from project_ui import (NEW_ROOM_SIDE_MM, prepare_project, upload_project, capture_room, room_bar, add_room_button, project_download, assembly_ui, finishing_ui)
 from oversikt import oversikt_ui, kpi, kpi_rad, tall
 from html import escape as html_escape
@@ -216,15 +216,15 @@ def _beregn_cached(
 
 
 # ── Navigasjon og sideoppsett ─────────────────────────────────────────────────
-MODULER = ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Bestilling", "Elementer",
+MODULER = ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Tilbud", "Bestilling", "Elementer",
            "FDV", "Transport", "Sammenstilling"]
 # Menyikoner (Material Symbols) i samme rekkefølge som MODULER; tegnes med CSS.
-MODUL_IKON = ["dashboard", "edit_square", "architecture", "calculate", "shopping_cart", "view_column",
+MODUL_IKON = ["dashboard", "edit_square", "architecture", "calculate", "request_quote", "shopping_cart", "view_column",
               "description", "local_shipping", "join_inner"]
 # Sidene der inndatapanelet vises ved siden av innholdet.
 INNDATA_MODULER = {"Rom", "Tegninger"}
 # Sidene som gjelder hele prosjektet, ikke rommet som er åpent.
-PROSJEKT_MODULER = {"Oversikt", "Bestilling", "Transport", "Sammenstilling"}
+PROSJEKT_MODULER = {"Oversikt", "Tilbud", "Bestilling", "Transport", "Sammenstilling"}
 
 # Keep an open session on the calculation page after removing the old menu item.
 _GAMLE_MODULER = {"U-verdi og varmetap": "Kalkulasjon", "Montasjetegninger": "Tegninger",
@@ -267,7 +267,7 @@ with st.sidebar:
         st.divider()
         upload_project()
         lagre_plass = st.container()
-        st.caption("Stramo kjøleromssystem · versjon 2026.11.03-r5")
+        st.caption("Stramo kjøleromssystem · versjon 2026.11.04-r1")
 
 topp = st.container()
 def _bytt_inndatapanel():
@@ -941,7 +941,7 @@ with innhold:
         from transport import transport_ui
         transport_ui(st.session_state["project_rooms"] or [current_room])
 
-    elif modul == "Bestilling":
+    elif modul in ("Bestilling", "Tilbud"):
         from purchase_summary import panel_summary_ui
         from cutlist_pdf import cutting_pdf, material_downloads, profile_downloads
         order_rooms = [current_room if r["id"] == current_room["id"] else r
@@ -950,18 +950,23 @@ with innhold:
             order_rooms.append(current_room)
         order_labels = {r["id"]: project_name(r["input"]["navn"]) or r["input"]["rom_type"] for r in order_rooms}
         order_options = ["Alle rom", *order_labels]
-        if st.session_state.get("order_room_choice") not in order_options:
-            st.session_state["order_room_choice"] = "Alle rom"
-        order_choice = st.selectbox("Bestilling for", order_options,
-            format_func=lambda value: order_labels.get(value, value), key="order_room_choice")
+        choice_key = "order_room_choice" if modul == "Bestilling" else "offer_room_choice"
+        if st.session_state.get(choice_key) not in order_options:
+            st.session_state[choice_key] = "Alle rom"
+        order_choice = st.selectbox(f"{modul} for", order_options,
+            format_func=lambda value: order_labels.get(value, value), key=choice_key)
         if order_choice != "Alle rom":
             order_rooms = [r for r in order_rooms if r["id"] == order_choice]
-        panel_summary_ui(order_rooms)
-        st.download_button("Last ned bestillingsliste elementer PDF",
-            cutting_pdf(order_rooms, "bestilling"), "bestillingsliste-elementer.pdf",
-            "application/pdf", key="panel_order_pdf")
-        material_downloads(order_rooms, include_elements=False)
-        profile_downloads(order_rooms)
+        if modul == "Tilbud":
+            from tilbud import tilbud_ui
+            tilbud_ui(order_rooms, order_choice)
+        else:
+            panel_summary_ui(order_rooms)
+            st.download_button("Last ned bestillingsliste elementer PDF",
+                cutting_pdf(order_rooms, "bestilling"), "bestillingsliste-elementer.pdf",
+                "application/pdf", key="panel_order_pdf")
+            material_downloads(order_rooms, include_elements=False)
+            profile_downloads(order_rooms)
 
     elif modul == "Elementer":
         st.subheader("Elementer")

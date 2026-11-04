@@ -38,7 +38,7 @@ def _registrer_font() -> tuple[str, str]:
 
 def draw_pdf_footer(canvas, page_number: int, page_width: float, *,
                     left: float = 40, right: float = 40, y: float = 24,
-                    total_pages: int | None = None, text_color=None) -> None:
+                    total_pages: int | None = None, text_color=None, show_page_number=True) -> None:
     """Draw the common company name and actual page number only."""
     from reportlab.lib import colors
     font, _ = _registrer_font()
@@ -49,7 +49,8 @@ def draw_pdf_footer(canvas, page_number: int, page_width: float, *,
     page_label = f"Side {page_number}"
     if total_pages is not None:
         page_label += f" av {total_pages}"
-    canvas.drawRightString(page_width-right, y, page_label)
+    if show_page_number:
+        canvas.drawRightString(page_width-right, y, page_label)
     canvas.restoreState()
 
 

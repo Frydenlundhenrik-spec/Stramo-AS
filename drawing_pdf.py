@@ -11,7 +11,7 @@ from branding import LOGO_PATH, logo_finnes, logo_sideforhold
 from export_pdf import _registrer_font, draw_pdf_footer
 
 
-def drawing_pdf(data, title="Tegninger"):
+def drawing_pdf(data, title="Tegninger", *, show_page_number=True):
     font, bold = _registrer_font()
     writer = PdfWriter()
     source = PdfReader(io.BytesIO(data))
@@ -44,7 +44,7 @@ def drawing_pdf(data, title="Tegninger"):
         c.setFillColor(HexColor("#07384c"));c.rect(margin,margin,width-2*margin,21,fill=1,stroke=0)
         c.setFillColor(HexColor("#d5e600"));c.rect(margin,margin,3,21,fill=1,stroke=0)
         draw_pdf_footer(c, number, width, left=margin+10, right=margin+10, y=margin+7,
-                        total_pages=len(source.pages), text_color=HexColor("#ffffff"))
+                        total_pages=len(source.pages), text_color=HexColor("#ffffff"), show_page_number=show_page_number)
         c.save()
         framed=PdfReader(buffer).pages[0]
         dx = (width - scale*sw)/2

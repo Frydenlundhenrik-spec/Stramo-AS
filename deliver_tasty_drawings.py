@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+from drawing_3d import static3d
 from pypdf import PdfReader,PdfWriter
 from project_file import decode_project,world_input
 from project_ui import assembly_plan
@@ -27,30 +27,6 @@ def merge(paths,out):
     w=PdfWriter()
     for p in paths:w.append(str(p),outline_item=p.stem)
     w.write(str(out));w.close()
-def static3d(plot,title):
-    fig=plt.figure(figsize=(14,9));ax=fig.add_subplot(111,projection='3d',computed_zorder=False);allpoints=[]
-    for t in plot.data:
-        if t.type=='scatter3d' and t.x is not None:
-            color=t.line.color or '#526b78'
-            if not isinstance(color,str) or color.startswith('rgb'):color='#526b78'
-            ax.plot(np.asarray(t.x,dtype=float),np.asarray(t.y,dtype=float),np.asarray(t.z,dtype=float),color=color,
-                    linewidth=1.1 if t.name=='Dørkarm' else .65,alpha=t.opacity if t.opacity is not None else .65,zorder=3)
-            continue
-        if t.type!='mesh3d' or t.x is None:continue
-        v=np.array([t.x,t.y,t.z],dtype=float).T
-        if not len(v):continue
-        allpoints.extend(v)
-        if t.i is not None:
-            tris=np.column_stack([t.i,t.j,t.k]).astype(int)
-            color=t.color or '#b4cbd8'
-            if not isinstance(color,str) or color.startswith('rgb'):color='#b4cbd8'
-            ax.add_collection3d(Poly3DCollection(v[tris],facecolor=color,edgecolor='none',linewidth=0,
-                alpha=t.opacity if t.opacity is not None else .6,zorder=2 if (t.name or '').startswith('Dør') else 1))
-    v=np.array(allpoints);lo=v.min(axis=0);hi=v.max(axis=0)
-    ax.set_xlim(lo[0]-.2,hi[0]+.2);ax.set_ylim(lo[1]-.2,hi[1]+.2);ax.set_zlim(0,hi[2]+.2)
-    ax.set_box_aspect(np.maximum(hi-lo,.1));ax.set_proj_type('ortho');ax.view_init(24,-65)
-    ax.set_xlabel('X (m)');ax.set_ylabel('Y (m)');ax.set_zlabel('Z (m)');ax.set_title(title)
-    return fig
 
 def open_model(inp):
     return tegn_3d_modell(inp,apninger=inp.apninger)

@@ -1,5 +1,6 @@
 """Versioned, portable JSON projects. No executable or credential data."""
 from dataclasses import asdict, replace
+from datetime import date, timedelta
 import base64
 import copy
 import json
@@ -12,6 +13,7 @@ from kalkulasjon import ProjectInput, beregn_prosjekt
 
 FORMAT = "stramo-project"
 VERSION = 1
+OFFER_ATTACHMENTS = ("Kappfordeling", "Plantegning", "Snittegning", "3D-bilde")
 
 
 def form_points(form):
@@ -194,8 +196,10 @@ def validate_room(room):
     return room
 
 
-def encode_project(rooms, draft, active_id=None):
+def encode_project(rooms, draft, active_id=None, offers=None):
     project = dict(format=FORMAT,version=VERSION,rooms=rooms,draft=draft,active_id=active_id)
+    if offers:
+        project["offers"] = offers
     validate_project(project)
     raw = json.dumps(project, ensure_ascii=False,allow_nan=False,indent=2).encode("utf-8")
     if len(raw) > 25*1024*1024:
@@ -221,6 +225,24 @@ def validate_project(project):
         raise ValueError("Utkastets rom-ID stemmer ikke med det aktive rommet. Prosjektet er ikke åpnet.")
     if project.get("active_id") is None and project["draft"]["id"] in ids:
         raise ValueError("Utkastet er et lagret rom, men aktiv rom-ID mangler.")
+    offers = project.get("offers", {})
+    if not isinstance(offers, dict) or len(offers) > 32:
+        raise ValueError("Ugyldige tilbud i prosjektfilen.")
+    for scope, offer in offers.items():
+        if scope not in {*ids, project["draft"]["id"], "Alle rom"} or not isinstance(offer, dict):
+            raise ValueError("Tilbudet viser til et ukjent rom.")
+        for key, limit in (("customer", 200), ("title", 300), ("note", 1500)):
+            if not isinstance(offer.get(key, ""), str) or len(offer.get(key, "")) > limit:
+                raise ValueError("Ugyldig tilbudstekst.")
+        if offer.get("price") is not None:
+            number(offer["price"], 0, 1e12)
+        if "date" in offer:
+            dated = date.fromisoformat(offer["date"])
+            if not date(1900,1,1) <= dated <= date.max - timedelta(days=30):
+                raise ValueError("Ugyldig tilbudsdato.")
+        attachments = offer.get("attachments", [])
+        if not isinstance(attachments,list) or any(a not in OFFER_ATTACHMENTS for a in attachments):
+            raise ValueError("Ugyldig tilbudsvedlegg.")
     sync_shared_walls(project["rooms"])
     project["draft"]["input"]["shared_walls"] = next(
         (r["input"]["shared_walls"] for r in project["rooms"] if r["id"] == project.get("active_id")), [])

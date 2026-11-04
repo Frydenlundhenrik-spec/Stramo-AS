@@ -49,7 +49,7 @@ def check():
         app.button(key="open_project").click().run()
         checked(app, project["draft"])
         modules = app.radio(key="ed_module").options
-        assert modules == ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Bestilling", "Elementer", "FDV", "Transport", "Sammenstilling"]
+        assert modules == ["Oversikt", "Rom", "Tegninger", "Kalkulasjon", "Tilbud", "Bestilling", "Elementer", "FDV", "Transport", "Sammenstilling"]
         assert PANEL_DB["PIR 80 mm"]["pris"] == 900
         assert PANEL_DB["PIR 100 mm"]["pris"] == 1000
         assert not any("NS 3420" in str(column) or "NS3420" in str(column)

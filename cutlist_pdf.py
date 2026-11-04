@@ -95,7 +95,7 @@ def material_tables(frame):
             yield group,part
 
 
-def cutting_pdf(rooms, kind="alle"):
+def cutting_pdf(rooms, kind="alle", *, include_cutting_plan=False):
     font,bold = _registrer_font()
     out = io.BytesIO()
     page_w,page_h = landscape(A4)
@@ -187,14 +187,17 @@ def cutting_pdf(rooms, kind="alle"):
             result = beregn_prosjekt(world_input(room), pris_override=room.get("prices", {}))
             section("Materialliste" if len(rooms) == 1 else "Materialliste – " + project_name(room["input"]["navn"]))
             table(materialliste_med_sum(result["df_mat"]))
-    if kind in ("materialer", "bestilling_tilbehor"):
+    if kind == "tilbud":
+        section("Materialliste – elementer")
+        table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"), ["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"], "Panel"))
+    if kind in ("materialer", "bestilling_tilbehor", "tilbud"):
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
             if title=="Elementer":
-                if kind == "bestilling_tilbehor":continue
+                if kind in ("bestilling_tilbehor", "tilbud"):continue
                 section("Bestillingsliste elementer")
             elif not accessory_page:
-                section("Bestillingsliste – beslag, dører og tilbehør")
+                section("Materialliste – beslag, dører og tilbehør" if kind == "tilbud" else "Bestillingsliste – beslag, dører og tilbehør")
                 accessory_page=True
             table(frame,title)
     if kind in ("alle","elementer") and rooms:
@@ -205,11 +208,11 @@ def cutting_pdf(rooms, kind="alle"):
         section("Bestillingsliste elementer")
         story.append(para("Lengder leveres på mål. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor. Ingen prosentvis kapptillegg. Vekt merket ESTIMAT gjelder bare paneler.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))
-    if kind == "kappfordeling":
+    if kind == "kappfordeling" or (kind == "tilbud" and include_cutting_plan):
         section("Kappfordeling – elementer")
         story.append(para("Råelementene er hele bestillingselementer. Elementnumrene viser delene på tegningene. 3 mm sagspor mellom delene; rom, bruksområde og leveringslengde holdes adskilt.",note))
         table(panel_cutting_plan(rooms))
-    if kind in ("alle","beslag","beslagprofiler","bestilling_tilbehor"):
+    if kind in ("alle","beslag","beslagprofiler","bestilling_tilbehor","tilbud"):
         from beslag_profiles import profile_rows, profile_cards
         section("Beslagsliste")
         profiles=profile_rows(project_materials(rooms))
@@ -248,7 +251,7 @@ def cutting_pdf(rooms, kind="alle"):
         canvas.setStrokeColor(rule)
         canvas.setLineWidth(.5)
         canvas.line(28,28,page_w-28,28)
-        draw_pdf_footer(canvas,document.page,page_w,left=28,right=28,y=16,text_color=muted)
+        draw_pdf_footer(canvas,document.page,page_w,left=28,right=28,y=16,text_color=muted,show_page_number=(kind != "tilbud"))
     doc.build(story,onFirstPage=footer,onLaterPages=footer)
     return out.getvalue()
 

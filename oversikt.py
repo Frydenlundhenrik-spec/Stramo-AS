@@ -14,6 +14,7 @@ from branding import project_name
 DOKUMENTER = [
     ("Tegninger", ":material/architecture:", "Plan, snitt, tak, vegger, produksjon og 3D"),
     ("Kalkulasjon", ":material/calculate:", "Materialliste og priser"),
+    ("Tilbud", ":material/request_quote:", "Kundetilbud med totalpris og vedlegg i én PDF"),
     ("Elementer", ":material/view_column:", "Elementlister og kapplister"),
     ("FDV", ":material/description:", "FDV-dokumentasjon"),
     ("Transport", ":material/local_shipping:", "Pakking og transport"),
