@@ -61,7 +61,7 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     if note.strip():
         story.extend([Spacer(1, 12), paragraph(note.strip())])
     story.append(gaps[1])
-    price_box = Table([[paragraph("Samlet tilbudspris eks. mva.", 11, bold, colors.white, 0)],
+    price_box = Table([[paragraph("Tilbudspris eks. mva.", 11, bold, colors.white, 0)],
                        [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width], splitByRow=0)
     price_box.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),INK), ("LINEBEFORE",(0,0),(0,-1),3,LIME),
@@ -77,6 +77,10 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     gap_height = max(24, (doc.height - 16 - content_height) / len(gaps))
     for gap in gaps:
         gap.height = gap_height
+    # Move the price nearer its terms without moving the surrounding sections.
+    price_shift = min(48, gap_height - 12)
+    gaps[1].height += price_shift
+    gaps[2].height -= price_shift
     def footer(c, document):
         draw_pdf_footer(c, document.page, A4[0], left=28, right=28, y=16, show_page_number=False)
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
@@ -163,7 +167,7 @@ def tilbud_ui(rooms, scope):
     if key+"price" in state and draft.get("price") is None and state.get(key+"base") != base:
         state[key+"price"] = base
     state[key+"base"] = base
-    price = st.number_input("Samlet tilbudspris eks. mva. (kr)", min_value=0., max_value=1e12,
+    price = st.number_input("Tilbudspris eks. mva. (kr)", min_value=0., max_value=1e12,
                             value=float(draft["price"] if draft.get("price") is not None else base),
                             step=100., format="%.2f", key=key+"price")
     st.caption("Utgangspunktet er de prissatte postene i kalkulasjonen. Sett totalen slik at den dekker montasje i Østfold og eventuelle uprisede varer.")

@@ -57,7 +57,7 @@ with patch.object(st, "download_button", side_effect=capture):
     assert text.count("425 000,00 kr") == 1 and "05.12.2026" in pages[0]
     assert "Takk for forespørselen." in pages[0] and "Med vennlig hilsen" not in text
     assert "Kunde: Tasty Fredrikstad" in pages[0] and "Presiseringer" not in pages[0]
-    assert pages[0].index("Takk for forespørselen.") < pages[0].index("Eksempeltilbud til gjennomgang.") < pages[0].index("Samlet tilbudspris")
+    assert pages[0].index("Takk for forespørselen.") < pages[0].index("Eksempeltilbud til gjennomgang.") < pages[0].index("Tilbudspris eks. mva.")
     assert len(pdf.pages[0].images) == 1  # Logo only; the room/model block has been removed.
     assert "Dette inngår i tilbudet" not in text
     assert "Tilbudsdato 05.11.2026 | Prosjekt 138 | Tasty Fredrikstad Kjølerom" in " ".join(pages[0].split())
