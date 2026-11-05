@@ -13,7 +13,7 @@ from kalkulasjon import ProjectInput, beregn_prosjekt
 
 FORMAT = "stramo-project"
 VERSION = 1
-OFFER_ATTACHMENTS = ("Kappfordeling", "Plantegning", "Snittegning", "3D-bilde")
+OFFER_ATTACHMENTS = ("Plantegning", "Snittegning")
 
 
 def form_points(form):
@@ -241,8 +241,10 @@ def validate_project(project):
             if not date(1900,1,1) <= dated <= date.max - timedelta(days=30):
                 raise ValueError("Ugyldig tilbudsdato.")
         attachments = offer.get("attachments", [])
-        if not isinstance(attachments,list) or any(a not in OFFER_ATTACHMENTS for a in attachments):
+        if not isinstance(attachments,list) or any(a not in (*OFFER_ATTACHMENTS, "Kappfordeling", "3D-bilde") for a in attachments):
             raise ValueError("Ugyldig tilbudsvedlegg.")
+        # Older projects may contain retired offer attachments; keep the project usable.
+        offer["attachments"] = [a for a in OFFER_ATTACHMENTS if a in attachments]
     sync_shared_walls(project["rooms"])
     project["draft"]["input"]["shared_walls"] = next(
         (r["input"]["shared_walls"] for r in project["rooms"] if r["id"] == project.get("active_id")), [])

@@ -95,7 +95,27 @@ def material_tables(frame):
             yield group,part
 
 
-def cutting_pdf(rooms, kind="alle", *, include_cutting_plan=False):
+def offer_materials(rooms):
+    """The calculation's column layout, using shared order quantities without prices."""
+    materials = project_materials(rooms)
+    rows = []
+    for group in ("Elementer", "Dører", "Beslag", "Tilbehør"):
+        for item in materials[materials.Gruppe.eq(group)].itertuples():
+            panel = group == "Elementer"
+            rows.append({
+                "Post": "Panel" if panel else "Dør" if group == "Dører" else group,
+                "Type": item.Produkt,
+                "Leveringslengde (mm)": item.Høyde_mm if panel else None,
+                "Bredde (mm)": item.Bredde_mm if panel else None,
+                "Tykkelse (mm)": item.Tykkelse_mm if panel else None,
+                "Antall (stk)": item.Stk if panel else None,
+                "Enhet": "m²" if panel else item.Enhet,
+                "Mengde": item.Areal_m2 if panel else item.Stk,
+            })
+    return pd.DataFrame(rows)
+
+
+def cutting_pdf(rooms, kind="alle"):
     font,bold = _registrer_font()
     out = io.BytesIO()
     page_w,page_h = landscape(A4)
@@ -142,7 +162,10 @@ def cutting_pdf(rooms, kind="alle", *, include_cutting_plan=False):
         weights=[text_weights.get(c,1) for c in frame.columns]
         widths=[(page_w-56)*w/sum(weights) for w in weights]
         if "Leveringslengde (mm)" in frame.columns:
-            weights=[95,185,92,48,56,44,55,55,80,90]
+            column_weights={"Post":95,"Type":185,"Leveringslengde (mm)":92,"Bredde (mm)":48,
+                            "Tykkelse (mm)":56,"Antall (stk)":44,"Enhet":55,"Mengde":55,
+                            "Enhetspris (kr)":80,"Totalpris (kr)":90}
+            weights=[column_weights[c] for c in frame.columns]
             widths=[(page_w-56)*w/sum(weights) for w in weights]
         if category in ("Beslag", "Dører", "Tilbehør"):
             widths=[(page_w-56)*.73, (page_w-56)*.12, (page_w-56)*.15]
@@ -188,16 +211,16 @@ def cutting_pdf(rooms, kind="alle", *, include_cutting_plan=False):
             section("Materialliste" if len(rooms) == 1 else "Materialliste – " + project_name(room["input"]["navn"]))
             table(materialliste_med_sum(result["df_mat"]))
     if kind == "tilbud":
-        section("Materialliste – elementer")
-        table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"), ["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"], "Panel"))
-    if kind in ("materialer", "bestilling_tilbehor", "tilbud"):
+        section("Materialliste")
+        table(offer_materials(rooms))
+    if kind in ("materialer", "bestilling_tilbehor"):
         accessory_page=False
         for title,frame in material_tables(project_materials(rooms)):
             if title=="Elementer":
-                if kind in ("bestilling_tilbehor", "tilbud"):continue
+                if kind == "bestilling_tilbehor":continue
                 section("Bestillingsliste elementer")
             elif not accessory_page:
-                section("Materialliste – beslag, dører og tilbehør" if kind == "tilbud" else "Bestillingsliste – beslag, dører og tilbehør")
+                section("Bestillingsliste – beslag, dører og tilbehør")
                 accessory_page=True
             table(frame,title)
     if kind in ("alle","elementer") and rooms:
@@ -208,11 +231,11 @@ def cutting_pdf(rooms, kind="alle", *, include_cutting_plan=False):
         section("Bestillingsliste elementer")
         story.append(para("Lengder leveres på mål. Kompatible kapp fordeles på hele råelementer med 3 mm sagspor. Ingen prosentvis kapptillegg. Vekt merket ESTIMAT gjelder bare paneler.",note))
         table(with_totals(grouped_panels(rooms).drop(columns="Bestill_lm"),["Bestill_hele_elementer","Bestill_m2","Bestill_vekt_kg"],"Panel"))
-    if kind == "kappfordeling" or (kind == "tilbud" and include_cutting_plan):
+    if kind == "kappfordeling":
         section("Kappfordeling – elementer")
         story.append(para("Råelementene er hele bestillingselementer. Elementnumrene viser delene på tegningene. 3 mm sagspor mellom delene; rom, bruksområde og leveringslengde holdes adskilt.",note))
         table(panel_cutting_plan(rooms))
-    if kind in ("alle","beslag","beslagprofiler","bestilling_tilbehor","tilbud"):
+    if kind in ("alle","beslag","beslagprofiler","bestilling_tilbehor"):
         from beslag_profiles import profile_rows, profile_cards
         section("Beslagsliste")
         profiles=profile_rows(project_materials(rooms))
