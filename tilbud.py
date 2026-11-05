@@ -62,7 +62,7 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
         story.extend([Spacer(1, 12), paragraph(note.strip())])
     story.append(gaps[1])
     price_box = Table([[paragraph("Samlet tilbudspris eks. mva.", 11, bold, colors.white, 0)],
-                       [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width])
+                       [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width], splitByRow=0)
     price_box.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),INK), ("LINEBEFORE",(0,0),(0,-1),3,LIME),
         ("LEFTPADDING",(0,0),(-1,-1),14), ("TOPPADDING",(0,0),(-1,0),10),
