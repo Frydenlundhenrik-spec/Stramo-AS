@@ -50,7 +50,7 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     masthead.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                  ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0)]))
     gaps = [Spacer(1, 24) for _ in range(4)]
-    story = [masthead, Spacer(1, 23), paragraph(title, 25, bold, after=11),
+    story = [masthead, Spacer(1, 51), paragraph(title, 25, bold, after=11),
              paragraph(f"Tilbudsdato {date_text}" +
                        (f"   |   Prosjekt {references}" if references else "") +
                        f"   |   {names}", 10, font, MUTED),
