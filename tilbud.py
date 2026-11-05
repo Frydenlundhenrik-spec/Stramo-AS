@@ -13,7 +13,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen import canvas
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, TopPadder
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from branding import LOGO_PATH, logo_finnes, logo_sideforhold, project_name
 from cutlist_pdf import cutting_pdf, offer_materials
@@ -49,35 +49,34 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     masthead = Table([[paragraph("TILBUD", 11, bold, MUTED, 0), logo]], colWidths=[width-77, 77])
     masthead.setStyle(TableStyle([("VALIGN",(0,0),(-1,-1),"MIDDLE"),
                                  ("LEFTPADDING",(0,0),(-1,-1),0), ("RIGHTPADDING",(0,0),(-1,-1),0)]))
+    gaps = [Spacer(1, 24) for _ in range(4)]
     story = [masthead, Spacer(1, 23), paragraph(title, 25, bold, after=11),
              paragraph(f"Tilbudsdato {date_text}" +
                        (f"   |   Prosjekt {references}" if references else "") +
                        f"   |   {names}", 10, font, MUTED),
-             Spacer(1, 36)]
+             gaps[0]]
     if customer:
-        story.append(paragraph(f"Til {customer}", 13, bold))
+        story.append(paragraph(f"Kunde: {customer}", 13, bold))
     story.append(paragraph("Takk for forespørselen. Vi har gleden av å tilby levering og montasje som beskrevet i dette tilbudet."))
-    story.append(Spacer(1, 48))
+    if note.strip():
+        story.extend([Spacer(1, 12), paragraph(note.strip())])
+    story.append(gaps[1])
     price_box = Table([[paragraph("Samlet tilbudspris eks. mva.", 11, bold, colors.white, 0)],
                        [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width])
     price_box.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),INK), ("LINEBEFORE",(0,0),(0,-1),3,LIME),
         ("LEFTPADDING",(0,0),(-1,-1),14), ("TOPPADDING",(0,0),(-1,0),10),
         ("BOTTOMPADDING",(0,-1),(-1,-1),11)]))
-    story.extend([price_box, Spacer(1, 22), paragraph("Montasje i Østfold er inkludert i tilbudsprisen.", after=3),
+    story.extend([price_box, gaps[2], paragraph("Montasje i Østfold er inkludert i tilbudsprisen.", after=3),
                   paragraph(f"Tilbudet er gyldig i 30 dager fra tilbudsdato, til og med {expiry}.", after=10)])
-    if note.strip():
-        story.extend([paragraph("Presiseringer", 12, bold), paragraph(note.strip(), 10)])
-    story.extend([Spacer(1, 36), paragraph("Vedlegg", 12, bold),
+    story.extend([gaps[3], paragraph("Vedlegg", 12, bold),
                   paragraph(" · ".join(["Materialliste", *attachments]), 10)])
-    signature = Table([[paragraph("Med vennlig hilsen", 10, after=0)],
-                       [paragraph("Stramo AS", 11, bold, after=0)]], colWidths=[width])
-    signature.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),
-                                    ("RIGHTPADDING",(0,0),(-1,-1),0),
-                                    ("TOPPADDING",(0,0),(-1,-1),0),
-                                    ("BOTTOMPADDING",(0,0),(-1,-1),0)]))
-    # Fill the remaining frame above the closing, also when a long note spans pages.
-    story.extend([Spacer(1, 18), TopPadder(signature)])
+    # Share spare page space between the sections; long notes can still flow onto another page.
+    content_height = sum(item.wrap(width, doc.height)[1] + item.getSpaceBefore() + item.getSpaceAfter()
+                         for item in story if item not in gaps)
+    gap_height = max(24, (doc.height - 16 - content_height) / len(gaps))
+    for gap in gaps:
+        gap.height = gap_height
     def footer(c, document):
         draw_pdf_footer(c, document.page, A4[0], left=28, right=28, y=16, show_page_number=False)
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
