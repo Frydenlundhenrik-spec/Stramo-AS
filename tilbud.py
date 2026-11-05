@@ -13,7 +13,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.pdfgen import canvas
-from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle, TopPadder
 
 from branding import LOGO_PATH, logo_finnes, logo_sideforhold, project_name
 from cutlist_pdf import cutting_pdf, offer_materials
@@ -32,7 +32,7 @@ LIME = colors.HexColor("#d5e600")
 def offer_cover(rooms, title, customer, issued, price, note, attachments):
     out = io.BytesIO()
     doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=48, rightMargin=48,
-                            topMargin=41, bottomMargin=40, title="Tilbud", author="Stramo AS")
+                            topMargin=41, bottomMargin=60, title="Tilbud", author="Stramo AS")
     font, bold = _registrer_font()
 
     def paragraph(text, size=11, face=font, color=INK, after=8):
@@ -53,24 +53,31 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
              paragraph(f"Tilbudsdato {date_text}" +
                        (f"   |   Prosjekt {references}" if references else "") +
                        f"   |   {names}", 10, font, MUTED),
-             Spacer(1, 15)]
+             Spacer(1, 36)]
     if customer:
         story.append(paragraph(f"Til {customer}", 13, bold))
     story.append(paragraph("Takk for forespørselen. Vi har gleden av å tilby levering og montasje som beskrevet i dette tilbudet."))
-    story.append(Spacer(1, 25))
+    story.append(Spacer(1, 48))
     price_box = Table([[paragraph("Samlet tilbudspris eks. mva.", 11, bold, colors.white, 0)],
                        [paragraph(tall(price, 2) + " kr", 23, bold, colors.white, 0)]], colWidths=[width])
     price_box.setStyle(TableStyle([
         ("BACKGROUND",(0,0),(-1,-1),INK), ("LINEBEFORE",(0,0),(0,-1),3,LIME),
         ("LEFTPADDING",(0,0),(-1,-1),14), ("TOPPADDING",(0,0),(-1,0),10),
         ("BOTTOMPADDING",(0,-1),(-1,-1),11)]))
-    story.extend([price_box, Spacer(1, 14), paragraph("Montasje i Østfold er inkludert i tilbudsprisen.", after=3),
+    story.extend([price_box, Spacer(1, 22), paragraph("Montasje i Østfold er inkludert i tilbudsprisen.", after=3),
                   paragraph(f"Tilbudet er gyldig i 30 dager fra tilbudsdato, til og med {expiry}.", after=10)])
     if note.strip():
         story.extend([paragraph("Presiseringer", 12, bold), paragraph(note.strip(), 10)])
-    story.extend([Spacer(1, 13), paragraph("Vedlegg", 12, bold),
-                  paragraph(" · ".join(["Materialliste", *attachments]), 10),
-                  Spacer(1, 15), paragraph("Med vennlig hilsen", 10, after=0), paragraph("Stramo AS", 11, bold)])
+    story.extend([Spacer(1, 36), paragraph("Vedlegg", 12, bold),
+                  paragraph(" · ".join(["Materialliste", *attachments]), 10)])
+    signature = Table([[paragraph("Med vennlig hilsen", 10, after=0)],
+                       [paragraph("Stramo AS", 11, bold, after=0)]], colWidths=[width])
+    signature.setStyle(TableStyle([("LEFTPADDING",(0,0),(-1,-1),0),
+                                    ("RIGHTPADDING",(0,0),(-1,-1),0),
+                                    ("TOPPADDING",(0,0),(-1,-1),0),
+                                    ("BOTTOMPADDING",(0,0),(-1,-1),0)]))
+    # Fill the remaining frame above the closing, also when a long note spans pages.
+    story.extend([Spacer(1, 18), TopPadder(signature)])
     def footer(c, document):
         draw_pdf_footer(c, document.page, A4[0], left=28, right=28, y=16, show_page_number=False)
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
