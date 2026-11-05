@@ -81,6 +81,10 @@ def offer_cover(rooms, title, customer, issued, price, note, attachments):
     price_shift = min(48, gap_height - 12)
     gaps[1].height += price_shift
     gaps[2].height -= price_shift
+    # Lower the price and terms together while leaving the attachments in place.
+    block_shift = min(64, gap_height - 16)
+    gaps[1].height += block_shift
+    gaps[3].height -= block_shift
     def footer(c, document):
         draw_pdf_footer(c, document.page, A4[0], left=28, right=28, y=16, show_page_number=False)
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
